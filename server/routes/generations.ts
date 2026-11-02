@@ -26,39 +26,49 @@ export function createGenerationRouter(
     createdAt: item.createdAt,
   })
 
-  router.get('/results', (request, response) => {
-    response.json({
-      items: userData.listTryOnResults(request.authUser.id)
+  router.get('/results', async (request, response, next) => {
+    try {
+      response.json({
+        items: (await userData.listTryOnResults(request.authUser.id))
         .filter((item) => TRY_ON_ANGLES.includes(item.angle))
         .map(toResponse),
-    })
+      })
+    } catch (error) {
+      next(error)
+    }
   })
 
-  router.get('/outfits', (request, response) => {
-    response.json({
-      items: userData.listSavedOutfits(request.authUser.id).map((outfit) => ({
-        id: outfit.id,
-        frontImageUrl: outfit.frontImageUrl,
-        backImageUrl: outfit.backImageUrl,
-        garmentIds: outfit.garmentIds,
-        createdAt: outfit.createdAt,
-      })),
-    })
+  router.get('/outfits', async (request, response, next) => {
+    try {
+      response.json({
+        items: (await userData.listSavedOutfits(request.authUser.id)).map((outfit) => ({
+          id: outfit.id,
+          frontImageUrl: outfit.frontImageUrl,
+          backImageUrl: outfit.backImageUrl,
+          garmentIds: outfit.garmentIds,
+          createdAt: outfit.createdAt,
+        })),
+      })
+    } catch (error) {
+      next(error)
+    }
   })
 
   router.delete('/outfits/:id', async (request, response, next) => {
     try {
       const userId = request.authUser.id
-      const deleted = userData.deleteSavedOutfit(userId, request.params.id)
+      const deleted = await userData.deleteSavedOutfit(userId, request.params.id)
       if (!deleted) {
         response.status(404).json({ message: 'Không tìm thấy bộ đồ đã lưu.' })
         return
       }
-      const currentKeys = new Set(userData.listTryOnResults(userId)
+      const currentKeys = new Set((await userData.listTryOnResults(userId))
         .flatMap((result) => result.imageKey ? [result.imageKey] : []))
-      const unusedKeys = [deleted.frontImageKey, deleted.backImageKey]
+      const candidateKeys = [deleted.frontImageKey, deleted.backImageKey]
         .filter((key): key is string => Boolean(key))
-        .filter((key) => !currentKeys.has(key) && !userData.isImageKeySaved(userId, key))
+        .filter((key) => !currentKeys.has(key))
+      const savedChecks = await Promise.all(candidateKeys.map((key) => userData.isImageKeySaved(userId, key)))
+      const unusedKeys = candidateKeys.filter((_key, index) => !savedChecks[index])
       await Promise.all(unusedKeys.map((key) => images.delete(key)))
       response.json({ deleted: true })
     } catch (error) {
@@ -87,12 +97,12 @@ export function createGenerationRouter(
         response.status(400).json({ message: 'Cần chọn ít nhất một món đồ.' })
         return
       }
-      const person = userData.getPersonImage(userId)
+      const person = await userData.getPersonImage(userId)
       if (!person) {
         response.status(400).json({ message: 'Cần tải ảnh người dùng trước.' })
         return
       }
-      const selectedGarments = garmentIds.map((id) => garments.findById(userId, id))
+      const selectedGarments = await Promise.all(garmentIds.map((id) => garments.findById(userId, id)))
       if (selectedGarments.some((garment) => !garment)) {
         response.status(400).json({ message: 'Có món đồ không còn tồn tại.' })
         return
@@ -106,7 +116,7 @@ export function createGenerationRouter(
       })
       const frontReference = angle === 'front'
         ? undefined
-        : userData.listTryOnResults(userId).find((item) => item.angle === 'front')?.imageUrl
+        : (await userData.listTryOnResults(userId)).find((item) => item.angle === 'front')?.imageUrl
       if (angle !== 'front' && !frontReference) {
         response.status(409).json({ message: 'Cần tạo ảnh TRƯỚC thành công trước.' })
         return
@@ -141,15 +151,15 @@ export function createGenerationRouter(
         imageKey: generated.storageKey ?? null,
         createdAt: new Date().toISOString(),
       }
-      const previousImageKey = userData.listTryOnResults(userId)
+      const previousImageKey = (await userData.listTryOnResults(userId))
         .find((item) => item.angle === angle)?.imageKey
-      userData.upsertTryOnResult(userId, result)
-      if (previousImageKey && previousImageKey !== result.imageKey && !userData.isImageKeySaved(userId, previousImageKey)) {
+      await userData.upsertTryOnResult(userId, result)
+      if (previousImageKey && previousImageKey !== result.imageKey && !(await userData.isImageKeySaved(userId, previousImageKey))) {
         await images.delete(previousImageKey)
       }
 
       if (angle === 'front') {
-        userData.saveOutfit(userId, {
+        await userData.saveOutfit(userId, {
           id: randomUUID(),
           frontImageUrl: result.imageUrl,
           frontImageKey: result.imageKey,
@@ -159,10 +169,10 @@ export function createGenerationRouter(
           createdAt: result.createdAt,
         })
       } else {
-        const front = userData.listTryOnResults(userId).find((item) => item.angle === 'front')
+        const front = (await userData.listTryOnResults(userId)).find((item) => item.angle === 'front')
         if (front) {
-          const pending = userData.findPendingOutfit(userId, front.imageUrl)
-          userData.saveOutfit(userId, {
+          const pending = await userData.findPendingOutfit(userId, front.imageUrl)
+          await userData.saveOutfit(userId, {
             id: pending?.id ?? randomUUID(),
             frontImageUrl: front.imageUrl,
             frontImageKey: front.imageKey,

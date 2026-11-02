@@ -7,6 +7,7 @@
 - Frontend: React, Vite, TypeScript strict, Tailwind, Zustand.
 - Backend: Node.js, Express, TypeScript.
 - Lưu trữ bản đầu: SQLite cho metadata và thư mục local cho file ảnh.
+- Production: Supabase PostgreSQL/Auth và Cloudflare R2 private qua adapter backend.
 - Tách nền: `@imgly/background-removal`, chạy trực tiếp trong trình duyệt.
 
 ## Cài đặt và chạy
@@ -43,6 +44,18 @@ npm start
 | `HOST` | local `127.0.0.1`, production `0.0.0.0` | Interface Express lắng nghe; Railway cần `0.0.0.0` |
 | `PORT` | `8787` | Cổng Express API |
 | `DATA_DIR` | `./data` | Vị trí SQLite và thư mục ảnh |
+| `PERSISTENCE_BACKEND` | `sqlite` | `sqlite` ở local; production dùng `postgres` |
+| `AUTH_BACKEND` | `local` | `local` ở development; production dùng `supabase` |
+| `IMAGE_STORAGE` | `local` | `local` ở development; production dùng `r2` |
+| `DATABASE_URL` | trống | Supabase Session pooler URI, thêm `sslmode=require` |
+| `DATABASE_POOL_MAX` | `10` | Số kết nối tối đa của tiến trình backend |
+| `SUPABASE_URL` | trống | Project URL của Supabase |
+| `SUPABASE_PUBLISHABLE_KEY` | trống | Publishable key dùng cho Supabase Auth phía backend |
+| `R2_ACCOUNT_ID` | trống | Cloudflare account ID |
+| `R2_ACCESS_KEY_ID` | trống | Access key của token chỉ có quyền trên bucket ứng dụng |
+| `R2_SECRET_ACCESS_KEY` | trống | Secret key R2, chỉ đặt ở backend |
+| `R2_BUCKET` | trống | Tên bucket R2 private |
+| `R2_PREFIX` | `uploads` | Tiền tố object để tách môi trường |
 | `AUTH_SESSION_DAYS` | `30` | Số ngày duy trì phiên đăng nhập |
 | `COOKIE_SECURE` | theo `NODE_ENV` | Production mặc định bật; local HTTP đặt `false` |
 | `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Railway thường cấu hình `1` sau khi xác minh topology |
@@ -62,6 +75,45 @@ npm start
 | `MUAPI_API_KEY` | trống | Chỉ đặt ở backend |
 
 Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó sẽ bị đóng gói vào frontend.
+
+## Deploy production: Render + Supabase + Cloudflare R2
+
+1. Trong Supabase SQL Editor, chạy toàn bộ [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) một lần. File này tự tạo bảng, index, RLS và trigger đồng bộ `auth.users` sang `profiles`; không tạo bảng thủ công.
+2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode.
+3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
+4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:
+
+```env
+NODE_ENV=production
+HOST=0.0.0.0
+COOKIE_SECURE=true
+TRUST_PROXY_HOPS=1
+PERSISTENCE_BACKEND=postgres
+AUTH_BACKEND=supabase
+IMAGE_STORAGE=r2
+DATABASE_URL=postgresql://...
+SUPABASE_URL=https://PROJECT_REF.supabase.co
+SUPABASE_PUBLISHABLE_KEY=...
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET=fitting-room
+R2_PREFIX=production
+```
+
+Không đặt `PORT`; Render tự cấp. `APP_BASE_URL` cũng có thể bỏ qua trên Render vì backend dùng biến hệ thống `RENDER_EXTERNAL_URL`; chỉ đặt thủ công khi chạy ở nền tảng khác. Ảnh R2 không có URL public: frontend đọc qua `/uploads/:key`, backend kiểm tra phiên và quyền sở hữu trước khi tải object.
+
+Module social hiện được lưu trong một hàng `social_state` dạng JSONB và dùng `SELECT ... FOR UPDATE` cho mọi mutation. Cách này an toàn cho một Render instance/MVP; trước khi scale ngang nhiều instance hoặc có lượng người dùng lớn, nên chuẩn hoá thành các bảng quan hệ riêng.
+
+Supabase Auth mặc định có thể yêu cầu xác minh email. Nếu bật xác minh, sau đăng ký người dùng phải mở email rồi đăng nhập; nếu tắt trong giai đoạn thử nghiệm, đăng ký sẽ tạo phiên ngay. Không dùng `service_role` key cho luồng này.
+
+Để tính năng **Quên mật khẩu** hoạt động, vào Supabase **Authentication → URL Configuration**:
+
+- đặt **Site URL** thành URL production, ví dụ `https://vn-vton.onrender.com`;
+- thêm chính xác `https://vn-vton.onrender.com/reset-password` vào **Redirect URLs**;
+- khi chạy local, có thể thêm `http://127.0.0.1:8787/reset-password`.
+
+Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ phần URL fragment. API trả thông báo chung dù email có tồn tại hay không để tránh dò tài khoản. Dịch vụ email mặc định của Supabase chỉ phù hợp thử nghiệm và bị giới hạn; production nên cấu hình SMTP riêng.
 
 ## Đăng nhập và dữ liệu tài khoản
 

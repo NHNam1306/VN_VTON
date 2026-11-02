@@ -158,8 +158,15 @@ export class GarmentExtractorService {
       try {
         const generated = await this.generateWithFlux(item, imageBuffer, mimeType)
         results.push(generated)
-      } catch {
-        console.warn('[AI Extract] FLUX item generation failed; using safe fallback')
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err)
+        // Phân biệt rõ lỗi có tốn phí (HTTP 200 nhưng payload hỏng) vs không tốn phí (HTTP 4xx/5xx/timeout)
+        const chargedLikely = reason.includes('invalid image payload') || reason.includes('empty image payload')
+        console.warn(
+          `[AI Extract] FLUX item generation failed for "${item.name}"; using safe fallback.` +
+          ` Reason: ${reason}` +
+          (chargedLikely ? ' [WARNING: API may have charged for this request]' : ' [No charge expected]'),
+        )
         try {
           // Fallback: Lưu ảnh crop riêng biệt của món đồ này thay vì lưu cả tấm ảnh lớn hỗn hợp
           const fallbackBuf = item.box_2d
@@ -478,26 +485,60 @@ Return strictly a JSON object:
       throw new Error(`OpenRouter FLUX returned HTTP ${res?.status ?? 'unknown'}`)
     }
 
-    const data = (await res.json()) as {
-      data?: Array<{ b64_json?: string; b64Json?: string }>
-    }
-    const b64 = data.data?.[0]?.b64_json || data.data?.[0]?.b64Json
-    if (!b64 || b64.length > MAX_GENERATED_BASE64_CHARS) {
-      throw new Error('OpenRouter FLUX returned empty image payload.')
+    const rawBody = await res.text()
+    let data: { data?: Array<{ b64_json?: string; b64Json?: string }>; usage?: { cost?: number }; error?: { message?: string } }
+    try {
+      data = JSON.parse(rawBody) as typeof data
+    } catch {
+      throw new Error(`OpenRouter FLUX returned non-JSON response (HTTP ${res.status}).`)
     }
 
-    const outputBuffer = Buffer.from(b64, 'base64')
-    if (
-      outputBuffer.length === 0
-      || outputBuffer.length > MAX_GENERATED_IMAGE_BYTES
-      || outputBuffer[0] !== 0x89
-      || outputBuffer[1] !== 0x50
-      || outputBuffer[2] !== 0x4e
-      || outputBuffer[3] !== 0x47
-    ) {
-      throw new Error('OpenRouter FLUX returned an invalid image payload.')
+    // Log chi phí thực tế nếu có để debug billing
+    if (data.usage?.cost !== undefined) {
+      console.info(`[AI Extract] FLUX garment item cost=$${data.usage.cost.toFixed(6)}`)
     }
-    const key = await this.images.save(outputBuffer, 'image/png')
+
+    // Nếu API trả về lỗi trong body (HTTP 200 nhưng có error field) thì throw ngay — không mất phí thực sự
+    if (data.error?.message) {
+      throw new Error(`OpenRouter FLUX error: ${data.error.message}`)
+    }
+
+    const firstItem = data.data?.[0] as { b64_json?: string; b64Json?: string; url?: string } | undefined
+    const b64 = firstItem?.b64_json || firstItem?.b64Json
+    let outputBuffer: Buffer | null = null
+
+    if (b64 && b64.length <= MAX_GENERATED_BASE64_CHARS) {
+      outputBuffer = Buffer.from(b64, 'base64')
+    } else if (firstItem?.url && typeof firstItem.url === 'string') {
+      try {
+        const imgRes = await this.fetchImpl(firstItem.url)
+        if (imgRes.ok) {
+          outputBuffer = Buffer.from(await imgRes.arrayBuffer())
+        }
+      } catch (err) {
+        console.warn(`[AI Extract] Failed to download image from OpenRouter URL: ${String(err)}`)
+      }
+    }
+
+    if (!outputBuffer || outputBuffer.length === 0 || outputBuffer.length > MAX_GENERATED_IMAGE_BYTES) {
+      throw new Error('OpenRouter FLUX returned empty or invalid image payload.')
+    }
+
+    // Dùng Sharp để validate và chuyển đổi bất kỳ định dạng nào (PNG/JPEG/WebP/AVIF) về PNG chuẩn
+    // Tránh trường hợp FLUX trả về WebP hoặc định dạng khác làm code cũ ném lỗi dù ảnh hợp lệ
+    let pngBuffer: Buffer
+    try {
+      const meta = await sharp(outputBuffer).metadata()
+      if (!meta.width || !meta.height || meta.width < 4 || meta.height < 4) {
+        throw new Error(`Image dimensions too small: ${meta.width}x${meta.height}`)
+      }
+      pngBuffer = await sharp(outputBuffer).png().toBuffer()
+      console.info(`[AI Extract] FLUX image OK format=${meta.format} size=${outputBuffer.length} -> png`)
+    } catch (sharpErr) {
+      throw new Error(`OpenRouter FLUX returned an image Sharp cannot decode: ${sharpErr instanceof Error ? sharpErr.message : String(sharpErr)}`)
+    }
+
+    const key = await this.images.save(pngBuffer, 'image/png')
 
     return {
       id: randomUUID(),

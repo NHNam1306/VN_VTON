@@ -5,12 +5,23 @@ import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { createApp } from './app.js'
 import { LocalImageStorage } from './storage/local-image-storage.js'
+import type { ImageStorage } from './storage/image-storage.js'
+import type { GarmentRepository } from './storage/garment-repository.js'
+import type { UserDataRepository } from './storage/user-data-repository.js'
 import { SqliteGarmentRepository } from './storage/sqlite-garment-repository.js'
 import { SqliteUserDataRepository } from './storage/sqlite-user-data-repository.js'
+import { PostgresGarmentRepository } from './storage/postgres-garment-repository.js'
+import { PostgresUserDataRepository } from './storage/postgres-user-data-repository.js'
+import { createPostgresPool, type PostgresPool } from './storage/postgres.js'
+import { R2ImageStorage } from './storage/r2-image-storage.js'
 import { createImageProvider } from './providers/provider-factory.js'
 import { AuthStore } from './auth/auth-store.js'
 import { AuthService } from './auth/auth-service.js'
+import type { AuthBackend } from './auth/auth-backend.js'
+import { SupabaseAuthService } from './auth/supabase-auth-service.js'
 import { SocialStore } from './social/social-store.js'
+import { PostgresSocialStore } from './social/postgres-social-store.js'
+import type { SocialService } from './social/social-service.js'
 import { runtimeConfig } from './config/runtime-config.js'
 
 const port = Number(process.env.PORT ?? 8787)
@@ -18,15 +29,71 @@ const isDevelopment = process.argv.includes('--dev')
 const dataDirectory = path.resolve(process.env.DATA_DIR ?? './data')
 const uploadDirectory = path.join(dataDirectory, 'uploads')
 
-await mkdir(dataDirectory, { recursive: true })
-const imageStorage = new LocalImageStorage(uploadDirectory)
-await imageStorage.ensureReady()
-const repository = new SqliteGarmentRepository(path.join(dataDirectory, 'fitting-room.sqlite'))
-const userDataRepository = new SqliteUserDataRepository(path.join(dataDirectory, 'fitting-room.sqlite'))
-const authStore = new AuthStore(path.join(dataDirectory, 'fitting-room.sqlite'))
-const authService = new AuthService(authStore, runtimeConfig.authSessionDays, runtimeConfig.legacyDataClaimToken)
+const persistenceBackend = process.env.PERSISTENCE_BACKEND ?? 'sqlite'
+const imageStorageBackend = process.env.IMAGE_STORAGE ?? 'local'
+const authBackend = process.env.AUTH_BACKEND ?? 'local'
+const appBaseUrl = process.env.APP_BASE_URL
+  ?? process.env.RENDER_EXTERNAL_URL
+  ?? `http://127.0.0.1:${port}`
+
+let postgresPool: PostgresPool | undefined
+let repository: GarmentRepository
+let userDataRepository: UserDataRepository
+let authStore: AuthStore | undefined
+let authService: AuthBackend
+let imageStorage: ImageStorage
+
+if (persistenceBackend === 'postgres') {
+  postgresPool = createPostgresPool(process.env.DATABASE_URL ?? '')
+  await postgresPool.query('SELECT 1')
+  repository = new PostgresGarmentRepository(postgresPool)
+  userDataRepository = new PostgresUserDataRepository(postgresPool)
+} else if (persistenceBackend === 'sqlite') {
+  await mkdir(dataDirectory, { recursive: true })
+  const databasePath = path.join(dataDirectory, 'fitting-room.sqlite')
+  repository = new SqliteGarmentRepository(databasePath)
+  userDataRepository = new SqliteUserDataRepository(databasePath)
+} else {
+  throw new Error(`PERSISTENCE_BACKEND="${persistenceBackend}" không được hỗ trợ.`)
+}
+
+if (imageStorageBackend === 'r2') {
+  imageStorage = new R2ImageStorage({
+    accountId: process.env.R2_ACCOUNT_ID ?? '',
+    accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
+    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
+    bucket: process.env.R2_BUCKET ?? '',
+    prefix: process.env.R2_PREFIX,
+  })
+} else if (imageStorageBackend === 'local') {
+  await mkdir(dataDirectory, { recursive: true })
+  const localStorage = new LocalImageStorage(uploadDirectory)
+  await localStorage.ensureReady()
+  imageStorage = localStorage
+} else {
+  throw new Error(`IMAGE_STORAGE="${imageStorageBackend}" không được hỗ trợ.`)
+}
+
+if (authBackend === 'supabase') {
+  authService = new SupabaseAuthService(
+    process.env.SUPABASE_URL ?? '',
+    process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '',
+    appBaseUrl,
+  )
+} else if (authBackend === 'local') {
+  if (persistenceBackend !== 'sqlite') {
+    throw new Error('AUTH_BACKEND=local chỉ dùng cùng PERSISTENCE_BACKEND=sqlite.')
+  }
+  authStore = new AuthStore(path.join(dataDirectory, 'fitting-room.sqlite'))
+  authService = new AuthService(authStore, runtimeConfig.authSessionDays, runtimeConfig.legacyDataClaimToken)
+} else {
+  throw new Error(`AUTH_BACKEND="${authBackend}" không được hỗ trợ.`)
+}
+
 const imageProvider = createImageProvider(imageStorage, { port })
-const social = new SocialStore(path.join(dataDirectory, 'fitting-room.sqlite'), userDataRepository)
+const social: SocialService = persistenceBackend === 'sqlite'
+  ? new SocialStore(path.join(dataDirectory, 'fitting-room.sqlite'), userDataRepository as SqliteUserDataRepository)
+  : new PostgresSocialStore(postgresPool!)
 const app = createApp(
   repository,
   userDataRepository,
@@ -77,8 +144,9 @@ const shutdown = async () => {
   server.close(() => {
     repository.close()
     userDataRepository.close()
-    authStore.close()
-    social.close()
+    authStore?.close()
+    void social.close()
+    void postgresPool?.end()
     process.exit(0)
   })
 }

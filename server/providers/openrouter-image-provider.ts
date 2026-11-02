@@ -211,19 +211,28 @@ export class OpenRouterImageProvider implements ImageProvider {
         throw mapHttpError(response.status, await responseMessage(response))
       }
 
-      const payload = await response.json() as OpenRouterImageResponse
+      const payload = await response.json() as OpenRouterImageResponse & { data?: Array<{ url?: string }> }
       const first = payload.data?.[0]
       const encoded = first?.b64_json ?? first?.b64Json
-      if (!encoded) {
+      let buffer: Buffer | null = null
+
+      if (encoded) {
+        buffer = Buffer.from(encoded, 'base64')
+      } else if (first?.url && typeof first.url === 'string') {
+        try {
+          const imgRes = await this.fetchImpl(first.url)
+          if (imgRes.ok) {
+            buffer = Buffer.from(await imgRes.arrayBuffer())
+          }
+        } catch {}
+      }
+
+      if (!buffer || buffer.length === 0 || buffer.length > MAX_OUTPUT_IMAGE_BYTES) {
         throw new ImageProviderError(
           'content_rejected',
           422,
           'OpenRouter không trả về ảnh. Hãy thử ảnh đầu vào khác.',
         )
-      }
-      const buffer = Buffer.from(encoded, 'base64')
-      if (buffer.length === 0 || buffer.length > MAX_OUTPUT_IMAGE_BYTES) {
-        throw new ImageProviderError('provider_unavailable', 502, 'Ảnh OpenRouter trả về không hợp lệ.')
       }
       const declaredMimeType = normalizeMimeType(first?.media_type ?? first?.mediaType)
       const mimeType = ALLOWED_IMAGE_TYPES.has(declaredMimeType)

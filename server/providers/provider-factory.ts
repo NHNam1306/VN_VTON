@@ -13,6 +13,9 @@ export function createImageProvider(
   { port }: ProviderFactoryOptions,
 ): ImageProvider {
   const provider = process.env.IMAGE_PROVIDER ?? 'mock'
+  const baseUrl = process.env.APP_BASE_URL
+    ?? process.env.RENDER_EXTERNAL_URL
+    ?? `http://127.0.0.1:${port}`
   if (provider === 'mock') {
     return new MockImageProvider(Number(process.env.MOCK_DELAY_MS ?? 2000))
   }
@@ -20,7 +23,7 @@ export function createImageProvider(
     return new GeminiImageProvider({
       apiKey: process.env.GEMINI_API_KEY ?? '',
       model: process.env.GEMINI_IMAGE_MODEL ?? 'gemini-3.1-flash-image',
-      baseUrl: process.env.APP_BASE_URL ?? `http://127.0.0.1:${port}`,
+      baseUrl,
       timeoutMs: Number(process.env.GEMINI_TIMEOUT_MS ?? 120_000),
       outputStorage: images,
     })
@@ -35,7 +38,7 @@ export function createImageProvider(
       model,
       resolution: process.env.OPENROUTER_IMAGE_RESOLUTION ?? '768',
       aspectRatio: process.env.OPENROUTER_IMAGE_ASPECT_RATIO ?? '4:5',
-      baseUrl: process.env.APP_BASE_URL ?? `http://127.0.0.1:${port}`,
+      baseUrl,
       timeoutMs: Number(process.env.OPENROUTER_TIMEOUT_MS ?? 120_000),
       outputStorage: images,
     })

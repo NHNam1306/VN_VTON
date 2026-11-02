@@ -1,13 +1,13 @@
 import { Router } from 'express'
-import type { SocialStore } from './social-store.js'
+import type { SocialService } from './social-service.js'
 
-export function createSocialRouter(store: SocialStore) {
+export function createSocialRouter(store: SocialService) {
   const router = Router()
   router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
-  router.get('/', (req,res) => res.json(store.snapshot(req.authUser.id)))
-  router.get('/search', (req,res) => res.json(store.search(req.authUser.id, String(req.query.q ?? ''))))
-  router.get('/invite', (req,res) => res.json(store.resolveInvite(req.authUser.id, String(req.query.code ?? ''))))
-  router.get('/profile/:id', (req,res) => res.json(store.profile(req.authUser.id, String(req.params.id))))
-  router.post('/:action', (req,res) => res.json(store.act(req.authUser.id, String(req.params.action), req.body ?? {})))
+  router.get('/', async (req,res,next) => { try { res.json(await store.snapshot(req.authUser.id)) } catch (error) { next(error) } })
+  router.get('/search', async (req,res,next) => { try { res.json(await store.search(req.authUser.id, String(req.query.q ?? ''))) } catch (error) { next(error) } })
+  router.get('/invite', async (req,res,next) => { try { res.json(await store.resolveInvite(req.authUser.id, String(req.query.code ?? ''))) } catch (error) { next(error) } })
+  router.get('/profile/:id', async (req,res,next) => { try { res.json(await store.profile(req.authUser.id, String(req.params.id))) } catch (error) { next(error) } })
+  router.post('/:action', async (req,res,next) => { try { res.json(await store.act(req.authUser.id, String(req.params.action), req.body ?? {})) } catch (error) { next(error) } })
   return router
 }

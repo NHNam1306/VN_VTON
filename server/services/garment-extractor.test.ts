@@ -5,6 +5,9 @@ import { GarmentExtractorService, cropGarmentBox } from './garment-extractor.js'
 
 const samplePng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 
+// Ảnh PNG 4×4 pixel hợp lệ để Sharp có thể decode (dùng trong test FLUX response)
+const validPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAIAAAAmkwkpAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAAEUlEQVQImWNImXYCjhiI4wAA1VIcIVirmxwAAAAASUVORK5CYII=', 'base64')
+
 const createMockStorage = () => {
   let counter = 0
   return {
@@ -44,7 +47,7 @@ describe('GarmentExtractorService', () => {
         expect(body.input_references[0]!.image_url.url).toContain('data:image/png;base64,')
         return new Response(
           JSON.stringify({
-            data: [{ b64_json: samplePng.toString('base64') }],
+            data: [{ b64_json: validPng.toString('base64') }],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         )
@@ -143,7 +146,7 @@ describe('GarmentExtractorService', () => {
         fluxCallsCount++
         return new Response(
           JSON.stringify({
-            data: [{ b64_json: samplePng.toString('base64') }],
+            data: [{ b64_json: validPng.toString('base64') }],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         )
@@ -210,7 +213,7 @@ describe('GarmentExtractorService', () => {
         fluxCallsCount++
         return new Response(
           JSON.stringify({
-            data: [{ b64_json: samplePng.toString('base64') }],
+            data: [{ b64_json: validPng.toString('base64') }],
           }),
           { status: 200, headers: { 'content-type': 'application/json' } },
         )

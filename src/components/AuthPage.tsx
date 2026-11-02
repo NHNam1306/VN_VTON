@@ -1,40 +1,121 @@
-import { Eye, EyeOff, LoaderCircle, LockKeyhole, Mail, ShieldCheck, Sparkles, UserRound } from 'lucide-react'
+import {
+  ArrowLeft,
+  Eye,
+  EyeOff,
+  LoaderCircle,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+} from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { authApi } from '../services/auth-api'
 import type { AuthUser } from '../types/auth'
 
-type AuthMode = 'login' | 'register'
+type AuthMode = 'login' | 'register' | 'forgot' | 'reset'
+
+type RecoveryCredentials = {
+  accessToken: string
+  refreshToken: string
+}
+
+type RecoveryState = {
+  requested: boolean
+  credentials: RecoveryCredentials | null
+  error: string | null
+}
 
 type AuthPageProps = {
   onAuthenticated: (user: AuthUser) => void
 }
 
+const readRecoveryState = (): RecoveryState => {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+  const requested = window.location.pathname === '/reset-password' || params.get('type') === 'recovery'
+  if (!requested) return { requested: false, credentials: null, error: null }
+
+  const accessToken = params.get('access_token') ?? ''
+  const refreshToken = params.get('refresh_token') ?? ''
+  const providerError = params.get('error_description')
+  window.history.replaceState(null, '', '/reset-password')
+
+  return {
+    requested: true,
+    credentials: accessToken && refreshToken ? { accessToken, refreshToken } : null,
+    error: providerError
+      ? providerError.replace(/\+/g, ' ')
+      : (!accessToken || !refreshToken ? 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.' : null),
+  }
+}
+
+const contentByMode: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
+  login: {
+    eyebrow: 'Chào mừng trở lại',
+    title: 'Tiếp tục vào phòng thử',
+    description: 'Đăng nhập để xem lại ảnh và tủ đồ đã lưu.',
+  },
+  register: {
+    eyebrow: 'Tạo tài khoản mới',
+    title: 'Bắt đầu tủ đồ của riêng bạn',
+    description: 'Dùng email và mật khẩu tối thiểu 8 ký tự.',
+  },
+  forgot: {
+    eyebrow: 'Khôi phục tài khoản',
+    title: 'Quên mật khẩu?',
+    description: 'Nhập email đăng ký, chúng tôi sẽ gửi cho bạn liên kết đặt lại mật khẩu.',
+  },
+  reset: {
+    eyebrow: 'Bảo mật tài khoản',
+    title: 'Đặt mật khẩu mới',
+    description: 'Chọn mật khẩu mới có ít nhất 8 ký tự.',
+  },
+}
+
 export function AuthPage({ onAuthenticated }: AuthPageProps) {
-  const [mode, setMode] = useState<AuthMode>('login')
+  const [recovery] = useState(readRecoveryState)
+  const [mode, setMode] = useState<AuthMode>(recovery.requested ? 'reset' : 'login')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(recovery.error)
+  const [success, setSuccess] = useState<string | null>(null)
 
   const changeMode = (nextMode: AuthMode) => {
     setMode(nextMode)
     setError(null)
+    setSuccess(null)
     setPassword('')
     setConfirmPassword('')
   }
 
   const submit = async (event: FormEvent) => {
     event.preventDefault()
-    if (mode === 'register' && password !== confirmPassword) {
+    if ((mode === 'register' || mode === 'reset') && password !== confirmPassword) {
       setError('Mật khẩu nhập lại chưa khớp.')
       return
     }
+    if (mode === 'reset' && !recovery.credentials) {
+      setError('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.')
+      return
+    }
+
     setIsSubmitting(true)
     setError(null)
+    setSuccess(null)
     try {
+      if (mode === 'forgot') {
+        setSuccess(await authApi.requestPasswordReset(email))
+        return
+      }
+      if (mode === 'reset' && recovery.credentials) {
+        const user = await authApi.resetPassword({ ...recovery.credentials, password })
+        onAuthenticated(user)
+        return
+      }
       const user = mode === 'login'
         ? await authApi.login({ email, password })
         : await authApi.register({ displayName, email, password })
@@ -45,6 +126,15 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
       setIsSubmitting(false)
     }
   }
+
+  const content = contentByMode[mode]
+  const submitLabel = mode === 'login'
+    ? 'Đăng nhập'
+    : mode === 'register'
+      ? 'Tạo tài khoản'
+      : mode === 'forgot'
+        ? 'Gửi liên kết đặt lại'
+        : 'Lưu mật khẩu mới'
 
   return (
     <main className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas p-4 sm:p-6">
@@ -58,9 +148,11 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             <span className="grid size-12 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15"><Sparkles size={22} /></span>
             <p className="mt-7 text-[11px] font-bold uppercase tracking-[0.22em] text-sage-300">Fitting Room</p>
             <h1 className="mt-3 max-w-md font-display text-4xl font-bold leading-[1.15]">Thử phong cách mới trên chính ảnh của bạn</h1>
-
           </div>
-
+          <div className="relative flex items-center gap-3 text-xs text-white/55">
+            <ShieldCheck size={18} className="text-sage-300" />
+            Phiên đăng nhập và ảnh của bạn được bảo vệ
+          </div>
         </div>
 
         <div className="p-5 sm:p-9 lg:p-10">
@@ -69,35 +161,59 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             <div><p className="font-display text-lg font-bold text-ink">Fitting Room</p><p className="text-xs text-ink/40">Không gian thử đồ của bạn</p></div>
           </div>
 
-          <div className="rounded-2xl bg-black/[0.04] p-1" role="tablist" aria-label="Đăng nhập hoặc đăng ký">
-            <div className="grid grid-cols-2">
-              <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => changeMode('login')} className={'rounded-xl px-4 py-2.5 text-sm transition ' + (mode === 'login' ? 'bg-white font-bold text-ink shadow-sm' : 'font-medium text-ink/40 hover:text-ink')}>Đăng nhập</button>
-              <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => changeMode('register')} className={'rounded-xl px-4 py-2.5 text-sm transition ' + (mode === 'register' ? 'bg-white font-bold text-ink shadow-sm' : 'font-medium text-ink/40 hover:text-ink')}>Đăng ký</button>
+          {(mode === 'login' || mode === 'register') ? (
+            <div className="rounded-2xl bg-black/[0.04] p-1" role="tablist" aria-label="Đăng nhập hoặc đăng ký">
+              <div className="grid grid-cols-2">
+                <button type="button" role="tab" aria-selected={mode === 'login'} onClick={() => changeMode('login')} className={'rounded-xl px-4 py-2.5 text-sm transition ' + (mode === 'login' ? 'bg-white font-bold text-ink shadow-sm' : 'font-medium text-ink/40 hover:text-ink')}>Đăng nhập</button>
+                <button type="button" role="tab" aria-selected={mode === 'register'} onClick={() => changeMode('register')} className={'rounded-xl px-4 py-2.5 text-sm transition ' + (mode === 'register' ? 'bg-white font-bold text-ink shadow-sm' : 'font-medium text-ink/40 hover:text-ink')}>Đăng ký</button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <button type="button" onClick={() => changeMode('login')} className="flex items-center gap-2 rounded-xl px-2 py-2 text-xs font-bold text-ink/50 transition hover:bg-black/5 hover:text-ink">
+              <ArrowLeft size={15} /> Quay lại đăng nhập
+            </button>
+          )}
 
           <div className="mt-8">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">{mode === 'login' ? 'Chào mừng trở lại' : 'Tạo tài khoản mới'}</p>
-            <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">{mode === 'login' ? 'Tiếp tục vào phòng thử' : 'Bắt đầu tủ đồ của riêng bạn'}</h2>
-            <p className="mt-2 text-sm leading-6 text-ink/45">{mode === 'login' ? 'Đăng nhập để xem lại ảnh và tủ đồ đã lưu.' : 'Dùng email và mật khẩu tối thiểu 8 ký tự.'}</p>
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">{content.eyebrow}</p>
+            <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">{content.title}</h2>
+            <p className="mt-2 text-sm leading-6 text-ink/45">{content.description}</p>
           </div>
 
           <form onSubmit={(event) => void submit(event)} className="mt-7 space-y-4">
             {mode === 'register' && (
               <label className="block"><span className="mb-2 block text-xs font-bold text-ink/65">Tên hiển thị</span><span className="relative block"><UserRound size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} autoComplete="name" required minLength={2} maxLength={50} placeholder="Tên của bạn" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /></span></label>
             )}
-            <label className="block"><span className="mb-2 block text-xs font-bold text-ink/65">Email</span><span className="relative block"><Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required maxLength={254} placeholder="ban@example.com" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /></span></label>
-            <label className="block"><span className="mb-2 block text-xs font-bold text-ink/65">Mật khẩu</span><span className="relative block"><LockKeyhole size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={8} maxLength={128} placeholder="Tối thiểu 8 ký tự" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-xl text-ink/30 hover:bg-black/5 hover:text-ink" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span></label>
-            {mode === 'register' && (
+
+            {mode !== 'reset' && (
+              <label className="block"><span className="mb-2 block text-xs font-bold text-ink/65">Email</span><span className="relative block"><Mail size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required maxLength={254} placeholder="ban@example.com" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /></span></label>
+            )}
+
+            {mode !== 'forgot' && (
+              <label className="block">
+                <span className="mb-2 flex items-center justify-between text-xs font-bold text-ink/65">
+                  <span>{mode === 'reset' ? 'Mật khẩu mới' : 'Mật khẩu'}</span>
+                  {mode === 'login' && <button type="button" onClick={() => changeMode('forgot')} className="font-semibold text-sage-700 transition hover:text-sage-900 hover:underline">Quên mật khẩu?</button>}
+                </span>
+                <span className="relative block"><LockKeyhole size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} autoComplete={mode === 'login' ? 'current-password' : 'new-password'} required minLength={8} maxLength={128} placeholder="Tối thiểu 8 ký tự" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-12 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /><button type="button" onClick={() => setShowPassword((current) => !current)} className="absolute right-3 top-1/2 grid size-8 -translate-y-1/2 place-items-center rounded-xl text-ink/30 hover:bg-black/5 hover:text-ink" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}>{showPassword ? <EyeOff size={16} /> : <Eye size={16} />}</button></span>
+              </label>
+            )}
+
+            {(mode === 'register' || mode === 'reset') && (
               <label className="block"><span className="mb-2 block text-xs font-bold text-ink/65">Nhập lại mật khẩu</span><span className="relative block"><LockKeyhole size={17} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-ink/30" /><input type={showPassword ? 'text' : 'password'} value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} autoComplete="new-password" required minLength={8} maxLength={128} placeholder="Nhập lại mật khẩu" className="w-full rounded-2xl border border-black/10 bg-white py-3.5 pl-11 pr-4 text-sm outline-none transition placeholder:text-ink/25 focus:border-sage-500 focus:ring-4 focus:ring-sage-100" /></span></label>
             )}
 
+            {success && <div className="flex gap-2 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-xs leading-5 text-emerald-800" role="status"><ShieldCheck size={17} className="mt-0.5 shrink-0" />{success}</div>}
             {error && <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs leading-5 text-red-700" role="alert">{error}</div>}
 
-            <button type="submit" disabled={isSubmitting} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(23,33,29,0.18)] transition hover:-translate-y-0.5 hover:bg-sage-700 disabled:cursor-wait disabled:opacity-50 disabled:hover:translate-y-0">
+            <button type="submit" disabled={isSubmitting || (mode === 'reset' && !recovery.credentials)} className="flex w-full items-center justify-center gap-2 rounded-2xl bg-ink px-5 py-3.5 text-sm font-bold text-white shadow-[0_12px_28px_rgba(23,33,29,0.18)] transition hover:-translate-y-0.5 hover:bg-sage-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0">
               {isSubmitting && <LoaderCircle size={17} className="animate-spin" />}
-              {isSubmitting ? 'Đang xử lý…' : mode === 'login' ? 'Đăng nhập' : 'Tạo tài khoản'}
+              {isSubmitting ? 'Đang xử lý…' : submitLabel}
             </button>
+
+            {mode === 'reset' && !recovery.credentials && (
+              <button type="button" onClick={() => changeMode('forgot')} className="w-full text-center text-xs font-bold text-sage-700 hover:underline">Yêu cầu liên kết mới</button>
+            )}
           </form>
         </div>
       </section>

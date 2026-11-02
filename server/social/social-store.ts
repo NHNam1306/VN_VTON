@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { AuthError } from '../auth/auth-service.js'
-import type { UserDataRepository } from '../storage/user-data-repository.js'
+import type { SqliteUserDataRepository } from '../storage/sqlite-user-data-repository.js'
 import type { SocialPerson, SocialProfile, SocialPoll, SocialSnapshot, OutfitPolicy } from './types.js'
 
 type Profile = Omit<SocialProfile, 'name'>
@@ -18,7 +18,7 @@ const ids = (v: unknown, max = 100): string[] => Array.isArray(v) && v.length <=
 /** Local SQLite implementation. All mutations use a transaction; no content or images in logs. */
 export class SocialStore {
   private db: Database.Database
-  constructor(databasePath: string, private outfits: UserDataRepository) {
+  constructor(databasePath: string, private outfits: SqliteUserDataRepository) {
     this.db = new Database(databasePath)
     this.db.pragma('journal_mode = WAL')
     this.db.exec('CREATE TABLE IF NOT EXISTS social_state (id INTEGER PRIMARY KEY CHECK(id = 1), data TEXT NOT NULL)')

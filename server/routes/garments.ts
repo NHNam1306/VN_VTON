@@ -4,7 +4,7 @@ import { GARMENT_CATEGORIES, type GarmentCategory, type GarmentRecord, type Garm
 import type { GarmentRepository } from '../storage/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import { GarmentExtractorService } from '../services/garment-extractor.js'
-import type { SocialStore } from '../social/social-store.js'
+import type { SocialService } from '../social/social-service.js'
 import { runtimeConfig } from '../config/runtime-config.js'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 import { createFixedWindowRateLimit } from '../http/rate-limit.js'
@@ -35,7 +35,7 @@ export function createGarmentRouter(
   repository: GarmentRepository,
   images: ImageStorage,
   extractor?: GarmentExtractorService,
-  social?: SocialStore,
+  social?: SocialService,
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
@@ -45,8 +45,13 @@ export function createGarmentRouter(
     key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
   })
 
-  router.get('/', (request, response) => {
-    response.json({ items: repository.list(request.authUser.id).map((item) => toResponse(item, images)) })
+  router.get('/', async (request, response, next) => {
+    try {
+      const items = await repository.list(request.authUser.id)
+      response.json({ items: items.map((item) => toResponse(item, images)) })
+    } catch (error) {
+      next(error)
+    }
   })
 
   router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
@@ -89,7 +94,7 @@ export function createGarmentRouter(
 
       console.info(`[AI Extract] Completed items=${items.length}`)
       for (const item of items) if (item.studioImageUrl.startsWith('/uploads/')) {
-        social?.trackTemporaryImage(request.authUser.id, decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length)))
+        await social?.trackTemporaryImage(request.authUser.id, decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length)))
       }
 
       response.json({ items })
@@ -151,7 +156,7 @@ export function createGarmentRouter(
         createdAt: new Date().toISOString(),
       }
 
-      repository.create(record)
+      await repository.create(record)
       response.status(201).json(toResponse(record, images))
     } catch (error) {
       await Promise.all(savedKeys.map((key) => images.delete(key)))
@@ -173,7 +178,7 @@ export function createGarmentRouter(
         return
       }
 
-      const updated = repository.update(request.authUser.id, request.params.id, {
+      const updated = await repository.update(request.authUser.id, request.params.id, {
         name,
         category,
       })
@@ -190,13 +195,13 @@ export function createGarmentRouter(
 
   router.delete('/:id', async (request, response, next) => {
     try {
-      const garment = repository.findById(request.authUser.id, request.params.id)
+      const garment = await repository.findById(request.authUser.id, request.params.id)
       if (!garment) {
         response.status(404).json({ message: 'Không tìm thấy món đồ.' })
         return
       }
 
-      repository.delete(request.authUser.id, garment.id)
+      await repository.delete(request.authUser.id, garment.id)
       const keys = [
         garment.frontOriginalKey,
         garment.frontProcessedKey,
