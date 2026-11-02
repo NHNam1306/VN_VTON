@@ -49,6 +49,7 @@ npm start
 | `IMAGE_STORAGE` | `local` | `local` ở development; production dùng `r2` |
 | `DATABASE_URL` | trống | Supabase Session pooler URI, thêm `sslmode=require` |
 | `DATABASE_POOL_MAX` | `10` | Số kết nối tối đa của tiến trình backend |
+| `DATABASE_CA_CERT_BASE64` | trống | Base64 của Supabase database CA; giữ xác minh TLS trên Render |
 | `SUPABASE_URL` | trống | Project URL của Supabase |
 | `SUPABASE_PUBLISHABLE_KEY` | trống | Publishable key dùng cho Supabase Auth phía backend |
 | `R2_ACCOUNT_ID` | trống | Cloudflare account ID |
@@ -79,7 +80,7 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 ## Deploy production: Render + Supabase + Cloudflare R2
 
 1. Trong Supabase SQL Editor, chạy toàn bộ [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) một lần. File này tự tạo bảng, index, RLS và trigger đồng bộ `auth.users` sang `profiles`; không tạo bảng thủ công.
-2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode.
+2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode. Trong **Database Settings → SSL Configuration**, tải certificate, chuyển file sang Base64 và đặt vào `DATABASE_CA_CERT_BASE64` để Render xác minh TLS đầy đủ.
 3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
 4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:
 
@@ -92,6 +93,7 @@ PERSISTENCE_BACKEND=postgres
 AUTH_BACKEND=supabase
 IMAGE_STORAGE=r2
 DATABASE_URL=postgresql://...
+DATABASE_CA_CERT_BASE64=...
 SUPABASE_URL=https://PROJECT_REF.supabase.co
 SUPABASE_PUBLISHABLE_KEY=...
 R2_ACCOUNT_ID=...
