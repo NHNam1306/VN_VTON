@@ -16,18 +16,31 @@ const readCookie = (request: Request): string | null => {
 }
 
 const loginAttempts = new Map<string, { count: number; resetAt: number }>()
+const LOGIN_WINDOW_MS = 15 * 60 * 1000
+let nextAttemptSweepAt = Date.now() + LOGIN_WINDOW_MS
 
-const enforceLoginRateLimit = (request: Request) => {
-  const key = request.ip ?? request.socket.remoteAddress ?? 'unknown'
+const enforceLoginRateLimit = (request: Request, account?: string) => {
+  const address = request.ip ?? request.socket.remoteAddress ?? 'unknown'
+  const keys = [`ip:${address}`]
+  const normalizedAccount = account?.trim().toLowerCase()
+  if (normalizedAccount) keys.push(`account:${normalizedAccount}`)
   const now = Date.now()
-  const current = loginAttempts.get(key)
-  if (!current || current.resetAt <= now) {
-    loginAttempts.set(key, { count: 1, resetAt: now + 15 * 60 * 1000 })
-    return
+  if (now >= nextAttemptSweepAt) {
+    for (const [key, entry] of loginAttempts) if (entry.resetAt <= now) loginAttempts.delete(key)
+    nextAttemptSweepAt = now + LOGIN_WINDOW_MS
   }
-  if (current.count >= 10) throw new AuthError(429, 'Bạn đã thử quá nhiều lần. Vui lòng đợi 15 phút.')
-  current.count += 1
+  for (const key of keys) {
+    const current = loginAttempts.get(key)
+    if (!current || current.resetAt <= now) {
+      loginAttempts.set(key, { count: 1, resetAt: now + LOGIN_WINDOW_MS })
+      continue
+    }
+    if (current.count >= 10) throw new AuthError(429, 'Bạn đã thử quá nhiều lần. Vui lòng đợi 15 phút.')
+    current.count += 1
+  }
 }
+
+const clearAccountAttempts = (email: string) => loginAttempts.delete(`account:${email.trim().toLowerCase()}`)
 
 export const createRequireAuth = (auth: AuthService) => (
   request: Request,
@@ -62,6 +75,7 @@ export function createAuthRouter(auth: AuthService, secureCookies: boolean) {
         email: typeof request.body.email === 'string' ? request.body.email : '',
         displayName: typeof request.body.displayName === 'string' ? request.body.displayName : '',
         password: typeof request.body.password === 'string' ? request.body.password : '',
+        legacyClaimToken: request.get('x-legacy-data-claim-token'),
       })
       setSessionCookie(response, result.token, result.expiresAt)
       response.status(201).json({ user: result.user })
@@ -72,11 +86,13 @@ export function createAuthRouter(auth: AuthService, secureCookies: boolean) {
 
   router.post('/login', async (request, response, next) => {
     try {
-      enforceLoginRateLimit(request)
+      const email = typeof request.body.email === 'string' ? request.body.email : ''
+      enforceLoginRateLimit(request, email)
       const result = await auth.login(
-        typeof request.body.email === 'string' ? request.body.email : '',
+        email,
         typeof request.body.password === 'string' ? request.body.password : '',
       )
+      clearAccountAttempts(email)
       setSessionCookie(response, result.token, result.expiresAt)
       response.json({ user: result.user })
     } catch (error) {
@@ -101,4 +117,3 @@ export function createAuthRouter(auth: AuthService, secureCookies: boolean) {
 
   return router
 }
-

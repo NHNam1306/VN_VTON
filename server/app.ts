@@ -16,6 +16,8 @@ import { createAuthRouter, createRequireAuth } from './auth/auth-http.js'
 import { GarmentExtractorService } from './services/garment-extractor.js'
 import type { SocialStore } from './social/social-store.js'
 import { createSocialRouter } from './social/router.js'
+import { runtimeConfig } from './config/runtime-config.js'
+import { requireMutationHeader, setSecurityHeaders } from './http/security.js'
 
 export function createApp(
   repository: GarmentRepository,
@@ -30,7 +32,10 @@ export function createApp(
 ) {
   const app = express()
   app.disable('x-powered-by')
+  if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
+  app.use(setSecurityHeaders)
   app.use(express.json({ limit: '32kb' }))
+  app.use('/api', requireMutationHeader)
 
   const extractor =
     garmentExtractor ??
@@ -61,6 +66,10 @@ export function createApp(
   app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
   app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())
+
+  app.use('/api', (_request, response) => {
+    response.status(404).json({ message: 'Không tìm thấy API.' })
+  })
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
     if (error instanceof multer.MulterError) {

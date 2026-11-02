@@ -1,23 +1,10 @@
 import { Router } from 'express'
-import multer from 'multer'
 import type { PersonImageRecord, PersonImageResponse } from '../domain/person-image.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { UserDataRepository } from '../storage/user-data-repository.js'
+import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_SIZE, files: 1 },
-  fileFilter: (_request, file, callback) => {
-    if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      callback(null, true)
-      return
-    }
-    callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname))
-  },
-})
+const upload = createImageUpload(1)
 
 const toResponse = (record: PersonImageRecord, images: ImageStorage): PersonImageResponse => ({
   id: 'current',
@@ -58,12 +45,7 @@ export function createUserDataRouter(repository: UserDataRepository, images: Ima
         response.status(400).json({ message: 'Vui lòng chọn ảnh toàn thân.' })
         return
       }
-      const width = Number(request.body.width)
-      const height = Number(request.body.height)
-      if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || Math.max(width, height) > 1024) {
-        response.status(400).json({ message: 'Kích thước ảnh sau resize không hợp lệ.' })
-        return
-      }
+      const { width, height } = await validateImageContent(request.file, { maxDimension: 1024 })
 
       newImageKey = await images.save(request.file.buffer, request.file.mimetype)
       const record: PersonImageRecord = {

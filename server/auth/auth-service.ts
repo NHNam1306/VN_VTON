@@ -15,9 +15,10 @@ export class AuthService {
   constructor(
     private readonly store: AuthStore,
     private readonly sessionDays = 30,
+    private readonly legacyDataClaimToken?: string,
   ) {}
 
-  async register(input: { email: string; displayName: string; password: string }): Promise<{ user: PublicUser; token: string; expiresAt: Date }> {
+  async register(input: { email: string; displayName: string; password: string; legacyClaimToken?: string }): Promise<{ user: PublicUser; token: string; expiresAt: Date }> {
     const email = input.email.trim().toLowerCase()
     const displayName = input.displayName.trim()
     this.validate(email, displayName, input.password)
@@ -34,7 +35,9 @@ export class AuthService {
       passwordSalt: salt,
       createdAt: new Date().toISOString(),
     })
-    if (isFirstUser) this.store.claimLegacyData(user.id)
+    if (isFirstUser && this.isValidLegacyClaimToken(input.legacyClaimToken)) {
+      this.store.claimLegacyData(user.id)
+    }
     const session = this.createSession(user.id)
     return { user, ...session }
   }
@@ -92,5 +95,11 @@ export class AuthService {
   private hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex')
   }
-}
 
+  private isValidLegacyClaimToken(candidate: string | undefined): boolean {
+    if (!candidate || !this.legacyDataClaimToken) return false
+    const expected = Buffer.from(createHash('sha256').update(this.legacyDataClaimToken).digest())
+    const actual = Buffer.from(createHash('sha256').update(candidate).digest())
+    return timingSafeEqual(actual, expected)
+  }
+}

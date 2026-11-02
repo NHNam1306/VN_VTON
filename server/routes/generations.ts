@@ -4,6 +4,8 @@ import type { GarmentRepository } from '../storage/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { UserDataRepository } from '../storage/user-data-repository.js'
 import { TRY_ON_ANGLES, type ImageProvider, type TryOnAngle } from '../providers/image-provider.js'
+import { runtimeConfig } from '../config/runtime-config.js'
+import { createFixedWindowRateLimit } from '../http/rate-limit.js'
 
 export function createGenerationRouter(
   provider: ImageProvider,
@@ -12,6 +14,11 @@ export function createGenerationRouter(
   images: ImageStorage,
 ) {
   const router = Router()
+  const aiRateLimit = createFixedWindowRateLimit({
+    max: runtimeConfig.aiRequestsPerWindow,
+    windowMs: runtimeConfig.aiRequestWindowMs,
+    key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
+  })
 
   const toResponse = (item: { angle: TryOnAngle; imageUrl: string; createdAt: string }) => ({
     angle: item.angle,
@@ -59,7 +66,7 @@ export function createGenerationRouter(
     }
   })
 
-  router.post('/angles/:angle', async (request, response, next) => {
+  router.post('/angles/:angle', aiRateLimit, async (request, response, next) => {
     try {
       const userId = request.authUser.id
       const angle = request.params.angle as TryOnAngle

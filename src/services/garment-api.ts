@@ -1,4 +1,5 @@
 import type { Garment, GarmentCategory } from '../types/fitting-room'
+import { apiFetch } from './api-client'
 
 type GarmentListResponse = { items: Garment[] }
 
@@ -54,7 +55,7 @@ export const garmentApi = {
     if (options?.extractAccessories) {
       form.set('extractAccessories', 'true')
     }
-    const response = await fetch('/api/garments/ai-extract', { method: 'POST', body: form })
+    const response = await apiFetch('/api/garments/ai-extract', { method: 'POST', body: form })
     if (!response.ok) throw new Error(await parseError(response))
     return (await response.json()) as AiExtractResponse
   },
@@ -70,13 +71,13 @@ export const garmentApi = {
       form.set('backProcessed', input.backProcessed, 'back-removed.png')
     }
 
-    const response = await fetch('/api/garments', { method: 'POST', body: form })
+    const response = await apiFetch('/api/garments', { method: 'POST', body: form })
     if (!response.ok) throw new Error(await parseError(response))
     return response.json() as Promise<Garment>
   },
 
   async update(id: string, input: { name?: string; category?: GarmentCategory }): Promise<Garment> {
-    const response = await fetch(`/api/garments/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/api/garments/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -86,7 +87,7 @@ export const garmentApi = {
   },
 
   async delete(id: string): Promise<void> {
-    const response = await fetch(`/api/garments/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/api/garments/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
     if (!response.ok) throw new Error(await parseError(response))

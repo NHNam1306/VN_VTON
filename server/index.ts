@@ -11,6 +11,7 @@ import { createImageProvider } from './providers/provider-factory.js'
 import { AuthStore } from './auth/auth-store.js'
 import { AuthService } from './auth/auth-service.js'
 import { SocialStore } from './social/social-store.js'
+import { runtimeConfig } from './config/runtime-config.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const isDevelopment = process.argv.includes('--dev')
@@ -23,7 +24,7 @@ await imageStorage.ensureReady()
 const repository = new SqliteGarmentRepository(path.join(dataDirectory, 'fitting-room.sqlite'))
 const userDataRepository = new SqliteUserDataRepository(path.join(dataDirectory, 'fitting-room.sqlite'))
 const authStore = new AuthStore(path.join(dataDirectory, 'fitting-room.sqlite'))
-const authService = new AuthService(authStore, Number(process.env.AUTH_SESSION_DAYS ?? 30))
+const authService = new AuthService(authStore, runtimeConfig.authSessionDays, runtimeConfig.legacyDataClaimToken)
 const imageProvider = createImageProvider(imageStorage, { port })
 const social = new SocialStore(path.join(dataDirectory, 'fitting-room.sqlite'), userDataRepository)
 const app = createApp(
@@ -33,7 +34,7 @@ const app = createApp(
   uploadDirectory,
   imageProvider,
   authService,
-  process.env.COOKIE_SECURE === 'true',
+  runtimeConfig.secureCookies,
   undefined,
   social,
 )
@@ -63,8 +64,9 @@ if (isDevelopment) {
   })
 }
 
-server.listen(port, '127.0.0.1', () => {
-  console.log(`Fitting Room running at http://127.0.0.1:${port}`)
+const host = process.env.HOST ?? (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1')
+server.listen(port, host, () => {
+  console.log(`Fitting Room listening on ${host}:${port}`)
 })
 
 let isShuttingDown = false

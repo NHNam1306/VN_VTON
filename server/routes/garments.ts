@@ -1,26 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
-import multer from 'multer'
 import { GARMENT_CATEGORIES, type GarmentCategory, type GarmentRecord, type GarmentResponse } from '../domain/garment.js'
 import type { GarmentRepository } from '../storage/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import { GarmentExtractorService } from '../services/garment-extractor.js'
 import type { SocialStore } from '../social/social-store.js'
+import { runtimeConfig } from '../config/runtime-config.js'
+import { createImageUpload, validateImageContent } from '../http/image-upload.js'
+import { createFixedWindowRateLimit } from '../http/rate-limit.js'
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: MAX_IMAGE_SIZE, files: 4 },
-  fileFilter: (_request, file, callback) => {
-    if (ALLOWED_IMAGE_TYPES.has(file.mimetype)) {
-      callback(null, true)
-      return
-    }
-    callback(new multer.MulterError('LIMIT_UNEXPECTED_FILE', file.fieldname))
-  },
-})
+const upload = createImageUpload(4)
 
 const uploadFields = upload.fields([
   { name: 'frontOriginal', maxCount: 1 },
@@ -50,18 +39,24 @@ export function createGarmentRouter(
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
+  const aiRateLimit = createFixedWindowRateLimit({
+    max: runtimeConfig.aiRequestsPerWindow,
+    windowMs: runtimeConfig.aiRequestWindowMs,
+    key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
+  })
 
   router.get('/', (request, response) => {
     response.json({ items: repository.list(request.authUser.id).map((item) => toResponse(item, images)) })
   })
 
-  router.post('/ai-extract', singleUpload, async (request, response, next) => {
+  router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
     try {
       const file = request.file
       if (!file) {
         response.status(400).json({ message: 'Vui lòng tải lên một ảnh để tách nền và tái tạo bằng FLUX.' })
         return
       }
+      await validateImageContent(file)
 
       const defaultCategory = (GARMENT_CATEGORIES.includes(request.body.category)
         ? request.body.category
@@ -76,9 +71,7 @@ export function createGarmentRouter(
           }
         : undefined
 
-      console.log(
-        `[AI Extract] Starting extraction: category=${defaultCategory}, autoDetect=${!hasManualOptions}, file=${file.originalname}, size=${file.size}`,
-      )
+      console.info(`[AI Extract] Started category=${defaultCategory} autoDetect=${!hasManualOptions}`)
 
       const activeExtractor = extractor ?? new GarmentExtractorService(images, {
         isMock: process.env.IMAGE_PROVIDER === 'mock',
@@ -94,14 +87,14 @@ export function createGarmentRouter(
         extractOptions,
       )
 
-      console.log(`[AI Extract] Completed: ${items.length} items extracted`)
+      console.info(`[AI Extract] Completed items=${items.length}`)
       for (const item of items) if (item.studioImageUrl.startsWith('/uploads/')) {
         social?.trackTemporaryImage(request.authUser.id, decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length)))
       }
 
       response.json({ items })
     } catch (error) {
-      console.error('[AI Extract] Failed:', error)
+      console.warn('[AI Extract] Failed safely')
       next(error)
     }
   })
@@ -133,6 +126,12 @@ export function createGarmentRouter(
         response.status(400).json({ message: 'Ảnh mặt sau cần đủ bản gốc và bản đã tách nền.' })
         return
       }
+
+      await Promise.all(
+        [frontOriginal, frontProcessed, backOriginal, backProcessed]
+          .filter((file): file is Express.Multer.File => Boolean(file))
+          .map((file) => validateImageContent(file)),
+      )
 
       const save = async (file: Express.Multer.File) => {
         const key = await images.save(file.buffer, file.mimetype)

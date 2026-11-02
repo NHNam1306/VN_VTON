@@ -1,6 +1,7 @@
 import type { SocialPerson, SocialSnapshot, SharedOutfit } from '../../server/social/types'
+import { apiFetch } from './api-client'
 async function request<T>(path: string, body?: Record<string, unknown>): Promise<T> {
-  const response = await fetch('/api/social' + path, body ? { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(body) } : { cache:'no-store' })
+  const response = await apiFetch('/api/social' + path, body ? { method: 'POST', headers: {'Content-Type':'application/json'}, body:JSON.stringify(body) } : { cache:'no-store' })
   const data = await response.json()
   if (!response.ok) throw new Error(data.message ?? 'Không thể kết nối.')
   return data as T

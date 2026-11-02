@@ -252,6 +252,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
               disabled={!personImage}
               className="mt-1 size-4 rounded border-black/20 text-ink focus:ring-ink"
             />
+            <span>Ảnh sẽ được gửi tới dịch vụ AI bên thứ ba; tôi xác nhận đây là ảnh của chính mình và đồng ý xử lý để thử đồ.</span>
           </label>
         </div>
       </div>

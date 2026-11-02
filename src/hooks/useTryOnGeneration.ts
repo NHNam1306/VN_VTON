@@ -18,6 +18,7 @@ export function useTryOnGeneration() {
   const outfit = useFittingRoomStore((state) => state.outfit)
   const preservePoseFront = useFittingRoomStore((state) => state.preservePoseFront)
   const preservePoseBack = useFittingRoomStore((state) => state.preservePoseBack)
+  const privacyConsent = useFittingRoomStore((state) => state.privacyConsent)
   const garmentIds = useMemo(
     () =>
       [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes, ...outfit.accessories].filter(
@@ -62,7 +63,7 @@ export function useTryOnGeneration() {
     }))
     try {
       const preservePose = angle === 'front' ? preservePoseFront : preservePoseBack
-      const result = await tryOnApi.generateAngle(angle, ids, preservePose)
+      const result = await tryOnApi.generateAngle(angle, ids, preservePose, privacyConsent)
       setStates((current) => ({
         ...current,
         [angle]: { status: 'success', result, error: null },
@@ -76,7 +77,7 @@ export function useTryOnGeneration() {
       }))
       throw error
     }
-  }, [preservePoseFront, preservePoseBack])
+  }, [preservePoseFront, preservePoseBack, privacyConsent])
 
   const generateAll = useCallback(async () => {
     if (!garmentIds.length) return

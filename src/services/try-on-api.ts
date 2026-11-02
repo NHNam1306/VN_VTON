@@ -1,4 +1,5 @@
 import type { SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
+import { apiFetch } from './api-client'
 
 const parseError = async (response: Response) => {
   try {
@@ -16,13 +17,13 @@ export const tryOnApi = {
     return ((await response.json()) as { items: TryOnResult[] }).items
   },
 
-  async generateAngle(angle: TryOnAngle, garmentIds: string[], preservePose = true): Promise<TryOnResult> {
-    const response = await fetch(`/api/generations/angles/${angle}`, {
+  async generateAngle(angle: TryOnAngle, garmentIds: string[], preservePose = true, privacyConfirmed = false): Promise<TryOnResult> {
+    const response = await apiFetch(`/api/generations/angles/${angle}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         garmentIds,
-        privacyConfirmed: true,
+        privacyConfirmed,
         preservePose,
       }),
     })
@@ -37,7 +38,7 @@ export const tryOnApi = {
   },
 
   async deleteOutfit(id: string): Promise<void> {
-    const response = await fetch(`/api/generations/outfits/${encodeURIComponent(id)}`, {
+    const response = await apiFetch(`/api/generations/outfits/${encodeURIComponent(id)}`, {
       method: 'DELETE',
     })
     if (!response.ok) throw new Error(await parseError(response))

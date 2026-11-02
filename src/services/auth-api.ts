@@ -1,4 +1,5 @@
 import type { AuthUser } from '../types/auth'
+import { apiFetch } from './api-client'
 
 const parseError = async (response: Response) => {
   try {
@@ -18,7 +19,7 @@ export const authApi = {
   },
 
   async register(input: { displayName: string; email: string; password: string }): Promise<AuthUser> {
-    const response = await fetch('/api/auth/register', {
+    const response = await apiFetch('/api/auth/register', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -28,7 +29,7 @@ export const authApi = {
   },
 
   async login(input: { email: string; password: string }): Promise<AuthUser> {
-    const response = await fetch('/api/auth/login', {
+    const response = await apiFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(input),
@@ -38,8 +39,7 @@ export const authApi = {
   },
 
   async logout(): Promise<void> {
-    const response = await fetch('/api/auth/logout', { method: 'POST' })
+    const response = await apiFetch('/api/auth/logout', { method: 'POST' })
     if (!response.ok) throw new Error(await parseError(response))
   },
 }
-

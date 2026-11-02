@@ -40,10 +40,14 @@ npm start
 
 | Biến | Mặc định | Mô tả |
 | --- | --- | --- |
+| `HOST` | local `127.0.0.1`, production `0.0.0.0` | Interface Express lắng nghe; Railway cần `0.0.0.0` |
 | `PORT` | `8787` | Cổng Express API |
 | `DATA_DIR` | `./data` | Vị trí SQLite và thư mục ảnh |
 | `AUTH_SESSION_DAYS` | `30` | Số ngày duy trì phiên đăng nhập |
-| `COOKIE_SECURE` | `false` | Đặt `true` khi production chạy sau HTTPS |
+| `COOKIE_SECURE` | theo `NODE_ENV` | Production mặc định bật; local HTTP đặt `false` |
+| `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Railway thường cấu hình `1` sau khi xác minh topology |
+| `AI_REQUESTS_PER_15_MIN` | `10` | Giới hạn tạm theo user + IP cho route AI; production nhiều replica cần limiter dùng chung |
+| `LEGACY_DATA_CLAIM_TOKEN` | trống | Token backend một lần để account đầu tiên claim dữ liệu bản cũ; xoá sau migration |
 | `IMAGE_PROVIDER` | `openrouter` | Provider tạo ảnh; hỗ trợ `openrouter`, `gemini` và `mock` |
 | `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock để kiểm thử loading |
 | `OPENROUTER_API_KEY` | trống | API key OpenRouter, chỉ đặt ở backend |
@@ -65,12 +69,12 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 - Mật khẩu được băm bằng Node.js `scrypt` với salt riêng; không lưu mật khẩu gốc.
 - Phiên đăng nhập dùng token ngẫu nhiên, chỉ hash token được lưu trong SQLite. Cookie có `HttpOnly` và `SameSite=Lax`.
 - Tủ đồ, ảnh người, kết quả hiện tại và “Bộ đồ của tôi” đều được phân vùng theo `user_id`.
-- Tài khoản đầu tiên tạo sau khi nâng cấp sẽ nhận dữ liệu local cũ. Các tài khoản sau bắt đầu với không gian trống.
+- Dữ liệu local cũ **không** tự chuyển cho người đăng ký đầu tiên. Muốn claim, operator phải cấu hình `LEGACY_DATA_CLAIM_TOKEN` và gửi token qua header `X-Legacy-Data-Claim-Token` đúng một lần khi đăng ký account đầu tiên.
 - Chưa có xác minh email hoặc quên mật khẩu; hai luồng này cần tích hợp dịch vụ gửi email trước khi triển khai công khai.
 
 ### Chạy với OpenRouter / FLUX 3 Image Klein
 
-Tạo key tại OpenRouter và đảm bảo tài khoản còn ít nhất 1 USD, sau đó sửa `.env`:
+Tạo key tại OpenRouter và đảm bảo tài khoản còn hạn mức. Ở Railway, đặt key trong mục Variables. Khi chạy local, ưu tiên biến môi trường của tiến trình thay vì ghi key vào file được chia sẻ:
 
 ```env
 IMAGE_PROVIDER=openrouter
@@ -79,6 +83,8 @@ OPENROUTER_IMAGE_MODEL=black-forest-labs/flux-3-image-klein
 OPENROUTER_IMAGE_RESOLUTION=768
 OPENROUTER_IMAGE_ASPECT_RATIO=4:5
 ```
+
+Nếu một key từng xuất hiện trong ảnh chụp, chat, log hoặc workspace gửi cho người khác, phải revoke/rotate key đó; chỉ xoá chuỗi khỏi file không làm key cũ an toàn trở lại.
 
 Backend đọc ảnh local, chuyển thành data URL và gửi qua `input_references`. OpenRouter trả ảnh base64; backend lưu output bằng `ImageStorage`. Chi phí thật của mỗi request được ghi từ `usage.cost` nhưng không log ảnh người dùng.
 
@@ -101,11 +107,14 @@ Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage
 src/
   components/       Giao diện tủ đồ, upload, kết quả và ảnh người dùng
   hooks/            Hook quản lý object URL
-  services/         API client và background removal
+  services/         API client dùng chung, CSRF header và background removal
   store/            Zustand store và unit test
   types/            Domain types dùng ở frontend
 server/
+  config/           Đọc và chuẩn hoá cấu hình runtime, không chứa secret literal
   domain/           Domain type của backend
+  http/             Security headers, rate limit và image-upload validation
+  providers/        Adapter Gemini/OpenRouter/mock; API key chỉ nhận từ backend env
   routes/           Express routes
   storage/          Interface repository/storage và implementation SQLite/local
 ```
@@ -150,7 +159,7 @@ server/
 
 - Provider MuAPI chưa cài vì phiên bản hiện tại chọn OpenRouter/FLUX làm provider thật.
 - Giai đoạn 4 còn lại: tải ZIP.
-- Giai đoạn 5 còn lại: quota tạo ảnh, ngân sách hệ thống, cache và retention. Auth đã có rate limit cơ bản cho đăng nhập.
+- Giai đoạn 5 còn lại: quota/ngân sách **bền vững dùng chung giữa nhiều Railway replica**, cache và retention. Hiện đã có limiter in-memory theo account/IP để bảo vệ bản đơn instance, nhưng đây chưa phải bộ đếm thanh toán production.
 
 ## Chuẩn hoá trang phục (Module garment_normalizer)
 

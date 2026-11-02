@@ -43,6 +43,9 @@ const DEFAULT_CATEGORY_DESCRIPTIONS: Record<GarmentCategory, string> = {
 
 const OPENROUTER_IMAGE_API_URL = 'https://openrouter.ai/api/v1/images'
 const OPENROUTER_CHAT_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
+const MAX_DETECTED_TARGETS = 5
+const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024
+const MAX_GENERATED_BASE64_CHARS = Math.ceil(MAX_GENERATED_IMAGE_BYTES / 3) * 4
 
 export type GarmentTarget = {
   category: GarmentCategory
@@ -155,8 +158,8 @@ export class GarmentExtractorService {
       try {
         const generated = await this.generateWithFlux(item, imageBuffer, mimeType)
         results.push(generated)
-      } catch (err) {
-        console.warn(`FLUX generation failed for "${item.name}":`, err)
+      } catch {
+        console.warn('[AI Extract] FLUX item generation failed; using safe fallback')
         try {
           // Fallback: Lưu ảnh crop riêng biệt của món đồ này thay vì lưu cả tấm ảnh lớn hỗn hợp
           const fallbackBuf = item.box_2d
@@ -308,7 +311,7 @@ Return strictly a JSON object:
       const validTargets: GarmentTarget[] = []
       const seenKeys = new Set<string>()
 
-      for (const raw of rawList) {
+      for (const raw of rawList.slice(0, MAX_DETECTED_TARGETS)) {
         const cat = raw.category?.toLowerCase() as GarmentCategory
         if (!cat || !GARMENT_CATEGORIES.includes(cat)) continue
 
@@ -340,8 +343,8 @@ Return strictly a JSON object:
       }
 
       return validTargets
-    } catch (err) {
-      console.warn('Vision detection failed, falling back to default category:', err)
+    } catch {
+      console.warn('[AI Extract] Vision detection failed; using default category')
       return [this.createFallbackTarget(defaultCategory)]
     }
   }
@@ -426,8 +429,8 @@ Return strictly a JSON object:
       try {
         referenceBuffer = await cropGarmentBox(imageBuffer, item.box_2d)
         referenceMimeType = 'image/png'
-      } catch (cropErr) {
-        console.warn(`Failed to crop box for "${item.name}":`, cropErr)
+      } catch {
+        console.warn('[AI Extract] Crop failed; using validated source image')
       }
     }
 
@@ -464,7 +467,7 @@ Return strictly a JSON object:
       })
 
       if (res.status === 429 && attempts < 2) {
-        console.warn(`[OpenRouter FLUX] Bị giới hạn tốc độ 429 cho "${item.name}", tự động thử lại sau 2.5s...`)
+        console.warn('[AI Extract] OpenRouter rate limited; retrying once')
         await new Promise((r) => setTimeout(r, 2500))
         continue
       }
@@ -472,19 +475,28 @@ Return strictly a JSON object:
     }
 
     if (!res || !res.ok) {
-      const errText = res ? await res.text().catch(() => '') : 'No response'
-      throw new Error(`OpenRouter FLUX returned HTTP ${res?.status}: ${errText.slice(0, 300)}`)
+      throw new Error(`OpenRouter FLUX returned HTTP ${res?.status ?? 'unknown'}`)
     }
 
     const data = (await res.json()) as {
       data?: Array<{ b64_json?: string; b64Json?: string }>
     }
     const b64 = data.data?.[0]?.b64_json || data.data?.[0]?.b64Json
-    if (!b64) {
+    if (!b64 || b64.length > MAX_GENERATED_BASE64_CHARS) {
       throw new Error('OpenRouter FLUX returned empty image payload.')
     }
 
     const outputBuffer = Buffer.from(b64, 'base64')
+    if (
+      outputBuffer.length === 0
+      || outputBuffer.length > MAX_GENERATED_IMAGE_BYTES
+      || outputBuffer[0] !== 0x89
+      || outputBuffer[1] !== 0x50
+      || outputBuffer[2] !== 0x4e
+      || outputBuffer[3] !== 0x47
+    ) {
+      throw new Error('OpenRouter FLUX returned an invalid image payload.')
+    }
     const key = await this.images.save(outputBuffer, 'image/png')
 
     return {

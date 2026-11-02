@@ -18,6 +18,7 @@ describe('useTryOnGeneration', () => {
     vi.clearAllMocks()
     useFittingRoomStore.setState({
       outfit: { tops: 'shirt-1', outerwear: null, bottoms: null, shoes: null, accessories: [] },
+      privacyConsent: true,
     })
     vi.mocked(tryOnApi.listResults).mockResolvedValue([])
     vi.mocked(tryOnApi.listOutfits).mockResolvedValue([])
@@ -34,12 +35,12 @@ describe('useTryOnGeneration', () => {
 
     await act(async () => result.current.generateAll())
     expect(tryOnApi.generateAngle).toHaveBeenCalledTimes(1)
-    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('front', ['shirt-1'], true)
+    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('front', ['shirt-1'], true, true)
     expect(result.current.states.back.status).toBe('idle')
 
     await act(async () => result.current.regenerate('back'))
     expect(tryOnApi.generateAngle).toHaveBeenCalledTimes(2)
-    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('back', ['shirt-1'], true)
+    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('back', ['shirt-1'], true, true)
   })
 
   it('gửi cờ preservePose độc lập cho ảnh trước và ảnh sau', async () => {
@@ -51,9 +52,9 @@ describe('useTryOnGeneration', () => {
     await waitFor(() => expect(tryOnApi.listOutfits).toHaveBeenCalledOnce())
 
     await act(async () => result.current.generateAll())
-    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('front', ['shirt-1'], false)
+    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('front', ['shirt-1'], false, true)
 
     await act(async () => result.current.regenerate('back'))
-    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('back', ['shirt-1'], true)
+    expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('back', ['shirt-1'], true, true)
   })
 })
