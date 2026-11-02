@@ -1,0 +1,176 @@
+import { Router } from 'express'
+import { randomUUID } from 'node:crypto'
+import type { GarmentRepository } from '../storage/garment-repository.js'
+import type { ImageStorage } from '../storage/image-storage.js'
+import type { UserDataRepository } from '../storage/user-data-repository.js'
+import { TRY_ON_ANGLES, type ImageProvider, type TryOnAngle } from '../providers/image-provider.js'
+
+export function createGenerationRouter(
+  provider: ImageProvider,
+  garments: GarmentRepository,
+  userData: UserDataRepository,
+  images: ImageStorage,
+) {
+  const router = Router()
+
+  const toResponse = (item: { angle: TryOnAngle; imageUrl: string; createdAt: string }) => ({
+    angle: item.angle,
+    imageUrl: item.imageUrl,
+    createdAt: item.createdAt,
+  })
+
+  router.get('/results', (request, response) => {
+    response.json({
+      items: userData.listTryOnResults(request.authUser.id)
+        .filter((item) => TRY_ON_ANGLES.includes(item.angle))
+        .map(toResponse),
+    })
+  })
+
+  router.get('/outfits', (request, response) => {
+    response.json({
+      items: userData.listSavedOutfits(request.authUser.id).map((outfit) => ({
+        id: outfit.id,
+        frontImageUrl: outfit.frontImageUrl,
+        backImageUrl: outfit.backImageUrl,
+        garmentIds: outfit.garmentIds,
+        createdAt: outfit.createdAt,
+      })),
+    })
+  })
+
+  router.delete('/outfits/:id', async (request, response, next) => {
+    try {
+      const userId = request.authUser.id
+      const deleted = userData.deleteSavedOutfit(userId, request.params.id)
+      if (!deleted) {
+        response.status(404).json({ message: 'Không tìm thấy bộ đồ đã lưu.' })
+        return
+      }
+      const currentKeys = new Set(userData.listTryOnResults(userId)
+        .flatMap((result) => result.imageKey ? [result.imageKey] : []))
+      const unusedKeys = [deleted.frontImageKey, deleted.backImageKey]
+        .filter((key): key is string => Boolean(key))
+        .filter((key) => !currentKeys.has(key) && !userData.isImageKeySaved(userId, key))
+      await Promise.all(unusedKeys.map((key) => images.delete(key)))
+      response.json({ deleted: true })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.post('/angles/:angle', async (request, response, next) => {
+    try {
+      const userId = request.authUser.id
+      const angle = request.params.angle as TryOnAngle
+      if (!TRY_ON_ANGLES.includes(angle)) {
+        response.status(400).json({ message: 'Góc ảnh không hợp lệ.' })
+        return
+      }
+      if (request.body.privacyConfirmed !== true) {
+        response.status(400).json({ message: 'Cần xác nhận quyền riêng tư trước khi tạo ảnh.' })
+        return
+      }
+      const garmentIds: string[] = Array.isArray(request.body.garmentIds)
+        ? request.body.garmentIds
+          .filter((id: unknown): id is string => typeof id === 'string')
+          .slice(0, 10)
+        : []
+      if (garmentIds.length === 0) {
+        response.status(400).json({ message: 'Cần chọn ít nhất một món đồ.' })
+        return
+      }
+      const person = userData.getPersonImage(userId)
+      if (!person) {
+        response.status(400).json({ message: 'Cần tải ảnh người dùng trước.' })
+        return
+      }
+      const selectedGarments = garmentIds.map((id) => garments.findById(userId, id))
+      if (selectedGarments.some((garment) => !garment)) {
+        response.status(400).json({ message: 'Có món đồ không còn tồn tại.' })
+        return
+      }
+
+      const garmentImageUrls = selectedGarments.map((garment) => {
+        const key = angle === 'back' && garment?.backProcessedKey
+          ? garment.backProcessedKey
+          : garment!.frontProcessedKey
+        return images.publicUrl(key)
+      })
+      const frontReference = angle === 'front'
+        ? undefined
+        : userData.listTryOnResults(userId).find((item) => item.angle === 'front')?.imageUrl
+      if (angle !== 'front' && !frontReference) {
+        response.status(409).json({ message: 'Cần tạo ảnh TRƯỚC thành công trước.' })
+        return
+      }
+
+      const garmentInfo = selectedGarments.map((g) => ({
+        name: g!.name,
+        category: g!.category,
+      }))
+
+      const preservePose = request.body.preservePose !== false
+
+      // KHI TẠO ẢNH GÓC SAU:
+      // Lấy trực tiếp ảnh góc trước đã hoàn thiện làm personImageUrl!
+      // Không truyền ảnh selfie gốc nữa để loại bỏ triệt để việc AI nhặt lại phụ kiện cũ
+      // (khăn bandana, túi xách cũ, điện thoại...) từ ảnh selfie ban đầu.
+      const personImageUrl = angle === 'back' && frontReference
+        ? frontReference
+        : images.publicUrl(person.imageKey)
+
+      const generated = await provider.generate({
+        personImageUrl,
+        garmentImageUrls,
+        garments: garmentInfo,
+        angle,
+        referenceImageUrl: frontReference,
+        preservePose,
+      })
+      const result = {
+        angle,
+        imageUrl: generated.imageUrl,
+        imageKey: generated.storageKey ?? null,
+        createdAt: new Date().toISOString(),
+      }
+      const previousImageKey = userData.listTryOnResults(userId)
+        .find((item) => item.angle === angle)?.imageKey
+      userData.upsertTryOnResult(userId, result)
+      if (previousImageKey && previousImageKey !== result.imageKey && !userData.isImageKeySaved(userId, previousImageKey)) {
+        await images.delete(previousImageKey)
+      }
+
+      if (angle === 'front') {
+        userData.saveOutfit(userId, {
+          id: randomUUID(),
+          frontImageUrl: result.imageUrl,
+          frontImageKey: result.imageKey,
+          backImageUrl: null,
+          backImageKey: null,
+          garmentIds,
+          createdAt: result.createdAt,
+        })
+      } else {
+        const front = userData.listTryOnResults(userId).find((item) => item.angle === 'front')
+        if (front) {
+          const pending = userData.findPendingOutfit(userId, front.imageUrl)
+          userData.saveOutfit(userId, {
+            id: pending?.id ?? randomUUID(),
+            frontImageUrl: front.imageUrl,
+            frontImageKey: front.imageKey,
+            backImageUrl: result.imageUrl,
+            backImageKey: result.imageKey,
+            garmentIds,
+            createdAt: result.createdAt,
+          })
+        }
+      }
+      response.json(toResponse(result))
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  return router
+}

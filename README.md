@@ -1,0 +1,179 @@
+# Fitting Room
+
+Ứng dụng thử trang phục bằng ảnh AI, không sử dụng mô hình 3D. Repository hiện dùng FLUX 3 Image Klein qua OpenRouter. Ảnh TRƯỚC và SAU được tạo bằng hai thao tác riêng để người dùng chủ động kiểm soát chi phí; ảnh TRƯỚC là tham chiếu cho ảnh SAU.
+
+## Công nghệ
+
+- Frontend: React, Vite, TypeScript strict, Tailwind, Zustand.
+- Backend: Node.js, Express, TypeScript.
+- Lưu trữ bản đầu: SQLite cho metadata và thư mục local cho file ảnh.
+- Tách nền: `@imgly/background-removal`, chạy trực tiếp trong trình duyệt.
+
+## Cài đặt và chạy
+
+Yêu cầu Node.js 22 trở lên.
+
+```bash
+npm install
+copy .env.example .env
+npm run dev
+```
+
+- Web và API: `http://127.0.0.1:8787`
+- API health check: `http://127.0.0.1:8787/api/health`
+
+Express nhúng Vite ở chế độ development nên frontend và API dùng chung một cổng. Khi chạy `npm start`, Express phục vụ frontend đã build từ `dist/` trên cùng cổng đó.
+
+`npm run dev` chạy đồng thời Vite và Express. Dữ liệu local được tạo trong `data/` và đã được gitignore.
+
+## Kiểm tra và build
+
+```bash
+npm run test
+npm run build
+npm start
+```
+
+`npm start` chạy backend đã build trong `dist-server/` và phục vụ frontend production từ `dist/`.
+
+## Biến môi trường
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `PORT` | `8787` | Cổng Express API |
+| `DATA_DIR` | `./data` | Vị trí SQLite và thư mục ảnh |
+| `AUTH_SESSION_DAYS` | `30` | Số ngày duy trì phiên đăng nhập |
+| `COOKIE_SECURE` | `false` | Đặt `true` khi production chạy sau HTTPS |
+| `IMAGE_PROVIDER` | `openrouter` | Provider tạo ảnh; hỗ trợ `openrouter`, `gemini` và `mock` |
+| `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock để kiểm thử loading |
+| `OPENROUTER_API_KEY` | trống | API key OpenRouter, chỉ đặt ở backend |
+| `OPENROUTER_IMAGE_MODEL` | `black-forest-labs/flux-3-image-klein` | Model OpenRouter tạo/chỉnh ảnh |
+| `OPENROUTER_IMAGE_RESOLUTION` | `768` | Mức phân giải output để kiểm soát chi phí |
+| `OPENROUTER_IMAGE_ASPECT_RATIO` | `4:5` | Tỷ lệ ảnh toàn thân |
+| `OPENROUTER_TIMEOUT_MS` | `120000` | Timeout mỗi request OpenRouter |
+| `GEMINI_API_KEY` | trống | Chỉ đặt ở backend |
+| `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image` | Model Gemini tạo/chỉnh ảnh |
+| `GEMINI_TIMEOUT_MS` | `120000` | Timeout mỗi request Gemini, tính bằng ms |
+| `APP_BASE_URL` | `http://127.0.0.1:8787` | Base URL để backend đọc ảnh local trước khi gửi bytes tới Gemini |
+| `MUAPI_API_KEY` | trống | Chỉ đặt ở backend |
+
+Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó sẽ bị đóng gói vào frontend.
+
+## Đăng nhập và dữ liệu tài khoản
+
+- Đăng ký bằng tên hiển thị, email và mật khẩu tối thiểu 8 ký tự.
+- Mật khẩu được băm bằng Node.js `scrypt` với salt riêng; không lưu mật khẩu gốc.
+- Phiên đăng nhập dùng token ngẫu nhiên, chỉ hash token được lưu trong SQLite. Cookie có `HttpOnly` và `SameSite=Lax`.
+- Tủ đồ, ảnh người, kết quả hiện tại và “Bộ đồ của tôi” đều được phân vùng theo `user_id`.
+- Tài khoản đầu tiên tạo sau khi nâng cấp sẽ nhận dữ liệu local cũ. Các tài khoản sau bắt đầu với không gian trống.
+- Chưa có xác minh email hoặc quên mật khẩu; hai luồng này cần tích hợp dịch vụ gửi email trước khi triển khai công khai.
+
+### Chạy với OpenRouter / FLUX 3 Image Klein
+
+Tạo key tại OpenRouter và đảm bảo tài khoản còn ít nhất 1 USD, sau đó sửa `.env`:
+
+```env
+IMAGE_PROVIDER=openrouter
+OPENROUTER_API_KEY=YOUR_SERVER_SIDE_API_KEY
+OPENROUTER_IMAGE_MODEL=black-forest-labs/flux-3-image-klein
+OPENROUTER_IMAGE_RESOLUTION=768
+OPENROUTER_IMAGE_ASPECT_RATIO=4:5
+```
+
+Backend đọc ảnh local, chuyển thành data URL và gửi qua `input_references`. OpenRouter trả ảnh base64; backend lưu output bằng `ImageStorage`. Chi phí thật của mỗi request được ghi từ `usage.cost` nhưng không log ảnh người dùng.
+
+### Chuyển lại Gemini
+
+Tạo API key trong Google AI Studio, sau đó sửa `.env` ở backend:
+
+```env
+IMAGE_PROVIDER=gemini
+GEMINI_API_KEY=YOUR_SERVER_SIDE_API_KEY
+GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
+GEMINI_TIMEOUT_MS=120000
+```
+
+Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage local, chuyển chúng thành inline image data rồi mới gọi Gemini; Google không cần truy cập URL localhost. Output Gemini được lưu lại qua `ImageStorage` và chỉ URL local được ghi vào SQLite.
+
+## Cấu trúc
+
+```text
+src/
+  components/       Giao diện tủ đồ, upload, kết quả và ảnh người dùng
+  hooks/            Hook quản lý object URL
+  services/         API client và background removal
+  store/            Zustand store và unit test
+  types/            Domain types dùng ở frontend
+server/
+  domain/           Domain type của backend
+  routes/           Express routes
+  storage/          Interface repository/storage và implementation SQLite/local
+```
+
+## Đã hoàn thành ở Giai đoạn 1
+
+- Layout ba vùng responsive, không có Three.js hoặc mô hình 3D.
+- Upload ảnh mặt trước bắt buộc và mặt sau tùy chọn.
+- Kiểm tra JPG/PNG/WebP và giới hạn 10MB cho ảnh món đồ.
+- Xem ảnh gốc và ảnh đã tách nền cạnh nhau; có thể chọn ảnh khác và tách lại.
+- Lưu, tải và xóa món đồ qua Express + SQLite + thư mục ảnh.
+- Mỗi nhóm chỉ chọn một món, có nút bỏ chọn và phần tóm tắt bộ đồ.
+
+## Đã hoàn thành ở Giai đoạn 2
+
+- Upload ảnh người dùng dạng JPG/PNG/WebP, tối đa 10MB.
+- Resize trên trình duyệt để cạnh dài tối đa 1024px; backend chỉ lưu bản đã resize.
+- Cảnh báo ảnh ngang, tỷ lệ bất thường hoặc độ phân giải thấp. Kiểm tra tư thế hiện là heuristic và checklist người dùng, chưa dùng model pose detection.
+- Checkbox bắt buộc xác nhận ảnh chính chủ và đồng ý gửi tới dịch vụ AI bên thứ ba.
+- Checkbox tự reset khi đổi hoặc xoá ảnh.
+- API xoá ảnh người dùng và toàn bộ kết quả; schema kết quả đã sẵn sàng cho Giai đoạn 3.
+
+## Đã hoàn thành ở Giai đoạn 3 — OpenRouter và Gemini
+
+- Interface `ImageProvider` dùng chung cho mock, Gemini và OpenRouter.
+- Prompt hai góc nằm riêng trong `server/prompts/try-on-prompt.ts`.
+- FLUX nhận ảnh người, tối đa bốn món đồ và dùng ảnh TRƯỚC làm reference cho ảnh SAU.
+- Góc SAU ưu tiên ảnh mặt sau của món đồ khi có.
+- Nút chính chỉ tạo ảnh TRƯỚC. Khi thành công, người dùng chủ động bấm “Tạo ảnh sau”; mỗi ảnh là một request tính phí riêng.
+- Loading, lỗi và nút tạo lại được quản lý riêng theo từng góc.
+- Phân loại lỗi quota, timeout, nội dung bị từ chối và provider không khả dụng.
+- Output OpenRouter/Gemini được lưu bằng `ImageStorage`; file cũ được dọn khi tạo lại, đổi ảnh người hoặc xoá dữ liệu.
+
+## Đã hoàn thành ở Giai đoạn 4 — Bộ đồ của tôi
+
+- Ảnh TRƯỚC được lưu ngay vào lịch sử; ảnh SAU là tuỳ chọn và được cập nhật vào đúng bộ khi người dùng chủ động tạo.
+- Trang “Bộ đồ của tôi” hiển thị nhiều lần thử, hỗ trợ phóng to cặp ảnh và xoá từng bộ.
+- Ảnh lịch sử được bảo toàn khi tạo bộ mới; “Xoá toàn bộ dữ liệu” dọn cả lịch sử và file liên quan.
+- Chưa có tải ZIP; tính năng này vẫn nằm trong phần còn lại của Giai đoạn 4.
+
+## Chưa làm
+
+- Provider MuAPI chưa cài vì phiên bản hiện tại chọn OpenRouter/FLUX làm provider thật.
+- Giai đoạn 4 còn lại: tải ZIP.
+- Giai đoạn 5 còn lại: quota tạo ảnh, ngân sách hệ thống, cache và retention. Auth đã có rate limit cơ bản cho đăng nhập.
+
+## Chuẩn hoá trang phục (Module garment_normalizer)
+
+Module độc lập tại [`src/garment_normalizer/`](src/garment_normalizer) nhận ảnh món đồ sau khi tách nền (PNG RGBA) và chuẩn hoá để mọi món đồ nằm đúng khung, thẳng, cùng tỉ lệ:
+
+- **Kiến trúc 2 tầng độc lập**:
+  1. `core/`: Hàm thuần trên `RGBAImage = { data: Uint8ClampedArray; width; height }`, không DOM, chạy và test trực tiếp trong Node.js/Vitest.
+  2. `io/`: Xử lý I/O, canvas multi-step halving resize, và chạy ngầm qua **Web Worker** (`postMessage` truyền `ArrayBuffer` dạng transferable, không đơ UI).
+- **Lưu ý Safari di động**: Mobile Safari có giới hạn bộ nhớ/diện tích Canvas (`canvas.maxArea`), do đó `max_input_px` được mặc định là `2048` (trên các thiết bị iOS cũ hoặc bộ nhớ thấp có thể điều chỉnh xuống `1536`).
+- **Hiệu năng thực tế (Benchmark)**: Ảnh độ phân giải $2048 \times 2048$ hoàn thành toàn bộ pipeline core trong **~930ms** (ngưỡng yêu cầu < 1.5 giây).
+- **Kiểm thử tự động**: 10 kịch bản kiểm thử toàn diện tại `src/garment_normalizer/__tests__/phase8_comprehensive.test.ts` (kiểm tra lệch tâm, nghiêng ±10°, nghiêng 25°, cắt mép, xoá rác, lấp lỗ, khử viền đỏ, tính lũy đẳng idempotent, và tỉ lệ relative).
+
+## Module bạn bè & bình chọn
+
+Đã thêm **Bảng tin** (/bang-tin) và **Bạn bè** (/ban-be): lời mời, nhóm, QR/link cá nhân, chia sẻ outfit và bình chọn 1–3 bộ. Xem [hướng dẫn social](docs/social-module.md) để test bằng nhiều tài khoản và hiểu quyền ảnh, tuổi tự khai, báo cáo và giới hạn MVP. Không cần API key mới.
+
+## Kiểm thử với mock provider
+
+`.env` local mặc định:
+
+```env
+IMAGE_PROVIDER=mock
+MOCK_DELAY_MS=2000
+```
+
+Mock tạo từng ảnh theo đúng thao tác của người dùng. Mỗi ảnh là SVG có nhãn `NOT AI OUTPUT`; đây chỉ là dữ liệu giả để kiểm thử loading, lỗi, tạo lại và bố cục, không phải kết quả thử đồ AI.

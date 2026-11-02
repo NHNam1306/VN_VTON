@@ -1,0 +1,106 @@
+// @vitest-environment node
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import path from 'node:path'
+import { AuthStore } from '../auth/auth-store.js'
+import { SqliteUserDataRepository } from '../storage/sqlite-user-data-repository.js'
+import { SqliteGarmentRepository } from '../storage/sqlite-garment-repository.js'
+import { SocialStore } from './social-store.js'
+describe('Social access and voting',()=>{
+ let dir:string,auth:AuthStore,outfits:SqliteUserDataRepository,garments:SqliteGarmentRepository,social:SocialStore
+ beforeEach(()=>{
+  dir=mkdtempSync(path.join(tmpdir(),'fitting-social-test-'))
+  const db=path.join(dir,'test.sqlite')
+  auth=new AuthStore(db);outfits=new SqliteUserDataRepository(db);garments=new SqliteGarmentRepository(db)
+  for(const id of ['alice','bob','carol','outsider'])auth.createUser({id,email:id+'@test.local',displayName:id,passwordHash:'test',passwordSalt:'test',createdAt:new Date().toISOString()})
+  social=new SocialStore(db,outfits)
+  social.snapshot('alice')
+  for(const id of ['one','two'])outfits.saveOutfit('alice',{id,frontImageUrl:'/uploads/'+id+'.png',frontImageKey:id+'.png',backImageUrl:null,backImageKey:null,garmentIds:[],createdAt:new Date().toISOString()})
+ })
+ afterEach(()=>{vi.useRealTimers();social.close();auth.close();outfits.close();garments.close();rmSync(dir,{recursive:true,force:true})})
+ const connect=(a:string,b:string)=>{
+  const code=social.snapshot(b).me.inviteCode
+  social.act(a,'request',{targetId:b,inviteCode:code})
+  const req=social.snapshot(b).incoming.find(r=>r.from.id===a)!
+  social.act(b,'request-response',{id:req.id,decision:'accept'})
+ }
+ const poll=()=>{
+  connect('alice','bob');connect('alice','carol')
+  return social.act('alice','poll-create',{outfitIds:['one','two'],recipientIds:['bob','carol'],hours:1,title:'Chọn giúp mình'}).polls[0]!
+ }
+ it('requires invite codes for unknown ages and protects private profile data',()=>{
+  expect(()=>social.act('bob','request',{targetId:'alice'})).toThrow()
+  connect('alice','bob')
+  const person=social.profile('bob','alice').person
+  expect(person).not.toHaveProperty('birthDate');expect(person).not.toHaveProperty('inviteCode')
+  expect(social.profile('bob','alice').outfits).toHaveLength(0)
+  expect(()=>social.profile('outsider','alice')).toThrow()
+ })
+ it('only recipients vote; vote changes replace rather than accumulate',()=>{
+  const p=poll()
+  expect(social.snapshot('outsider').polls).toHaveLength(0)
+  expect(()=>social.act('outsider','vote',{id:p.id,outfitId:'one'})).toThrow()
+  social.act('bob','vote',{id:p.id,outfitId:'one'})
+  expect(social.snapshot('carol').polls[0]!.votes).toHaveLength(0)
+  social.act('bob','vote',{id:p.id,outfitId:'two'})
+  social.act('carol','vote',{id:p.id,outfitId:'one'})
+  expect(social.snapshot('bob').polls[0]!.votes).toHaveLength(2)
+  expect(social.snapshot('alice').polls[0]!.votes.find(v=>v.user.id==='bob')?.outfitId).toBe('two')
+ })
+ it('revokes poll and media access on unfriend, even after reconnect',()=>{
+  const p=poll()
+  expect(social.canReadImage('bob','one.png')).toBe(true)
+  expect(social.canReadImage('outsider','one.png')).toBe(false)
+  social.act('alice','unfriend',{targetId:'bob'})
+  expect(social.snapshot('bob').polls).toHaveLength(0)
+  expect(social.canReadImage('bob','one.png')).toBe(false)
+  connect('alice','bob')
+  expect(()=>social.act('bob','vote',{id:p.id,outfitId:'one'})).toThrow()
+ })
+ it('blocks requests and removes notifications without notifying blocked user',()=>{
+  poll();social.act('alice','block',{targetId:'bob'})
+  expect(social.snapshot('bob').notifications).toHaveLength(0)
+  expect(social.search('bob','user_alice')).toHaveLength(0)
+  expect(()=>social.act('bob','request',{targetId:'alice',inviteCode:social.snapshot('alice').me.inviteCode})).toThrow()
+ })
+ it('group membership gates media; leaving revokes access',()=>{
+  connect('alice','bob');connect('alice','carol')
+  const group=social.act('alice','group-save',{name:'Close',memberIds:['bob']}).groups[0]!
+  social.act('alice','outfit-policy',{outfitId:'one',visibility:'groups',groupIds:[group.id]})
+  expect(social.canReadImage('bob','one.png')).toBe(true)
+  expect(social.canReadImage('carol','one.png')).toBe(false)
+  expect(()=>social.act('bob','group-save',{id:group.id,name:'Steal',memberIds:[]})).toThrow()
+  social.act('bob','group-leave',{id:group.id})
+  expect(social.canReadImage('bob','one.png')).toBe(false)
+ })
+ it('expiration prevents votes and emits results once; owner saves winning outfit',()=>{
+  const p=poll();social.act('bob','vote',{id:p.id,outfitId:'two'})
+  expect(()=>social.act('alice','poll-winner',{id:p.id,outfitId:'two'})).toThrow()
+  vi.useFakeTimers();vi.setSystemTime(p.expiresAt+1)
+  expect(()=>social.act('bob','vote',{id:p.id,outfitId:'one'})).toThrow()
+  const count=social.snapshot('bob').notifications.length
+  expect(social.snapshot('bob').notifications).toHaveLength(count)
+  expect(()=>social.act('alice','poll-winner',{id:p.id,outfitId:'one'})).toThrow()
+  expect(social.act('alice','poll-winner',{id:p.id,outfitId:'two'}).policies.find(o=>o.outfitId==='two')?.official).toBe(true)
+ })
+ it('private reset and deletion revoke prior poll media access',()=>{
+  poll()
+  social.act('alice','outfit-policy',{outfitId:'one',visibility:'private'})
+  expect(social.snapshot('bob').polls).toHaveLength(0)
+  expect(social.canReadImage('bob','one.png')).toBe(false)
+ })
+ it('rejects more than 3 outfits, invalid audience and changes to others polls',()=>{
+  const p=poll()
+  expect(()=>social.act('alice','poll-create',{outfitIds:['one','two','three','four'],recipientIds:['bob'],hours:24})).toThrow()
+  expect(()=>social.act('alice','poll-create',{outfitIds:['one'],recipientIds:['outsider'],hours:24})).toThrow()
+  expect(()=>social.act('bob','poll-delete',{id:p.id})).toThrow()
+ })
+ it('stores reports and limits minor invitation settings',()=>{
+  const result=social.act('alice','settings',{username:'alice_1',avatar:'🌸',birthDate:'2015-01-01',invitePolicy:'everyone'})
+  expect(result.me.invitePolicy).toBe('known')
+  expect(()=>social.act('bob','report',{targetId:'alice',reason:'Unsafe content'})).not.toThrow()
+  const code=result.me.inviteCode;social.act('alice','rotate-invite',{})
+  expect(()=>social.resolveInvite('bob',code)).toThrow()
+ })
+})

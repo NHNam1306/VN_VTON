@@ -1,0 +1,59 @@
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { randomUUID } from 'node:crypto'
+import type { ImageStorage } from './image-storage.js'
+
+const extensionByMimeType: Record<string, string> = {
+  'image/jpeg': '.jpg',
+  'image/png': '.png',
+  'image/webp': '.webp',
+}
+
+const mimeTypeByExtension = Object.fromEntries(
+  Object.entries(extensionByMimeType).map(([mimeType, extension]) => [extension, mimeType]),
+) as Record<string, string>
+
+export class LocalImageStorage implements ImageStorage {
+  constructor(private readonly uploadDirectory: string) {}
+
+  async ensureReady(): Promise<void> {
+    await mkdir(this.uploadDirectory, { recursive: true })
+  }
+
+  async save(buffer: Buffer, mimeType: string): Promise<string> {
+    const extension = extensionByMimeType[mimeType]
+    if (!extension) {
+      throw new Error('Định dạng ảnh không được hỗ trợ.')
+    }
+    const key = `${randomUUID()}${extension}`
+    await writeFile(path.join(this.uploadDirectory, key), buffer)
+    return key
+  }
+
+  async read(key: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const safeKey = path.basename(key)
+    if (!key || safeKey !== key) {
+      throw new Error('Khoá ảnh không hợp lệ.')
+    }
+    const mimeType = mimeTypeByExtension[path.extname(safeKey).toLowerCase()]
+    if (!mimeType) {
+      throw new Error('Định dạng ảnh không được hỗ trợ.')
+    }
+    return {
+      buffer: await readFile(path.join(this.uploadDirectory, safeKey)),
+      mimeType,
+    }
+  }
+
+  async delete(key: string): Promise<void> {
+    try {
+      await unlink(path.join(this.uploadDirectory, path.basename(key)))
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    }
+  }
+
+  publicUrl(key: string): string {
+    return `/uploads/${encodeURIComponent(path.basename(key))}`
+  }
+}

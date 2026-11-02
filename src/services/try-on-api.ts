@@ -1,0 +1,45 @@
+import type { SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
+
+const parseError = async (response: Response) => {
+  try {
+    const data = await response.json() as { message?: string }
+    return data.message ?? 'Không thể tạo ảnh.'
+  } catch {
+    return 'Không thể tạo ảnh.'
+  }
+}
+
+export const tryOnApi = {
+  async listResults(): Promise<TryOnResult[]> {
+    const response = await fetch('/api/generations/results')
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { items: TryOnResult[] }).items
+  },
+
+  async generateAngle(angle: TryOnAngle, garmentIds: string[], preservePose = true): Promise<TryOnResult> {
+    const response = await fetch(`/api/generations/angles/${angle}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        garmentIds,
+        privacyConfirmed: true,
+        preservePose,
+      }),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    return response.json() as Promise<TryOnResult>
+  },
+
+  async listOutfits(): Promise<SavedOutfit[]> {
+    const response = await fetch('/api/generations/outfits')
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { items: SavedOutfit[] }).items
+  },
+
+  async deleteOutfit(id: string): Promise<void> {
+    const response = await fetch(`/api/generations/outfits/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+  },
+}
