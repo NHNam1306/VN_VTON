@@ -55,11 +55,25 @@ export class SupabaseAuthService implements AuthBackend {
     const { data, error } = await this.client.auth.signUp({
       email,
       password: input.password,
-      options: { data: { display_name: displayName } },
+      options: {
+        data: { display_name: displayName },
+        emailRedirectTo: new URL('/', this.appBaseUrl).toString(),
+      },
     })
     if (error) {
       const duplicate = /already|registered|exists/i.test(error.message)
-      throw new AuthError(duplicate ? 409 : 400, duplicate ? 'Email này đã được sử dụng.' : error.message)
+      const mailFailure = /confirmation email|sending email|smtp/i.test(error.message)
+      console.error('[auth.signup] Supabase rejected signup', {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      })
+      throw new AuthError(
+        duplicate ? 409 : (mailFailure ? 502 : 400),
+        duplicate
+          ? 'Email này đã được sử dụng.'
+          : (mailFailure ? 'Tài khoản chưa thể gửi email xác minh. Vui lòng thử lại sau.' : error.message),
+      )
     }
     if (!data.user || !data.session) {
       throw new AuthError(403, 'Tài khoản đã được tạo. Hãy xác minh email rồi đăng nhập.')
@@ -72,8 +86,41 @@ export class SupabaseAuthService implements AuthBackend {
       email: emailInput.trim().toLowerCase(),
       password,
     })
-    if (error || !data.user || !data.session) throw new AuthError(401, 'Email hoặc mật khẩu không đúng.')
+    if (error) {
+      const unconfirmed = error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message)
+      throw new AuthError(
+        unconfirmed ? 403 : 401,
+        unconfirmed ? 'Email chưa được xác minh. Hãy kiểm tra hộp thư hoặc gửi lại email xác minh.' : 'Email hoặc mật khẩu không đúng.',
+      )
+    }
+    if (!data.user || !data.session) throw new AuthError(401, 'Email hoặc mật khẩu không đúng.')
     return this.fromSession(data.user, data.session.access_token, data.session.refresh_token, data.session.expires_at)
+  }
+
+  async resendSignupConfirmation(emailInput: string): Promise<void> {
+    const email = emailInput.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
+      throw new AuthError(400, 'Email không hợp lệ.')
+    }
+    const { error } = await this.client.auth.resend({
+      type: 'signup',
+      email,
+      options: { emailRedirectTo: new URL('/', this.appBaseUrl).toString() },
+    })
+    if (!error) return
+
+    console.error('[auth.resend-confirmation] Supabase could not send confirmation email', {
+      code: error.code,
+      status: error.status,
+      message: error.message,
+    })
+    const rateLimited = error.status === 429 || /rate limit|too many/i.test(error.message)
+    throw new AuthError(
+      rateLimited ? 429 : 502,
+      rateLimited
+        ? 'Bạn vừa yêu cầu gửi email. Vui lòng đợi khoảng một phút rồi thử lại.'
+        : 'Chưa thể gửi lại email xác minh. Vui lòng thử lại sau.',
+    )
   }
 
   async requestPasswordReset(emailInput: string): Promise<void> {

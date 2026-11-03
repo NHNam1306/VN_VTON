@@ -16,6 +16,7 @@ export interface AuthBackend {
     legacyClaimToken?: string
   }): Promise<AuthResult>
   login(email: string, password: string): Promise<AuthResult>
+  resendSignupConfirmation?(email: string): Promise<void>
   requestPasswordReset?(email: string): Promise<void>
   resetPassword?(input: {
     accessToken: string

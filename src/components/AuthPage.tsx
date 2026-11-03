@@ -81,6 +81,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isResendingConfirmation, setIsResendingConfirmation] = useState(false)
+  const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
   const [error, setError] = useState<string | null>(recovery.error)
   const [success, setSuccess] = useState<string | null>(null)
 
@@ -88,6 +90,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
     setMode(nextMode)
     setError(null)
     setSuccess(null)
+    setAwaitingConfirmation(false)
     setPassword('')
     setConfirmPassword('')
   }
@@ -121,9 +124,30 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         : await authApi.register({ displayName, email, password })
       onAuthenticated(user)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : 'Không thể xác thực tài khoản.')
+      const message = submitError instanceof Error ? submitError.message : 'Không thể xác thực tài khoản.'
+      const needsConfirmation = /xác minh email|email chưa được xác minh/i.test(message)
+      if (needsConfirmation) {
+        setAwaitingConfirmation(true)
+        setSuccess(message)
+      } else {
+        setError(message)
+      }
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const resendConfirmation = async () => {
+    if (!email.trim()) return
+    setIsResendingConfirmation(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      setSuccess(await authApi.resendSignupConfirmation(email))
+    } catch (resendError) {
+      setError(resendError instanceof Error ? resendError.message : 'Chưa thể gửi lại email xác minh.')
+    } finally {
+      setIsResendingConfirmation(false)
     }
   }
 
@@ -210,6 +234,13 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
               {isSubmitting && <LoaderCircle size={17} className="animate-spin" />}
               {isSubmitting ? 'Đang xử lý…' : submitLabel}
             </button>
+
+            {awaitingConfirmation && (mode === 'login' || mode === 'register') && (
+              <button type="button" onClick={() => void resendConfirmation()} disabled={isResendingConfirmation} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-sage-200 bg-sage-50 px-5 py-3 text-xs font-bold text-sage-800 transition hover:border-sage-300 hover:bg-sage-100 disabled:cursor-wait disabled:opacity-55">
+                {isResendingConfirmation && <LoaderCircle size={15} className="animate-spin" />}
+                {isResendingConfirmation ? 'Đang gửi lại…' : 'Gửi lại email xác minh'}
+              </button>
+            )}
 
             {mode === 'reset' && !recovery.credentials && (
               <button type="button" onClick={() => changeMode('forgot')} className="w-full text-center text-xs font-bold text-sage-700 hover:underline">Yêu cầu liên kết mới</button>

@@ -28,6 +28,7 @@ const readCookie = (request: Request, cookieName: string): string | null => {
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000
+const CONFIRMATION_RESEND_WINDOW_MS = 60 * 1000
 
 type CookieOptions = { secure: boolean; sessionDays: number }
 
@@ -108,6 +109,15 @@ export function createAuthRouter(
     namespace: 'auth.reset.account', store: rateLimits, max: runtimeConfig.passwordResetAccountPerWindow,
     windowMs: PASSWORD_RESET_WINDOW_MS, key: accountKey, message: limited,
   })
+  const resendConfirmationIpLimit = createFixedWindowRateLimit({
+    namespace: 'auth.confirmation.ip', store: rateLimits, max: 10,
+    windowMs: PASSWORD_RESET_WINDOW_MS, key: ipKey, message: limited,
+  })
+  const resendConfirmationAccountLimit = createFixedWindowRateLimit({
+    namespace: 'auth.confirmation.account', store: rateLimits, max: 1,
+    windowMs: CONFIRMATION_RESEND_WINDOW_MS, key: accountKey,
+    message: 'Bạn vừa yêu cầu gửi email. Vui lòng đợi khoảng một phút rồi thử lại.',
+  })
 
   router.post('/register', registerLimit, async (request, response, next) => {
     try {
@@ -135,6 +145,21 @@ export function createAuthRouter(
       if (account) await rateLimits.reset(buildRateLimitKey('auth.login.account', account))
       setSessionCookies(response, result, cookieOptions)
       response.json({ user: decorate ? await decorate(result.user) : result.user })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.post('/resend-confirmation', resendConfirmationIpLimit, resendConfirmationAccountLimit, async (request, response, next) => {
+    try {
+      if (!auth.resendSignupConfirmation) {
+        throw new AuthError(501, 'Xác minh email chưa được bật ở môi trường này.')
+      }
+      const email = typeof request.body.email === 'string' ? request.body.email : ''
+      await auth.resendSignupConfirmation(email)
+      response.status(202).json({
+        message: 'Đã yêu cầu gửi lại. Hãy kiểm tra cả Hộp thư đến và Thư rác trong ít phút.',
+      })
     } catch (error) {
       next(error)
     }

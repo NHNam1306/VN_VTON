@@ -38,6 +38,16 @@ export const authApi = {
     return ((await response.json()) as { user: AuthUser }).user
   },
 
+  async resendSignupConfirmation(email: string): Promise<string> {
+    const response = await apiFetch('/api/auth/resend-confirmation', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email }),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { message: string }).message
+  },
+
   async requestPasswordReset(email: string): Promise<string> {
     const response = await apiFetch('/api/auth/forgot-password', {
       method: 'POST',
