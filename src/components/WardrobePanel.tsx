@@ -1,4 +1,4 @@
-import { Check, ImagePlus, LoaderCircle, Maximize2, Pencil, Plus, RotateCcw, Search, Shirt, Trash2 } from 'lucide-react'
+import { ArrowRight, Check, ImagePlus, LoaderCircle, Maximize2, Pencil, Plus, Search, Shirt, Trash2 } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { garmentApi } from '../services/garment-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
@@ -181,10 +181,11 @@ function WardrobeGarmentCard({ garment, isSelected, onSelect, onEdit, onDelete, 
 
 type WardrobePanelProps = {
   onAddGarment: () => void
+  onGoToFitting?: () => void
   mode?: 'compact' | 'page'
 }
 
-export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelProps) {
+export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact' }: WardrobePanelProps) {
   const [query, setQuery] = useState('')
   const [editingGarment, setEditingGarment] = useState<Garment | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
@@ -198,7 +199,6 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
   const error = useFittingRoomStore((state) => state.wardrobeError)
   const setActiveCategory = useFittingRoomStore((state) => state.setActiveCategory)
   const selectGarment = useFittingRoomStore((state) => state.selectGarment)
-  const clearSelection = useFittingRoomStore((state) => state.clearSelection)
   const removeGarment = useFittingRoomStore((state) => state.removeGarment)
   const setWardrobeError = useFittingRoomStore((state) => state.setWardrobeError)
   const tabListRef = useRef<HTMLDivElement>(null)
@@ -209,20 +209,13 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
     garment.category === activeCategory &&
     (!normalizedQuery || garment.name.toLocaleLowerCase('vi').includes(normalizedQuery))
   ))
-  const wardrobeTarget = MAX_WARDROBE_GARMENTS
   const isWardrobeFull = garments.length >= MAX_WARDROBE_GARMENTS
-  const wardrobeProgress = Math.min(100, Math.round((garments.length / wardrobeTarget) * 100))
   const selectedCount = [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes]
     .filter(Boolean).length + outfit.accessories.length
   const isGarmentSelected = (garment: Garment) =>
     garment.category === 'accessories'
       ? outfit.accessories.includes(garment.id)
       : outfit[garment.category] === garment.id
-
-  const hasSelectionInActiveCategory =
-    activeCategory === 'accessories'
-      ? outfit.accessories.length > 0
-      : Boolean(outfit[activeCategory])
 
   const handleSelect = (garment: Garment) => {
     const isSelected = isGarmentSelected(garment)
@@ -293,30 +286,39 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
 
   return (
     <aside className={'flex min-h-0 flex-col overflow-hidden rounded-[32px] border border-black/[0.065] bg-white/80 shadow-[0_16px_40px_rgba(23,33,29,0.06)] backdrop-blur-md ' + (mode === 'page' ? 'min-h-[620px]' : 'lg:h-full')}>
-      <div className="flex items-center justify-between px-5 pb-3.5 pt-5">
-        <div>
-          <div className="mb-0.5 flex items-center gap-2">
-            <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-sage-800">Bộ sưu tập</span>
-            <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2 py-0.5 text-[10px] font-bold text-ink/60">
-              {garments.length} món
-            </span>
-          </div>
-          <h2 className="font-display text-xl font-bold tracking-tight text-ink">Tủ đồ cá nhân</h2>
+      <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3.5 pt-5 sm:px-6">
+        <div className="flex items-center gap-3">
+          <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Tủ đồ</h2>
+          <span className="rounded-full border border-black/[0.06] bg-black/[0.03] px-2.5 py-0.5 text-xs font-bold text-ink/60">
+            {garments.length} món
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={onAddGarment}
-          disabled={isWardrobeFull}
-          className="group relative flex h-10 items-center gap-1.5 overflow-hidden rounded-full bg-ink px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,33,29,0.18)] transition-all hover:-translate-y-0.5 hover:bg-sage-800 hover:shadow-[0_12px_24px_rgba(23,33,29,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
-          aria-label={`Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}
-        >
-          <Plus size={16} className="transition-transform duration-200 group-hover:rotate-90" />
-          <span>{isWardrobeFull ? 'Tủ đồ đã đầy' : `Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          {onGoToFitting && (
+            <button
+              type="button"
+              onClick={onGoToFitting}
+              className="inline-flex items-center gap-1.5 rounded-full border border-black/10 bg-white px-4 py-2 text-xs font-bold text-ink shadow-xs transition hover:border-black/20 hover:bg-black/[0.03]"
+            >
+              <span>Sang phòng thử</span>
+              <ArrowRight size={14} />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onAddGarment}
+            disabled={isWardrobeFull}
+            className="group relative flex h-10 items-center gap-1.5 overflow-hidden rounded-full bg-ink px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,33,29,0.18)] transition-all hover:-translate-y-0.5 hover:bg-sage-800 hover:shadow-[0_12px_24px_rgba(23,33,29,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
+            aria-label={`Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}
+          >
+            <Plus size={16} className="transition-transform duration-200 group-hover:rotate-90" />
+            <span>{isWardrobeFull ? 'Tủ đồ đã đầy' : `Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}</span>
+          </button>
+        </div>
       </div>
 
       <div className="px-4 pb-3">
-        <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+        <div className="mb-3">
           <label className="relative block">
             <span className="sr-only">Tìm trong tủ đồ</span>
             <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink/35" />
@@ -327,16 +329,12 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
               className="w-full rounded-2xl border border-black/[0.07] bg-white/80 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition focus:border-sage-300 focus:ring-2 focus:ring-sage-300/40"
             />
           </label>
-          <div className="rounded-2xl border border-black/[0.06] bg-sage-50/80 px-3.5 py-2.5" aria-label={`Tiến độ tủ đồ ${garments.length} trên ${wardrobeTarget} món`}>
-            <div className="flex items-center justify-between text-[10px] font-bold text-ink/55">
-              <span>{isWardrobeFull ? 'Tủ đồ đã đầy' : 'Dung lượng tủ đồ'}</span>
-              <span>{Math.min(garments.length, wardrobeTarget)}/{wardrobeTarget}</span>
-            </div>
-            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
-              <span className="block h-full rounded-full bg-sage-600 transition-[width] duration-500" style={{ width: `${wardrobeProgress}%` }} />
-            </div>
-          </div>
         </div>
+        {selectionNotice && (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800" role="alert">
+            {selectionNotice}
+          </p>
+        )}
         <div
           ref={tabListRef}
           className="wardrobe-tab-track scrollbar-none flex gap-1 overflow-x-auto rounded-2xl border border-black/[0.04] bg-black/[0.03] p-1"
@@ -409,32 +407,6 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
             </div>
           )}
         </div>
-      </div>
-
-      <div className="border-t border-black/[0.055] p-4">
-        <div className="mb-3 flex items-center justify-between rounded-xl bg-black/[0.035] px-3 py-2 text-xs text-ink/60">
-          <span>Đồ đang chọn</span>
-          <strong className={selectedCount >= MAX_SELECTED_GARMENTS ? 'text-coral' : 'text-ink'}>
-            {selectedCount}/{MAX_SELECTED_GARMENTS}
-          </strong>
-        </div>
-        {selectionNotice && (
-          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800" role="alert">
-            {selectionNotice}
-          </p>
-        )}
-        <button
-          type="button"
-          onClick={() => {
-            setSelectionNotice(null)
-            clearSelection(activeCategory)
-          }}
-          disabled={!hasSelectionInActiveCategory}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-xs font-bold text-ink transition hover:border-coral/40 hover:bg-red-50/30 hover:text-coral disabled:cursor-not-allowed disabled:opacity-35"
-        >
-          <RotateCcw size={14} aria-hidden="true" />
-          <span>Bỏ chọn {garmentCategoryLabels[activeCategory].toLowerCase()}</span>
-        </button>
       </div>
 
       <ConfirmDialog

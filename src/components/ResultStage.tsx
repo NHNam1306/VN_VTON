@@ -1,7 +1,7 @@
 import { Camera, Image, Maximize2, RefreshCw, Sparkles } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
-import type { AngleGenerationState, Garment, TryOnAngle } from '../types/fitting-room'
+import { MAX_SELECTED_GARMENTS, type AngleGenerationState, type Garment, type TryOnAngle } from '../types/fitting-room'
 import { ImageLightbox } from './ImageLightbox'
 
 const angles: Array<{ key: TryOnAngle; label: string; number: string; subLabel: string }> = [
@@ -68,13 +68,10 @@ export function ResultStage({ states, onRegenerate }: ResultStageProps) {
   return (
     <section className="flex min-h-[560px] flex-col overflow-x-hidden overflow-y-auto rounded-[32px] border border-black/[0.06] bg-[#eae7de]/70 shadow-[0_20px_50px_rgba(23,33,29,0.06)] backdrop-blur-md lg:h-full lg:min-h-0">
       <div className="flex flex-col gap-2 border-b border-black/[0.05] px-6 pb-3.5 pt-5 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.22em] text-ink/40">STUDIO RENDER</span>
-            <span className="rounded-full border border-black/[0.08] bg-white/70 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink/75">2 Góc Nhìn</span>
-          </div>
+        <div>
+          <h2 className="font-display text-base font-bold text-ink">Kết quả thử đồ</h2>
+          <p className="mt-0.5 text-[11px] text-ink/45">Góc trước và góc sau</p>
         </div>
-        <p className="text-left text-[11px] font-medium leading-5 text-ink/45 sm:text-right">Góc SAU dùng góc TRƯỚC làm tham chiếu nhận diện</p>
       </div>
 
       <div className="flex-1 p-4 sm:p-5">
@@ -187,7 +184,7 @@ export function ResultStage({ states, onRegenerate }: ResultStageProps) {
       <div className="shrink-0 border-t border-black/[0.05] bg-white/40 px-6 py-3.5 backdrop-blur-sm">
         <div className="mb-2 flex items-center justify-between">
           <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink/40">
-            LOOKBOOK SELECTION · {selected.length > 5 ? selected.length : `${selected.length}/5`} MÓN
+            BỘ ĐỒ ĐÃ CHỌN · {selected.length}/{MAX_SELECTED_GARMENTS} MÓN
           </p>
           <span className="text-[10px] font-medium text-ink/40">Mặc theo lớp layer</span>
         </div>

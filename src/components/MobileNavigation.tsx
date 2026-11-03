@@ -1,4 +1,4 @@
-import { BadgeDollarSign, Camera, Home, MessageSquare, Plus, Shirt, Sparkles, UserRound, X } from 'lucide-react'
+import { BadgeDollarSign, Camera, Home, MessageSquare, Plus, Shirt, Sparkles, Users, X } from 'lucide-react'
 import type { AppView } from '../navigation'
 
 export function MobileNavigation({ activeView, onNavigate, onQuickAction }: { activeView: AppView; onNavigate: (view: AppView) => void; onQuickAction: () => void }) {
@@ -6,7 +6,7 @@ export function MobileNavigation({ activeView, onNavigate, onQuickAction }: { ac
     { view: 'feed', label: 'Trang chủ', icon: Home },
     { view: 'wardrobe', label: 'Tủ đồ', icon: Shirt },
     { view: 'fitting', label: 'Phòng thử', icon: Sparkles },
-    { view: 'profile', label: 'Hồ sơ', icon: UserRound },
+    { view: 'friends', label: 'Bạn bè', icon: Users },
   ]
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-black/10 bg-panel/95 px-3 pb-[max(0.65rem,env(safe-area-inset-bottom))] pt-2 shadow-[0_-12px_35px_rgba(23,33,29,0.1)] backdrop-blur-xl lg:hidden" aria-label="Điều hướng di động">

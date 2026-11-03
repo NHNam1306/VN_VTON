@@ -4,14 +4,11 @@ import {
   CalendarDays,
   Camera,
   CheckCircle2,
-  ExternalLink,
   Images,
   Loader2,
   Maximize2,
-  Settings,
   Shirt,
   Sparkles,
-  Users,
 } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { AppView } from '../navigation'
@@ -39,8 +36,8 @@ type ProfileTab = 'outfits' | 'wardrobe'
 const roleLabels: Record<AuthUser['role'], { label: string; className: string }> = {
   admin: { label: 'Quản trị viên', className: 'bg-red-500/10 text-red-700 border-red-200/80' },
   moderator: { label: 'Kiểm duyệt viên', className: 'bg-purple-500/10 text-purple-700 border-purple-200/80' },
-  koc: { label: 'KOC Studio Creator', className: 'bg-amber-500/10 text-amber-700 border-amber-200/80' },
-  user: { label: 'Thành viên Atelier', className: 'bg-sage-600/10 text-sage-800 border-sage-200/80' },
+  koc: { label: 'KOC', className: 'bg-amber-500/10 text-amber-700 border-amber-200/80' },
+  user: { label: 'Thành viên', className: 'bg-sage-600/10 text-sage-800 border-sage-200/80' },
 }
 
 const formatJoinDate = (value: string) =>
@@ -153,40 +150,33 @@ export function ProfilePage({
     return garments.filter((g) => g.category === selectedCategory)
   }, [garments, selectedCategory])
 
-  const roleInfo = roleLabels[user.role] ?? roleLabels.user
+  const roleInfo = user.role === 'user' ? null : (roleLabels[user.role] ?? null)
 
   return (
-    <main className="mx-auto w-full max-w-[1320px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
+    <main className="mx-auto w-full max-w-[1180px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
       {/* ========================================================= */}
       {/* HERO BANNER & PROFILE CARD (Phong cách Facebook & Instagram) */}
       {/* ========================================================= */}
-      <section className="overflow-hidden rounded-[32px] border border-black/[0.07] bg-panel/95 shadow-[0_20px_50px_rgba(23,33,29,0.06)] backdrop-blur-md">
+      <section className="overflow-hidden rounded-[28px] border border-black/[0.07] bg-panel/95 shadow-[0_16px_42px_rgba(23,33,29,0.055)] backdrop-blur-md">
         {/* Cover Panorama / Banner */}
-        <div className="relative h-44 w-full overflow-hidden bg-gradient-to-r from-[#141d18] via-[#243a2c] to-[#17251d] sm:h-56 lg:h-64">
+        <div className="relative h-24 w-full overflow-hidden bg-gradient-to-r from-[#18231d] via-[#2b4033] to-[#1b2a21] sm:h-32">
           {/* Subtle Studio Micro-grid */}
           <div className="absolute inset-0 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:20px_20px] opacity-15" />
-          <div className="pointer-events-none absolute -right-16 -top-20 size-96 rounded-full bg-emerald-500/15 blur-3xl" />
-          <div className="pointer-events-none absolute -left-12 -bottom-20 size-80 rounded-full bg-sage-400/15 blur-2xl" />
-
-          {/* Top Atelier Badge */}
-          <div className="absolute left-5 top-5 flex items-center gap-2 rounded-full border border-white/20 bg-black/35 px-3.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-white/90 backdrop-blur-md">
-            <Sparkles size={11} className="text-amber-300" />
-            <span>Atelier Studio · Không gian cá nhân</span>
-          </div>
+          <div className="pointer-events-none absolute -right-16 -top-28 size-80 rounded-full bg-emerald-400/15 blur-3xl" />
         </div>
 
         {/* Profile Info Header */}
-        <div className="px-5 pb-6 sm:px-8 sm:pb-8">
-          <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+        <div className="px-5 pb-5 sm:px-8 sm:pb-7">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             {/* Avatar & Identifiers */}
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
               {/* Avatar với viền Story Instagram Gradient */}
-              <div className="group relative -mt-16 size-28 shrink-0 rounded-full p-1 sm:-mt-20 sm:size-32 lg:-mt-24 lg:size-36 bg-gradient-to-tr from-amber-400 via-rose-500 to-sage-600 shadow-xl">
+              <div className="group relative -mt-12 size-24 shrink-0 rounded-full bg-panel p-1 shadow-lg sm:-mt-14 sm:size-28">
                 <div className="size-full overflow-hidden rounded-full border-4 border-panel bg-sand-100">
                   <Avatar
                     name={user.displayName}
                     src={previewUrl ?? avatarUrl}
-                    className="size-full text-2xl font-extrabold sm:text-3xl"
+                    className="size-full text-2xl font-extrabold"
                     imageClassName="object-cover size-full"
                   />
                 </div>
@@ -205,7 +195,7 @@ export function ProfilePage({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={uploading}
-                  className="absolute bottom-0.5 right-0.5 sm:bottom-1 sm:right-1 grid size-9 sm:size-10 place-items-center rounded-full border-[3px] border-panel bg-[#16171b] text-white shadow-lg transition hover:scale-110 hover:bg-black active:scale-95 disabled:opacity-60"
+                  className="absolute bottom-0 right-0 grid size-9 place-items-center rounded-full border-[3px] border-panel bg-[#16171b] text-white shadow-lg transition hover:bg-black active:scale-95 disabled:opacity-60"
                   aria-label="Đổi ảnh đại diện"
                   title="Đổi ảnh đại diện (JPG, PNG, WebP)"
                 >
@@ -214,25 +204,22 @@ export function ProfilePage({
               </div>
 
               {/* Tên, Username, Vai trò */}
-              <div className="min-w-0 pb-1">
+              <div className="min-w-0 flex-1 pb-0.5">
                 <div className="flex flex-wrap items-center gap-2">
                   <h1 className="truncate font-display text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">
                     {user.displayName}
                   </h1>
-                  <CheckCircle2 size={18} className="shrink-0 text-sage-600" aria-label="Đã xác thực" />
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${roleInfo.className}`}
-                  >
-                    {roleInfo.label}
-                  </span>
+                  {roleInfo && (
+                    <span className={'inline-flex items-center rounded-full border px-2.5 py-0.5 text-[10px] font-bold ' + roleInfo.className}>
+                      {roleInfo.label}
+                    </span>
+                  )}
                 </div>
 
-                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink/55">
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-ink/50">
                   <span className="font-semibold text-sage-800 dark:text-sage-300">
                     @{username || user.displayName.toLowerCase().replace(/\s+/g, '')}
                   </span>
-                  <span className="text-black/20">•</span>
-                  <span className="text-ink/50">{user.email}</span>
                   <span className="text-black/20">•</span>
                   <span className="flex items-center gap-1 text-ink/45">
                     <CalendarDays size={12} /> Tham gia {formatJoinDate(user.createdAt)}
@@ -240,16 +227,16 @@ export function ProfilePage({
                 </div>
 
                 {/* Hàng số liệu thống kê (Instagram Stat Counters) */}
-                <div className="mt-4 flex items-center gap-6 sm:gap-8 pt-3 border-t border-black/[0.06]">
+                <div className="mt-4 flex items-center gap-7">
                   <button
                     type="button"
                     onClick={() => setActiveTab('outfits')}
                     className="group text-left transition hover:opacity-80"
                   >
-                    <strong className="block font-display text-lg sm:text-xl font-extrabold text-ink tracking-tight">
+                    <strong className="block font-display text-lg font-extrabold tracking-tight text-ink">
                       {outfitCount}
                     </strong>
-                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">bộ ảnh lookbook</span>
+                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">outfit</span>
                   </button>
 
                   <button
@@ -257,10 +244,10 @@ export function ProfilePage({
                     onClick={() => setActiveTab('wardrobe')}
                     className="group text-left transition hover:opacity-80"
                   >
-                    <strong className="block font-display text-lg sm:text-xl font-extrabold text-ink tracking-tight">
+                    <strong className="block font-display text-lg font-extrabold tracking-tight text-ink">
                       {garmentCount}
                     </strong>
-                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">món trong tủ</span>
+                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">món đồ</span>
                   </button>
 
                   <button
@@ -268,35 +255,15 @@ export function ProfilePage({
                     onClick={() => onNavigate('friends')}
                     className="group text-left transition hover:opacity-80"
                   >
-                    <strong className="block font-display text-lg sm:text-xl font-extrabold text-ink tracking-tight">
+                    <strong className="block font-display text-lg font-extrabold tracking-tight text-ink">
                       {friendsCount}
                     </strong>
-                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">bạn bè kết nối</span>
+                    <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">bạn bè</span>
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Thanh nút hành động nhanh (Action Buttons) */}
-            <div className="flex flex-wrap items-center gap-2 sm:self-center">
-              <button
-                type="button"
-                onClick={() => onNavigate('settings')}
-                className="inline-flex items-center gap-2 rounded-full border border-black/[0.1] bg-white dark:bg-black/20 px-4 py-2.5 text-xs font-bold text-ink shadow-xs transition hover:bg-black/[0.03] hover:border-black/20"
-              >
-                <Settings size={14} className="text-ink/65" />
-                <span>Cài đặt &amp; Mật khẩu</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onNavigate('fitting')}
-                className="inline-flex items-center gap-2 rounded-full bg-[#16171b] px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-black"
-              >
-                <Sparkles size={13} className="text-amber-300" />
-                <span>Thử đồ ngay</span>
-              </button>
-            </div>
           </div>
 
           {/* Thông báo kết quả thao tác (Alert Badge) */}
@@ -321,17 +288,14 @@ export function ProfilePage({
             role="tab"
             aria-selected={activeTab === 'outfits'}
             onClick={() => setActiveTab('outfits')}
-            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3.5 text-xs font-bold tracking-wider uppercase transition-all sm:py-4 ${
+            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3.5 text-xs font-bold transition-all sm:py-4 ${
               activeTab === 'outfits'
                 ? 'border-ink text-ink bg-white/70'
                 : 'border-transparent text-ink/40 hover:text-ink/75 hover:bg-black/[0.02]'
             }`}
           >
             <Images size={15} />
-            <span>BỘ SƯU TẬP (LOOKBOOK)</span>
-            <span className="hidden rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-bold text-ink/70 sm:inline">
-              {outfitCount}
-            </span>
+            <span>Outfit</span>
           </button>
 
           <button
@@ -339,17 +303,14 @@ export function ProfilePage({
             role="tab"
             aria-selected={activeTab === 'wardrobe'}
             onClick={() => setActiveTab('wardrobe')}
-            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3.5 text-xs font-bold tracking-wider uppercase transition-all sm:py-4 ${
+            className={`flex flex-1 items-center justify-center gap-2 border-b-2 py-3.5 text-xs font-bold transition-all sm:py-4 ${
               activeTab === 'wardrobe'
                 ? 'border-ink text-ink bg-white/70'
                 : 'border-transparent text-ink/40 hover:text-ink/75 hover:bg-black/[0.02]'
             }`}
           >
             <Shirt size={15} />
-            <span>TỦ ĐỒ CÁ NHÂN</span>
-            <span className="hidden rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-bold text-ink/70 sm:inline">
-              {garmentCount}
-            </span>
+            <span>Tủ đồ</span>
           </button>
         </div>
       </section>
@@ -365,16 +326,13 @@ export function ProfilePage({
       ) : activeTab === 'outfits' ? (
         <section className="mt-7">
           <div className="mb-4 flex items-center justify-between">
-            <div>
-              <h2 className="font-display text-lg sm:text-xl font-bold text-ink">Thư viện lookbook đã lưu</h2>
-              <p className="text-xs text-ink/45">Những bộ đồ studio phối sẵn trên người mẫu của bạn</p>
-            </div>
+            <h2 className="font-display text-lg font-bold text-ink sm:text-xl">Outfit của tôi</h2>
             <button
               type="button"
               onClick={() => onNavigate('outfits')}
               className="inline-flex items-center gap-1 text-xs font-bold text-sage-800 hover:underline"
             >
-              <span>Xem trang đầy đủ</span>
+              <span>Quản lý</span>
               <ArrowRight size={13} />
             </button>
           </div>
@@ -384,9 +342,9 @@ export function ProfilePage({
               <span className="grid size-14 place-items-center rounded-2xl bg-sage-50 text-sage-700 shadow-xs">
                 <Images size={26} strokeWidth={1.7} />
               </span>
-              <h3 className="mt-4 font-display text-base font-bold text-ink">Chưa có bộ ảnh lookbook nào</h3>
+              <h3 className="mt-4 font-display text-base font-bold text-ink">Chưa có outfit nào</h3>
               <p className="mt-1.5 max-w-sm text-xs leading-5 text-ink/45">
-                Hãy vào Phòng thử đồ ảo để chọn trang phục và tạo những bộ ảnh studio đầu tiên của bạn.
+                Chọn trang phục trong Phòng thử để tạo outfit đầu tiên của bạn.
               </p>
               <button
                 type="button"
@@ -394,7 +352,7 @@ export function ProfilePage({
                 className="mt-5 inline-flex items-center gap-2 rounded-full bg-[#16171b] px-5 py-2.5 text-xs font-bold text-white shadow-md transition hover:bg-black"
               >
                 <Sparkles size={13} className="text-amber-300" />
-                <span>Thử đồ ngay trong phòng thử</span>
+                <span>Tạo outfit</span>
               </button>
             </div>
           ) : (
@@ -418,7 +376,7 @@ export function ProfilePage({
                   )}
 
                   {/* Hover Overlay phong cách Instagram */}
-                  <div className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                  <div className="absolute inset-0 flex flex-col justify-between bg-gradient-to-t from-black/80 via-black/20 to-transparent p-3 opacity-100 transition-opacity duration-200 sm:opacity-0 sm:group-hover:opacity-100">
                     <div className="flex justify-end">
                       <button
                         type="button"
@@ -448,16 +406,13 @@ export function ProfilePage({
       ) : (
         <section className="mt-7">
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="font-display text-lg sm:text-xl font-bold text-ink">Tủ đồ kỹ thuật số</h2>
-              <p className="text-xs text-ink/45">Toàn bộ trang phục bạn đã chuẩn hóa và lưu trữ</p>
-            </div>
+            <h2 className="font-display text-lg font-bold text-ink sm:text-xl">Tủ đồ của tôi</h2>
             <button
               type="button"
               onClick={() => onNavigate('wardrobe')}
               className="inline-flex items-center gap-1 text-xs font-bold text-sage-800 hover:underline"
             >
-              <span>Quản lý tủ đồ đầy đủ</span>
+              <span>Quản lý</span>
               <ArrowRight size={13} />
             </button>
           </div>

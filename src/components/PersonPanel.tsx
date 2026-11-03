@@ -16,7 +16,7 @@ import { useRef, useState, type ChangeEvent } from 'react'
 import { personApi } from '../services/person-api'
 import { processPersonImage, validatePersonImage } from '../services/person-image-processing'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
-import { garmentCategoryLabels, type GarmentCategory } from '../types/fitting-room'
+import { garmentCategoryLabels, MAX_SELECTED_GARMENTS, type GarmentCategory } from '../types/fitting-room'
 import { ImageLightbox } from './ImageLightbox'
 
 const categories = Object.keys(garmentCategoryLabels) as GarmentCategory[]
@@ -109,11 +109,10 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
             <span className="grid size-7 place-items-center rounded-lg bg-black/[0.04] text-ink/75">
               <UserRound size={15} aria-hidden="true" />
             </span>
-            <h2 className="font-display text-base font-bold">Người mẫu | Bản thân</h2>
+            <h2 className="font-display text-base font-bold">Ảnh của bạn</h2>
           </div>
-          <span className="font-mono text-[9px] font-bold uppercase tracking-wider text-ink/35">STUDIO 4:5</span>
         </div>
-        <p className="text-xs leading-5 text-ink/45">Ảnh toàn thân</p>
+        <p className="text-xs leading-5 text-ink/45">Sử dụng ảnh toàn thân, rõ người và đủ sáng.</p>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -161,15 +160,15 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
           {notice && <div className="mt-3.5 rounded-2xl border border-sage-200 bg-sage-50/80 px-3.5 py-2.5 text-xs leading-5 text-sage-800" role="status">{notice}</div>}
         </div>
 
-        <div className="mx-5 border-t border-black/[0.05] pt-4">
-          <div className="mb-3 flex items-center justify-between">
+        <details className="mx-5 border-t border-black/[0.05] pt-4">
+          <summary className="mb-3 flex cursor-pointer list-none items-center justify-between">
             <div className="flex items-center gap-2 text-xs font-bold text-ink uppercase tracking-wider font-mono">
               <Shirt size={14} className="text-ink/50" /> BỘ HIỆN TẠI
             </div>
             <span className="rounded-full bg-black/[0.05] px-2 py-0.5 font-mono text-[10px] font-bold text-ink">
-              {selectedCount > 5 ? selectedCount : `${selectedCount}/5`}
+              {selectedCount}/{MAX_SELECTED_GARMENTS}
             </span>
-          </div>
+          </summary>
           <div className="space-y-1.5">
             {categories.map((category) => {
               if (category === 'accessories') {
@@ -218,7 +217,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
               )
             })}
           </div>
-        </div>
+        </details>
 
         <div className="mx-5 mt-4 flex items-center justify-between rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3">
           <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
@@ -278,7 +277,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
             <Sparkles size={17} className={canGenerate ? 'text-amber-300 animate-pulse' : 'text-white/40'} />
           )}
           <span className="tracking-wide">
-            {isGenerating ? 'ĐANG TẠO ẢNH…' : 'BẮT ĐẦU THỬ ĐỒ'}
+            {isGenerating ? 'Đang tạo ảnh…' : 'Tạo ảnh thử đồ'}
           </span>
         </button>
         <p className="mt-2 text-center text-[10px] leading-4 text-ink/40 font-medium">

@@ -108,4 +108,22 @@ describe('useFittingRoomStore', () => {
     expect(useFittingRoomStore.getState().privacyConsent).toBe(false)
     expect(useFittingRoomStore.getState().personImage).toBeNull()
   })
+
+  it('loadOutfitGarments nạp chính xác các món đồ vào nhóm tương ứng', () => {
+    useFittingRoomStore.setState({
+      garments: [
+        { id: 'top-1', name: 'Áo', category: 'tops', frontOriginalUrl: '', frontProcessedUrl: '', backOriginalUrl: null, backProcessedUrl: null, createdAt: '' },
+        { id: 'bot-1', name: 'Quần', category: 'bottoms', frontOriginalUrl: '', frontProcessedUrl: '', backOriginalUrl: null, backProcessedUrl: null, createdAt: '' },
+        { id: 'acc-1', name: 'Mũ', category: 'accessories', frontOriginalUrl: '', frontProcessedUrl: '', backOriginalUrl: null, backProcessedUrl: null, createdAt: '' },
+        { id: 'acc-2', name: 'Túi', category: 'accessories', frontOriginalUrl: '', frontProcessedUrl: '', backOriginalUrl: null, backProcessedUrl: null, createdAt: '' },
+      ],
+      outfit: { tops: null, outerwear: null, bottoms: null, shoes: null, accessories: [] },
+    })
+
+    useFittingRoomStore.getState().loadOutfitGarments(['top-1', 'bot-1', 'acc-1', 'acc-2'])
+    const state = useFittingRoomStore.getState().outfit
+    expect(state.tops).toBe('top-1')
+    expect(state.bottoms).toBe('bot-1')
+    expect(state.accessories).toEqual(['acc-1', 'acc-2'])
+  })
 })

@@ -138,42 +138,48 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
   const remainingText = remaining >= 60
     ? `${Math.floor(remaining / 60)} giờ ${remaining % 60} phút`
     : `${remaining} phút`
+  const status = poll.closed
+    ? 'Đã kết thúc'
+    : owner
+      ? 'Đang bình chọn'
+      : poll.myVote
+        ? 'Đã bình chọn'
+        : 'Chờ bạn chọn'
 
   return (
-    <article id={`poll-${poll.id}`} className="social-poll mb-5 rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
+    <article id={`poll-${poll.id}`} className="social-poll mb-6 overflow-hidden rounded-[26px] border border-black/[0.07] bg-white/85 shadow-[0_14px_36px_rgba(40,54,47,0.06)] backdrop-blur-sm">
       {/* Header */}
-      <header className="mb-4 flex items-center gap-3">
-        <Avatar name={poll.owner.name} src={poll.owner.avatar} className="size-10 text-xs" />
+      <header className="flex items-center gap-3 border-b border-black/[0.055] px-5 py-4 sm:px-6">
+        <Avatar name={poll.owner.name} src={poll.owner.avatar} className="size-11 text-xs" />
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-ink">{poll.owner.name}</p>
-          <p className="flex items-center gap-1 text-xs text-ink/40">
-            <Clock size={10} />
-            {poll.closed ? 'Đã kết thúc' : `Còn ${remainingText}`}
+          <p className="truncate text-sm font-bold text-ink">{poll.owner.name}</p>
+          <p className="mt-0.5 flex items-center gap-1 text-[11px] text-ink/40">
+            <Clock size={11} />
+            {poll.closed ? 'Bình chọn đã đóng' : `Còn ${remainingText}`}
+            <span aria-hidden="true">·</span>
+            {total} lượt chọn
           </p>
         </div>
-        <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold ${
-          poll.closed ? 'bg-amber-100 text-amber-700' : poll.myVote ? 'bg-sage-100 text-sage-700' : 'bg-blue-50 text-blue-600'
+        <span className={`shrink-0 rounded-full px-3 py-1.5 text-[10px] font-bold ${
+          poll.closed ? 'bg-black/[0.055] text-ink/55' : poll.myVote ? 'bg-sage-100 text-sage-700' : owner ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-600'
         }`}>
-          {poll.closed ? 'Kết quả' : poll.myVote ? 'Đã chọn' : 'Chờ ý kiến'}
+          {status}
         </span>
       </header>
 
-      <h2 className="mb-1 text-base font-bold text-ink">{poll.title}</h2>
-      <p className="mb-4 text-xs text-ink/40">
-        <a href={`/bang-tin?poll=${poll.id}`} className="underline underline-offset-3 hover:text-sage-700 transition">Mở bình chọn</a>
-        {` · ${total} phiếu`}
-      </p>
+      <div className="px-5 pb-6 pt-5 sm:px-6">
+        <h2 className="mb-4 font-display text-lg font-bold leading-snug text-ink sm:text-xl">{poll.title}</h2>
 
-      {/* Vote strip */}
-      <div className="social-vote-strip">
-        {poll.outfits.map((o, i) => {
+        {/* Vote strip */}
+        <div className="social-vote-strip">
+          {poll.outfits.map((o, i) => {
           const voters = poll.votes.filter(v => v.outfitId === o.id)
           const percent = total ? Math.round(voters.length / total * 100) : 0
           const isWinner = poll.winnerId === o.id
           const isSelected = poll.myVote === o.id
 
-          return (
-            <section key={o.id} className={`social-vote-option min-w-0 rounded-2xl border-2 p-3 transition ${isSelected ? 'border-sage-500 bg-sage-50/60' : 'border-black/[0.07] bg-sage-50/30'}`}>
+            return (
+              <section key={o.id} className={`social-vote-option min-w-0 rounded-[20px] border p-3 transition ${isSelected ? 'border-sage-500 bg-sage-50/60 ring-2 ring-sage-200/60' : 'border-black/[0.07] bg-[#fafaf7]'}`}>
               {/* Images */}
               <div className="social-image-pair mb-3 rounded-xl overflow-hidden">
                 <button className="flex-1 border-0 bg-transparent p-0" onClick={() => onZoom(o.frontImageUrl)}>
@@ -186,7 +192,7 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
                 )}
               </div>
 
-              <div className="flex items-center gap-2 mb-2">
+              <div className="mb-2 flex items-center gap-2">
                 <h3 className="text-sm font-bold text-ink">Phương án {i + 1}</h3>
                 {isWinner && <span className="flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700"><Trophy size={9} /> Chính thức</span>}
               </div>
@@ -222,35 +228,38 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
                   )}
                 </div>
               )}
-            </section>
-          )
-        })}
+              </section>
+            )
+          })}
+        </div>
+
+        {!show && (
+          <p className="mt-3 text-center text-xs text-ink/40">Chọn một bộ để xem kết quả. Bạn có thể đổi lựa chọn trước khi hết hạn.</p>
+        )}
+
+        <footer className="mt-5 flex flex-col gap-2 border-t border-black/[0.055] pt-4 sm:flex-row sm:items-start sm:justify-between">
+          <details className="text-xs">
+            <summary className="cursor-pointer list-none font-semibold text-ink/45 transition hover:text-ink">
+              <span className="flex items-center gap-1.5"><Users size={12} /> {poll.recipients.length} người được xem</span>
+            </summary>
+            <p className="mt-2 max-w-xl leading-relaxed text-ink/40">{poll.recipients.map(p => p.name).join(', ')}</p>
+          </details>
+
+          {owner && (
+            <details className="text-xs sm:text-right">
+              <summary className="cursor-pointer list-none font-semibold text-ink/45 transition hover:text-ink">Quản lý</summary>
+              <div className="mt-2 flex flex-wrap gap-2 sm:justify-end">
+                {!poll.closed && (
+                  <button onClick={() => void act('poll-close', { id: poll.id })} className={btnGhost}>Đóng bình chọn</button>
+                )}
+                <button className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-100" onClick={() => void act('poll-delete', { id: poll.id })}>
+                  Xoá bình chọn
+                </button>
+              </div>
+            </details>
+          )}
+        </footer>
       </div>
-
-      {!show && (
-        <p className="mt-3 text-center text-xs text-ink/40">Bỏ phiếu để xem kết quả. Bạn có thể đổi lựa chọn trước khi hết hạn.</p>
-      )}
-
-      <details className="mt-4 text-xs">
-        <summary className="cursor-pointer font-semibold text-ink/40 hover:text-ink transition list-none">
-          <span className="flex items-center gap-1"><Users size={11} /> Người được xem · {poll.recipients.length}</span>
-        </summary>
-        <p className="mt-1.5 leading-relaxed text-ink/35">{poll.recipients.map(p => p.name).join(', ')}</p>
-      </details>
-
-      {owner && (
-        <details className="mt-2 text-xs">
-          <summary className="cursor-pointer font-semibold text-ink/40 hover:text-ink transition list-none">Quản lý bình chọn</summary>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {!poll.closed && (
-              <button onClick={() => void act('poll-close', { id: poll.id })} className={btnGhost}>Đóng bình chọn ngay</button>
-            )}
-            <button className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition" onClick={() => void act('poll-delete', { id: poll.id })}>
-              Xoá bình chọn và kết quả
-            </button>
-          </div>
-        </details>
-      )}
     </article>
   )
 }

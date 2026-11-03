@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { applyOutfitCustomizations, removeOutfitCustomization } from '../services/outfit-customizations'
 import { tryOnApi } from '../services/try-on-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
 import { MAX_SAVED_OUTFITS, type AngleGenerationState, type SavedOutfit, type TryOnAngle, type TryOnResult } from '../types/fitting-room'
@@ -30,7 +31,8 @@ export function useTryOnGeneration() {
   const refreshHistory = useCallback(async () => {
     setHistoryError(null)
     try {
-      setHistory(await tryOnApi.listOutfits())
+      const raw = await tryOnApi.listOutfits()
+      setHistory(applyOutfitCustomizations(raw))
     } catch (error) {
       setHistoryError(error instanceof Error ? error.message : 'Không thể tải Bộ đồ của tôi.')
     } finally {
@@ -48,7 +50,7 @@ export function useTryOnGeneration() {
           })
           return next
         })
-        setHistory(outfits)
+        setHistory(applyOutfitCustomizations(outfits))
       })
       .catch((error: unknown) => {
         setHistoryError(error instanceof Error ? error.message : 'Không thể tải dữ liệu kết quả.')
@@ -139,7 +141,14 @@ export function useTryOnGeneration() {
 
   const deleteOutfit = useCallback(async (id: string) => {
     await tryOnApi.deleteOutfit(id)
+    removeOutfitCustomization(id)
     setHistory((current) => current.filter((outfit) => outfit.id !== id))
+  }, [])
+
+  const updateOutfit = useCallback((id: string, updates: Partial<SavedOutfit>) => {
+    setHistory((current) =>
+      current.map((outfit) => (outfit.id === id ? { ...outfit, ...updates } : outfit)),
+    )
   }, [])
 
   return {
@@ -150,6 +159,7 @@ export function useTryOnGeneration() {
     isHistoryLoading,
     historyError,
     deleteOutfit,
+    updateOutfit,
     clearResults: () => setStates(createInitialState()),
     clearAllResults: () => {
       setStates(createInitialState())

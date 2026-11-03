@@ -113,6 +113,6 @@ describe('WardrobePanel - Trước / Sau swap', () => {
     })
     render(<WardrobePanel onAddGarment={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Thêm áo trong' })).toBeDisabled()
-    expect(screen.getAllByText('Tủ đồ đã đầy')).toHaveLength(2)
+    expect(screen.getByText('Tủ đồ đã đầy')).toBeInTheDocument()
   })
 })

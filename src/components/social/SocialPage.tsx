@@ -1,25 +1,24 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Users, MessageSquare, Bell, ImageIcon, Loader2, AlertCircle, PlusCircle } from 'lucide-react'
+import { MessageSquare, ImageIcon, Loader2, AlertCircle, PlusCircle } from 'lucide-react'
 import type { SocialSnapshot, SocialPerson, SharedOutfit } from '../../../server/social/types'
 import { socialApi } from '../../services/social-api'
 import { tryOnApi } from '../../services/try-on-api'
 import { FriendsPanel } from './FriendsPanel'
 import { Avatar } from './Avatar'
 import { PollCard, PollComposer } from './Voting'
-import { SharingPanel } from './SharingPanel'
+import { ImageLightbox } from '../ImageLightbox'
 import './social.css'
 
 export type Act = (action: string, body: Record<string, unknown>) => Promise<boolean>
-
-function UnreadDot() {
-  return <span className="inline-block size-2 rounded-full bg-sage-600 shrink-0 mt-1" aria-hidden="true" />
-}
 
 export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 'feed' | 'friends'; onCreateOutfit: () => void; composeSignal?: number }) {
   const [data, setData] = useState<SocialSnapshot | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [tab, setTab] = useState(() => new URLSearchParams(location.search).get('tab') ?? 'friends')
+  const [tab, setTab] = useState(() => {
+    const requested = new URLSearchParams(location.search).get('tab')
+    return requested === 'requests' || requested === 'groups' ? requested : 'friends'
+  })
   const [compose, setCompose] = useState(() => new URLSearchParams(location.search).get('compose') === '1')
   const pollId = new URLSearchParams(location.search).get('poll')
   const [mine, setMine] = useState<SharedOutfit[]>([])
@@ -49,7 +48,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
   }, [])
 
   useEffect(() => {
-    if (!profile && !zoom) return
+    if (!profile) return
     const previous = document.activeElement as HTMLElement | null
     const dialogs = document.querySelectorAll<HTMLElement>('.social-overlay')
     const dialog = dialogs[dialogs.length - 1]
@@ -62,7 +61,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
     }
     document.addEventListener('keydown', trap)
     return () => { document.removeEventListener('keydown', trap); previous?.focus() }
-  }, [!!profile, !!zoom])
+  }, [!!profile])
 
   useEffect(() => {
     if (data && location.hash.startsWith('#poll-')) document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: 'start' })
@@ -90,26 +89,18 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
 
   const friendsTabs = [
     { id: 'friends', label: 'Bạn bè', badge: 0 },
-    { id: 'groups', label: 'Nhóm', badge: 0 },
     { id: 'requests', label: 'Lời mời', badge: data?.incoming.length ?? 0 },
-    { id: 'settings', label: 'Riêng tư & mã mời', badge: 0 },
-    { id: 'sharing', label: 'Outfit chia sẻ', badge: 0 },
+    { id: 'groups', label: 'Nhóm', badge: 0 },
   ]
 
   return (
-    <main className="social-page mx-auto max-w-[1320px] px-4 sm:px-6 pb-20 pt-8 text-ink">
+    <main className={`social-page mx-auto px-4 pb-20 pt-8 text-ink sm:px-6 ${mode === 'feed' ? 'max-w-[1080px]' : 'max-w-[1320px]'}`}>
       {/* Page header */}
       <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="mb-1.5 text-[10px] font-bold tracking-[0.18em] uppercase text-ink/40">
-            {mode === 'feed' ? 'YOUR INNER CIRCLE' : 'BẠN BÈ'}
-          </p>
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
-            {mode === 'feed' ? 'Một chút ý kiến, đúng gu của bạn.' : 'Phong cách đẹp hơn cùng bạn bè.'}
+            {mode === 'feed' ? 'Bảng tin' : 'Bạn bè'}
           </h1>
-          <p className="mt-1.5 text-xs leading-relaxed text-ink/45">
-            Không lượt thích, không người theo dõi. Chỉ chia sẻ với những người bạn chọn.
-          </p>
         </div>
         {mode === 'feed' && (
           <button
@@ -137,70 +128,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
           </div>
         </div>
       ) : (
-        <fieldset disabled={busy} className="grid grid-cols-1 gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-          {/* Sidebar */}
-          <aside className="flex flex-col gap-4">
-            {/* Profile card */}
-            <div className="rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
-              <div className="mb-3 flex items-center gap-3">
-                <Avatar name={data.me.name} src={data.me.avatar} className="size-12 text-sm shadow-inner" />
-                <div className="min-w-0">
-                  <p className="truncate font-bold text-ink">{data.me.name}</p>
-                  <p className="truncate text-xs text-ink/40">@{data.me.username}</p>
-                </div>
-              </div>
-              <a href="/ban-be" className="inline-flex items-center gap-1.5 text-xs font-semibold text-sage-700 underline underline-offset-4 hover:text-sage-900">
-                <Users size={12} /> Quản lý bạn bè
-              </a>
-            </div>
-
-            {/* Notifications card */}
-            <div className="rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Bell size={15} className="text-ink/50" />
-                  <h2 className="text-sm font-bold text-ink">
-                    Thông báo
-                    {data.notifications.filter(n => !n.read).length > 0 && (
-                      <span className="ml-1.5 rounded-full bg-sage-700 px-1.5 py-0.5 text-[9px] font-bold text-white">
-                        {data.notifications.filter(n => !n.read).length}
-                      </span>
-                    )}
-                  </h2>
-                </div>
-                <button
-                  className="text-[10px] font-semibold text-ink/40 hover:text-ink transition"
-                  onClick={() => void act('notification-read', {})}
-                >
-                  Đọc hết
-                </button>
-              </div>
-              {data.notifications.length === 0
-                ? <p className="text-xs text-ink/35 leading-relaxed">Chưa có thông báo nào.</p>
-                : (
-                  <ul className="divide-y divide-black/[0.05]">
-                    {data.notifications.slice(0, 8).map(n => (
-                      <li key={n.id}>
-                        <a
-                          href={n.kind === 'request' ? '/ban-be?tab=requests' : '/bang-tin#poll-' + n.targetId}
-                          className={`flex gap-2.5 py-2.5 text-xs leading-5 transition hover:text-sage-800 ${n.read ? 'text-ink/50' : 'font-semibold text-ink'}`}
-                          onClick={event => { event.preventDefault(); const href = event.currentTarget.href; void act('notification-read', { id: n.id }).then(() => location.assign(href)) }}
-                        >
-                          {!n.read && <UnreadDot />}
-                          <span className={n.read ? 'pl-4' : ''}>
-                            {n.text}
-                            <span className="mt-0.5 block text-[10px] text-ink/30">{new Date(n.createdAt).toLocaleString('vi-VN')}</span>
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                )
-              }
-            </div>
-          </aside>
-
-          {/* Main content */}
+        <fieldset disabled={busy} className="block">
           <div className="min-w-0">
             {mode === 'friends' ? (
               <>
@@ -218,10 +146,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
                     </button>
                   ))}
                 </nav>
-                {tab === 'sharing'
-                  ? <SharingPanel data={data} outfits={mine} act={act} />
-                  : <FriendsPanel data={data} tab={tab} act={act} onProfile={id => void openProfile(id)} />
-                }
+                <FriendsPanel data={data} tab={tab} act={act} onProfile={id => void openProfile(id)} />
               </>
             ) : (
               <>
@@ -318,13 +243,12 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
         </div>
       )}
 
-      {/* Zoom overlay */}
-      {zoom && (
-        <div className="social-overlay fixed inset-0 z-70 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm" role="dialog" aria-modal="true" aria-label="Xem ảnh" onClick={() => setZoom(null)}>
-          <button autoFocus onClick={() => setZoom(null)} className="absolute right-4 top-4 grid size-9 place-items-center rounded-full bg-white/20 text-white hover:bg-white/30 transition" aria-label="Đóng">✕</button>
-          <img className="max-h-[90dvh] max-w-[95vw] rounded-2xl object-contain shadow-2xl" src={zoom} alt="Chi tiết outfit" />
-        </div>
-      )}
+      <ImageLightbox
+        open={Boolean(zoom)}
+        src={zoom ?? ''}
+        alt="Chi tiết outfit"
+        onClose={() => setZoom(null)}
+      />
     </main>
   )
 }

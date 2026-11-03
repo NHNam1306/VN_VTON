@@ -1,3 +1,4 @@
+import { applyOutfitCustomizations, removeOutfitCustomization } from './outfit-customizations'
 import type { SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
 import { apiFetch } from './api-client'
 
@@ -34,7 +35,8 @@ export const tryOnApi = {
   async listOutfits(): Promise<SavedOutfit[]> {
     const response = await fetch('/api/generations/outfits')
     if (!response.ok) throw new Error(await parseError(response))
-    return ((await response.json()) as { items: SavedOutfit[] }).items
+    const items = ((await response.json()) as { items: SavedOutfit[] }).items
+    return applyOutfitCustomizations(items)
   },
 
   async deleteOutfit(id: string): Promise<void> {
@@ -42,5 +44,6 @@ export const tryOnApi = {
       method: 'DELETE',
     })
     if (!response.ok) throw new Error(await parseError(response))
+    removeOutfitCustomization(id)
   },
 }

@@ -1,4 +1,4 @@
-import { ArrowRight, ChevronRight, LayoutGrid, LoaderCircle, Shirt, Sparkles, WandSparkles } from 'lucide-react'
+import { ChevronRight, LayoutGrid, LoaderCircle, Shirt, Sparkles, WandSparkles } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { AuthPage } from './components/AuthPage'
 import { AdminPage } from './components/admin/AdminPage'
@@ -163,37 +163,19 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         {(activeView === 'feed' || activeView === 'friends') && <SocialPage mode={activeView} composeSignal={composeSignal} onCreateOutfit={() => navigate('fitting')} />}
         {activeView === 'wardrobe' && (
           <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-            <section className="mb-5 flex flex-col gap-5 rounded-[28px] border border-black/[0.06] bg-panel/80 px-5 py-6 shadow-[0_14px_45px_rgba(40,54,47,0.055)] backdrop-blur-md sm:px-7 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-
-                <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Tủ đồ kỹ thuật số</h2>
-                <p className="mt-2 max-w-2xl text-xs sm:text-sm leading-6 text-ink/50">Thêm sản phẩm theo từng nhóm, sau đó phối tối đa 8 món cho mỗi bộ đồ</p>
-              </div>
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                <div className="flex items-center gap-5 rounded-2xl border border-black/[0.06] bg-white/80 px-4 py-2.5 shadow-xs backdrop-blur-sm">
-                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đã lưu</p><p className="mt-0.5 text-lg font-bold text-ink">{garments.length}/{MAX_WARDROBE_GARMENTS}</p></div>
-                  <div className="h-8 w-px bg-black/[0.07]" />
-                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đang chọn</p><p className="mt-0.5 text-lg font-bold text-sage-700">{selectedCount}/{MAX_SELECTED_GARMENTS}</p></div>
-                </div>
-                <button type="button" onClick={() => navigate('fitting')} className="flex items-center justify-center gap-2 rounded-2xl bg-[#16171b] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_28px_rgba(22,23,27,0.22)] transition hover:-translate-y-0.5 hover:bg-black">
-                  Sang phòng thử <ArrowRight size={16} />
-                </button>
-              </div>
-            </section>
-            <WardrobePanel mode="page" onAddGarment={openGarmentUpload} />
+            <WardrobePanel
+              mode="page"
+              onAddGarment={openGarmentUpload}
+              onGoToFitting={() => navigate('fitting')}
+            />
           </main>
         )}
 
         {activeView === 'fitting' && (
-          <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
+          <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
             <section className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.22em] text-ink/45">
-                  <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  STUDIO SESSION · THỬ ĐỒ
-                </div>
                 <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Phòng thử đồ ảo</h2>
-                <p className="mt-1.5 text-xs sm:text-sm leading-6 text-ink/50 max-w-xl">Phối trang phục theo phong cách của bạn</p>
               </div>
               <button
                 type="button"
@@ -201,7 +183,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
                 className="group flex items-center gap-2.5 self-start rounded-full border border-black/[0.08] bg-white/85 px-4 py-2 text-xs sm:text-sm font-semibold text-ink shadow-xs backdrop-blur-md transition-all hover:border-black/20 hover:bg-white hover:shadow-md sm:self-auto"
               >
                 <Shirt size={15} className="text-ink/60 transition-transform group-hover:scale-110" />
-                <span>Chỉnh bộ đồ</span>
+                <span>Chọn đồ</span>
                 <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-bold text-ink">
                   {selectedCount}/{MAX_SELECTED_GARMENTS}
                 </span>
@@ -221,10 +203,10 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
             )}
 
             <div className="grid grid-cols-1 gap-5 lg:h-[calc(100dvh-250px)] lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
-              <div className="min-h-0">
+              <div className="order-2 min-h-0 lg:order-1">
                 <ResultStage states={generation.states} onRegenerate={generation.regenerate} />
               </div>
-              <div className="min-h-0">
+              <div className="order-1 min-h-0 lg:order-2">
                 <PersonPanel
                   onGenerate={generation.generateAll}
                   onClearResults={generation.clearResults}
@@ -242,7 +224,12 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
             isLoading={generation.isHistoryLoading}
             error={generation.historyError}
             onDelete={generation.deleteOutfit}
+            onUpdateOutfit={generation.updateOutfit}
             onBack={() => navigate('fitting')}
+            onEditInFitting={(outfit) => {
+              useFittingRoomStore.getState().loadOutfitGarments(outfit.garmentIds)
+              navigate('fitting')
+            }}
           />
         )}
 

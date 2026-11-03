@@ -29,6 +29,7 @@ type FittingRoomState = {
   removeGarment: (garmentId: string) => void
   selectGarment: (category: GarmentCategory, garmentId: string) => void
   clearSelection: (category: GarmentCategory) => void
+  loadOutfitGarments: (garmentIds: string[]) => void
   setLoadingGarments: (isLoading: boolean) => void
   setWardrobeError: (error: string | null) => void
   setPersonImage: (personImage: PersonImage | null) => void
@@ -114,6 +115,29 @@ export const useFittingRoomStore = create<FittingRoomState>((set) => ({
           : { [category]: null }),
       },
     })),
+  loadOutfitGarments: (garmentIds) =>
+    set((state) => {
+      const nextOutfit: OutfitSelection = {
+        tops: null,
+        outerwear: null,
+        bottoms: null,
+        shoes: null,
+        accessories: [],
+      }
+      const garmentMap = new Map(state.garments.map((g) => [g.id, g]))
+      for (const id of garmentIds) {
+        const garment = garmentMap.get(id)
+        if (!garment) continue
+        if (garment.category === 'accessories') {
+          if (!nextOutfit.accessories.includes(id)) {
+            nextOutfit.accessories.push(id)
+          }
+        } else {
+          nextOutfit[garment.category] = id
+        }
+      }
+      return { outfit: nextOutfit }
+    }),
   setLoadingGarments: (isLoadingGarments) => set({ isLoadingGarments }),
   setWardrobeError: (wardrobeError) => set({ wardrobeError }),
   setPersonImage: (personImage) => set({ personImage, privacyConsent: false }),

@@ -2,17 +2,12 @@
 
 /* Snap scrolling for vote strip */
 .social-vote-strip {
-  display: flex;
-  overflow-x: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
-  scroll-snap-type: x mandatory;
-  padding-bottom: 8px;
-  scrollbar-width: none;
 }
-.social-vote-strip::-webkit-scrollbar { display: none }
 .social-vote-option {
-  flex: 1 0 min(270px, 85%);
-  scroll-snap-align: start;
+  min-width: 0;
 }
 
 /* Image pair inside a poll card */
@@ -27,6 +22,21 @@
 
 /* Anchor scroll offset for header */
 .social-poll { scroll-margin-top: 120px }
+
+@media (max-width: 720px) {
+  .social-vote-strip {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: 8px;
+    scrollbar-width: none;
+  }
+  .social-vote-strip::-webkit-scrollbar { display: none }
+  .social-vote-option {
+    flex: 1 0 min(290px, 88%);
+    scroll-snap-align: start;
+  }
+}
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {

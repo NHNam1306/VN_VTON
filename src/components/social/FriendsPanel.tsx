@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { Search, UserPlus, Users, Link2, QrCode, Shield, Loader2, Check, X } from 'lucide-react'
+import { Search, UserPlus, Users, Link2, QrCode, Loader2, Check, X } from 'lucide-react'
 import type { SocialSnapshot, SocialPerson } from '../../../server/social/types'
 import { socialApi } from '../../services/social-api'
 import { Avatar } from './Avatar'
@@ -222,29 +222,40 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
       )}
 
       {tab === 'requests' && (
-        <Card>
-          <h2 className="mb-3 text-sm font-bold text-ink">Đã nhận · {data.incoming.length}</h2>
-          {data.incoming.length === 0
-            ? <p className="text-xs text-ink/40">Không có lời mời nào.</p>
-            : data.incoming.map(r => (
-                <PersonRow key={r.id} person={r.from} action={
-                  <div className="flex gap-1.5">
-                    <button onClick={() => void act('request-response', { id: r.id, decision: 'accept' })} className={btnPrimary}><Check size={12} />Chấp nhận</button>
-                    <button onClick={() => void act('request-response', { id: r.id, decision: 'decline' })} className={btnGhost}>Từ chối</button>
-                  </div>
-                } />
-              ))
-          }
-          <h2 className="mb-3 mt-5 text-sm font-bold text-ink">Đã gửi · {data.outgoing.length}</h2>
-          {data.outgoing.length === 0
-            ? <p className="text-xs text-ink/40">Chưa có lời mời đang chờ.</p>
-            : data.outgoing.map(r => (
-                <PersonRow key={r.id} person={r.to} action={
-                  <button onClick={() => void act('request-response', { id: r.id, decision: 'cancel' })} className={btnGhost}>Huỷ lời mời</button>
-                } />
-              ))
-          }
-        </Card>
+        <>
+          <Card>
+            <h2 className="mb-3 text-sm font-bold text-ink">Đã nhận · {data.incoming.length}</h2>
+            {data.incoming.length === 0
+              ? <p className="text-xs text-ink/40">Không có lời mời nào.</p>
+              : data.incoming.map(r => (
+                  <PersonRow key={r.id} person={r.from} action={
+                    <div className="flex gap-1.5">
+                      <button onClick={() => void act('request-response', { id: r.id, decision: 'accept' })} className={btnPrimary}><Check size={12} />Chấp nhận</button>
+                      <button onClick={() => void act('request-response', { id: r.id, decision: 'decline' })} className={btnGhost}>Từ chối</button>
+                    </div>
+                  } />
+                ))
+            }
+            <h2 className="mb-3 mt-5 text-sm font-bold text-ink">Đã gửi · {data.outgoing.length}</h2>
+            {data.outgoing.length === 0
+              ? <p className="text-xs text-ink/40">Chưa có lời mời đang chờ.</p>
+              : data.outgoing.map(r => (
+                  <PersonRow key={r.id} person={r.to} action={
+                    <button onClick={() => void act('request-response', { id: r.id, decision: 'cancel' })} className={btnGhost}>Huỷ lời mời</button>
+                  } />
+                ))
+            }
+          </Card>
+          <Card>
+            <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink"><QrCode size={15} className="text-ink/40" /> Mã mời của bạn</h2>
+            {qr && <img src={qr} alt="Mã QR kết bạn" width={144} height={144} className="mx-auto mb-4 rounded-2xl border border-black/[0.07] bg-white p-2" />}
+            <input aria-label="Link mời" value={link} readOnly onFocus={e => e.target.select()} className="mb-3 w-full rounded-xl border border-black/[0.09] bg-sage-50 px-3 py-2 text-xs text-ink/60 outline-none" />
+            <div className="flex gap-2">
+              <button onClick={() => void navigator.clipboard.writeText(link).catch(() => setError('Hãy chọn và sao chép link phía trên.'))} className={btnPrimary}><Link2 size={12} /> Sao chép</button>
+              <button className={btnGhost} onClick={() => void act('rotate-invite', {})}>Đổi mã mời</button>
+            </div>
+          </Card>
+        </>
       )}
 
       {/* GROUPS tab */}
@@ -292,69 +303,6 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
         </>
       )}
 
-      {/* SETTINGS tab */}
-      {tab === 'settings' && (
-        <>
-          <Card>
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
-              <QrCode size={15} className="text-ink/40" /> QR &amp; link mời cá nhân
-            </h2>
-            {qr && <img src={qr} alt="Mã QR kết bạn" width={160} height={160} className="mx-auto mb-4 rounded-2xl border border-black/[0.07] p-2 bg-white" />}
-            <label className="block text-xs font-medium text-ink/50 mb-1">Link mời</label>
-            <input value={link} readOnly onFocus={e => e.target.select()} className="mb-3 w-full rounded-xl border border-black/[0.09] bg-sage-50 px-3 py-2 text-xs text-ink/60 outline-none" />
-            <p className="mb-3 text-[10px] leading-relaxed text-ink/35">Chỉ gửi cho người quen. Link localhost chỉ hoạt động trên máy bạn.</p>
-            <div className="flex gap-2">
-              <button onClick={() => void navigator.clipboard.writeText(link).catch(() => setError('Hãy chọn và sao chép link phía trên.'))} className={btnPrimary}><Link2 size={12} /> Sao chép</button>
-              <button className={btnGhost} onClick={() => void act('rotate-invite', {})}>Đổi mã mời</button>
-            </div>
-          </Card>
-
-          <Card>
-            <h2 className="mb-4 flex items-center gap-2 text-sm font-bold text-ink">
-              <Shield size={15} className="text-ink/40" /> Hồ sơ &amp; quyền riêng tư
-            </h2>
-            <form key={data.me.id} onSubmit={e => { e.preventDefault(); const values = Object.fromEntries(new FormData(e.currentTarget)); void act('settings', values) }} className="flex flex-col gap-3">
-              <div>
-                <label className="block text-xs font-medium text-ink/50 mb-1">Username</label>
-                <input name="username" defaultValue={data.me.username} pattern="[a-z0-9_]{3,40}" required className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-ink/50 mb-1">Ngày sinh (riêng tư, chỉ khai một lần)</label>
-                <input type="date" name="birthDate" defaultValue={data.me.birthDate ?? ''} disabled={!!data.me.birthDate} max={new Date().toISOString().slice(0, 10)} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400 disabled:opacity-50" />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-ink/50 mb-1">Ai được gửi lời mời?</label>
-                <select name="invitePolicy" defaultValue={data.me.invitePolicy} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400">
-                  <option value="known">Bạn chung hoặc có mã mời</option>
-                  <option value="code">Chỉ người có mã mời</option>
-                  <option value="everyone">Mọi người (18+)</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-ink/50 mb-1">Outfit mới mặc định hiển thị với</label>
-                <select name="defaultVisibility" defaultValue={data.me.defaultVisibility} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400">
-                  <option value="private">Chỉ mình tôi</option>
-                  <option value="friends">Bạn bè</option>
-                </select>
-              </div>
-              <p className="text-[10px] leading-relaxed text-ink/35">Chưa khai tuổi hoặc dưới 18: luôn cần bạn chung hoặc mã mời.</p>
-              <button className={btnPrimary + ' self-start'}>Lưu cài đặt</button>
-            </form>
-          </Card>
-
-          <Card>
-            <h2 className="mb-3 text-sm font-bold text-ink">Danh sách đã chặn</h2>
-            {data.blocked.length === 0
-              ? <p className="text-xs text-ink/40">Chưa chặn ai.</p>
-              : data.blocked.map(p => (
-                  <PersonRow key={p.id} person={p} action={
-                    <button onClick={() => void act('unblock', { targetId: p.id })} className={btnGhost}>Bỏ chặn</button>
-                  } />
-                ))
-            }
-          </Card>
-        </>
-      )}
     </div>
   )
 }
