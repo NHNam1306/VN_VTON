@@ -33,8 +33,24 @@ services:
         value: "120000"
       - key: AUTH_SESSION_DAYS
         value: "30"
+      - key: ADMIN_EMAILS
+        sync: false
       - key: AI_REQUESTS_PER_15_MIN
         value: "10"
+      - key: API_REQUESTS_PER_MINUTE
+        value: "600"
+      - key: API_RATE_LIMIT_BURST
+        value: "120"
+      - key: AUTH_LOGIN_ACCOUNT_PER_15_MIN
+        value: "10"
+      - key: AUTH_LOGIN_IP_PER_15_MIN
+        value: "60"
+      - key: AUTH_REGISTER_IP_PER_HOUR
+        value: "20"
+      - key: AUTH_RESET_ACCOUNT_PER_15_MIN
+        value: "5"
+      - key: AUTH_RESET_IP_PER_15_MIN
+        value: "30"
       - key: R2_PREFIX
         value: production
       - key: DATABASE_URL

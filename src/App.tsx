@@ -1,10 +1,15 @@
 import { ArrowRight, ChevronRight, LayoutGrid, LoaderCircle, Shirt, Sparkles, WandSparkles } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { AuthPage } from './components/AuthPage'
+import { AdminPage } from './components/admin/AdminPage'
 import { Header } from './components/Header'
+import { KocStudioPage } from './components/KocStudioPage'
+import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
+import { OnboardingFlow } from './components/OnboardingFlow'
 import { OutfitHistory } from './components/OutfitHistory'
 import { PersonPanel } from './components/PersonPanel'
 import { ProfilePage } from './components/ProfilePage'
+import { SettingsPage } from './components/SettingsPage'
 import { SocialPage } from './components/social/SocialPage'
 import { ResultStage } from './components/ResultStage'
 import { UploadGarmentModal } from './components/UploadGarmentModal'
@@ -14,22 +19,30 @@ import { appViewPaths, resolveAppView, type AppView } from './navigation'
 import { authApi } from './services/auth-api'
 import { garmentApi } from './services/garment-api'
 import { personApi } from './services/person-api'
+import { socialApi } from './services/social-api'
 import { useFittingRoomStore } from './store/useFittingRoomStore'
 import type { AuthUser } from './types/auth'
+import { MAX_SELECTED_GARMENTS, MAX_WARDROBE_GARMENTS } from './types/fitting-room'
 
 type FittingRoomAppProps = {
   user: AuthUser
   onLoggedOut: () => void
+  onUserUpdate: (user: AuthUser) => void
 }
 
 const runViewTransition = (update: () => void) => {
   update()
 }
 
-function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
+function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps) {
   const [isUploadOpen, setIsUploadOpen] = useState(false)
+  const [isQuickActionOpen, setIsQuickActionOpen] = useState(false)
+  const [composeSignal, setComposeSignal] = useState(0)
+  const [showOnboarding, setShowOnboarding] = useState(() => window.localStorage.getItem(`tryoh:onboarding:${user.id}:v1`) !== 'complete')
+  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem('tryoh:theme') === 'dark')
   const [activeView, setActiveView] = useState<AppView>(() => resolveAppView(window.location.pathname) ?? 'feed')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const activeCategory = useFittingRoomStore((state) => state.activeCategory)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
@@ -48,6 +61,21 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
     ...outfit.accessories,
   ].filter(Boolean).length
 
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode)
+    window.localStorage.setItem('tryoh:theme', darkMode ? 'dark' : 'light')
+  }, [darkMode])
+
+  useEffect(() => {
+    let current = true
+    socialApi.snapshot()
+      .then((snapshot) => {
+        if (current) setAvatarUrl(snapshot.me.avatar.startsWith('/uploads/') ? snapshot.me.avatar : null)
+      })
+      .catch(() => { if (current) setAvatarUrl(null) })
+    return () => { current = false }
+  }, [user.id])
+
   const navigate = useCallback((view: AppView) => {
     const nextPath = appViewPaths[view]
     if (window.location.pathname !== nextPath) window.history.pushState(null, '', nextPath)
@@ -56,6 +84,16 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
       window.scrollTo({ top: 0, behavior: 'smooth' })
     }
   }, [])
+
+  const openGarmentUpload = () => {
+    if (garments.length >= MAX_WARDROBE_GARMENTS) {
+      setError(`Tủ đồ chỉ lưu tối đa ${MAX_WARDROBE_GARMENTS} món. Hãy xoá bớt một món trước.`)
+      navigate('wardrobe')
+      return
+    }
+    setError(null)
+    setIsUploadOpen(true)
+  }
 
   useEffect(() => {
     const initialView = resolveAppView(window.location.pathname)
@@ -83,6 +121,11 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
     }
   }
 
+  const openPollComposer = () => {
+    navigate('feed')
+    setComposeSignal(value => value + 1)
+  }
+
   useEffect(() => {
     const loadWardrobe = async () => {
       setLoading(true)
@@ -104,7 +147,7 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
   }, [setError, setGarments, setLoading, setPersonImage])
 
   return (
-    <div className="min-h-screen bg-[#f6f5f1] text-ink bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(215,223,212,0.45),transparent_70%),radial-gradient(circle_at_bottom_right,rgba(235,230,220,0.5),transparent_50%)]">
+    <div className="min-h-screen bg-canvas pb-24 text-ink bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(215,223,212,0.32),transparent_70%),radial-gradient(circle_at_bottom_right,rgba(235,230,220,0.35),transparent_50%)] lg:pb-0">
       <Header
         activeView={activeView}
         historyCount={generation.history.length}
@@ -113,30 +156,31 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
         user={user}
         isLoggingOut={isLoggingOut}
         onLogout={() => void logout()}
+        avatarUrl={avatarUrl}
       />
 
       <div key={activeView} className="app-page-transition">
-        {(activeView === 'feed' || activeView === 'friends') && <SocialPage mode={activeView} onCreateOutfit={() => navigate('fitting')} />}
+        {(activeView === 'feed' || activeView === 'friends') && <SocialPage mode={activeView} composeSignal={composeSignal} onCreateOutfit={() => navigate('fitting')} />}
         {activeView === 'wardrobe' && (
           <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
             <section className="mb-5 flex flex-col gap-5 rounded-[28px] border border-black/[0.06] bg-panel/80 px-5 py-6 shadow-[0_14px_45px_rgba(40,54,47,0.055)] backdrop-blur-md sm:px-7 lg:flex-row lg:items-end lg:justify-between">
               <div>
 
                 <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Tủ đồ kỹ thuật số</h2>
-                <p className="mt-2 max-w-2xl text-xs sm:text-sm leading-6 text-ink/50">Thêm sản phẩm theo từng nhóm, sau đó chọn tối đa một món cho mỗi lớp</p>
+                <p className="mt-2 max-w-2xl text-xs sm:text-sm leading-6 text-ink/50">Thêm sản phẩm theo từng nhóm, sau đó phối tối đa 8 món cho mỗi bộ đồ</p>
               </div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-5 rounded-2xl border border-black/[0.06] bg-white/80 px-4 py-2.5 shadow-xs backdrop-blur-sm">
-                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đã lưu</p><p className="mt-0.5 text-lg font-bold text-ink">{garments.length}</p></div>
+                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đã lưu</p><p className="mt-0.5 text-lg font-bold text-ink">{garments.length}/{MAX_WARDROBE_GARMENTS}</p></div>
                   <div className="h-8 w-px bg-black/[0.07]" />
-                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đang chọn</p><p className="mt-0.5 text-lg font-bold text-sage-700">{selectedCount > 5 ? selectedCount : `${selectedCount}/5`}</p></div>
+                  <div><p className="text-[9px] font-bold uppercase tracking-wider text-ink/35">Đang chọn</p><p className="mt-0.5 text-lg font-bold text-sage-700">{selectedCount}/{MAX_SELECTED_GARMENTS}</p></div>
                 </div>
                 <button type="button" onClick={() => navigate('fitting')} className="flex items-center justify-center gap-2 rounded-2xl bg-[#16171b] px-5 py-3 text-sm font-bold text-white shadow-[0_10px_28px_rgba(22,23,27,0.22)] transition hover:-translate-y-0.5 hover:bg-black">
                   Sang phòng thử <ArrowRight size={16} />
                 </button>
               </div>
             </section>
-            <WardrobePanel mode="page" onAddGarment={() => setIsUploadOpen(true)} />
+            <WardrobePanel mode="page" onAddGarment={openGarmentUpload} />
           </main>
         )}
 
@@ -159,7 +203,7 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
                 <Shirt size={15} className="text-ink/60 transition-transform group-hover:scale-110" />
                 <span>Chỉnh bộ đồ</span>
                 <span className="rounded-full bg-black/[0.06] px-2 py-0.5 text-[10px] font-bold text-ink">
-                  {selectedCount > 5 ? selectedCount : `${selectedCount}/5`}
+                  {selectedCount}/{MAX_SELECTED_GARMENTS}
                 </span>
               </button>
             </section>
@@ -202,14 +246,29 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
           />
         )}
 
+        {activeView === 'koc' && <KocStudioPage user={user} onNavigate={navigate} />}
+        {activeView === 'admin' && <AdminPage user={user} onNavigate={navigate} />}
+
         {activeView === 'profile' && (
           <ProfilePage
             user={user}
             garmentCount={garments.length}
             outfitCount={generation.history.length}
+            onNavigate={navigate}
+            avatarUrl={avatarUrl}
+            onAvatarChange={setAvatarUrl}
+          />
+        )}
+        {activeView === 'settings' && (
+          <SettingsPage
+            user={user}
             isLoggingOut={isLoggingOut}
             onNavigate={navigate}
             onLogout={() => void logout()}
+            darkMode={darkMode}
+            onDarkModeChange={setDarkMode}
+            onReplayOnboarding={() => setShowOnboarding(true)}
+            onUserUpdate={onUserUpdate}
           />
         )}
       </div>
@@ -220,6 +279,26 @@ function FittingRoomApp({ user, onLoggedOut }: FittingRoomAppProps) {
         onClose={() => setIsUploadOpen(false)}
         onSaved={addGarment}
       />
+      <MobileNavigation activeView={activeView} onNavigate={navigate} onQuickAction={() => setIsQuickActionOpen(true)} />
+      <QuickActionSheet
+        open={isQuickActionOpen}
+        onClose={() => setIsQuickActionOpen(false)}
+        onUpload={openGarmentUpload}
+        onOutfit={() => navigate('fitting')}
+        onPoll={openPollComposer}
+        onKoc={() => navigate('koc')}
+      />
+      {showOnboarding && (
+        <OnboardingFlow
+          user={user}
+          hasGarments={garments.length > 0}
+          onComplete={(destination) => {
+            setShowOnboarding(false)
+            if (destination === 'upload') openGarmentUpload()
+            else navigate('fitting')
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -245,7 +324,7 @@ function App() {
     return <><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} />{startupError && <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-red-600 px-4 py-2 text-xs text-white shadow-lg">{startupError}</div>}</>
   }
 
-  return <FittingRoomApp user={user} onLoggedOut={() => setUser(null)} />
+  return <FittingRoomApp user={user} onLoggedOut={() => setUser(null)} onUserUpdate={(updated) => setUser(updated)} />
 }
 
 export default App

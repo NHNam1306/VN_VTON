@@ -30,12 +30,21 @@ describe('Social access and voting',()=>{
   return social.act('alice','poll-create',{outfitIds:['one','two'],recipientIds:['bob','carol'],hours:1,title:'Chọn giúp mình'}).polls[0]!
  }
  it('requires invite codes for unknown ages and protects private profile data',()=>{
+  expect(social.snapshot('alice').me.defaultVisibility).toBe('private')
   expect(()=>social.act('bob','request',{targetId:'alice'})).toThrow()
   connect('alice','bob')
   const person=social.profile('bob','alice').person
   expect(person).not.toHaveProperty('birthDate');expect(person).not.toHaveProperty('inviteCode')
   expect(social.profile('bob','alice').outfits).toHaveLength(0)
   expect(()=>social.profile('outsider','alice')).toThrow()
+ })
+ it('applies the profile default visibility only when an outfit has no explicit policy',()=>{
+  connect('alice','bob')
+  expect(social.profile('bob','alice').outfits).toHaveLength(0)
+  social.act('alice','settings',{username:'alice_style',invitePolicy:'known',defaultVisibility:'friends'})
+  expect(social.profile('bob','alice').outfits).toHaveLength(2)
+  social.act('alice','outfit-policy',{outfitId:'one',visibility:'private',groupIds:[]})
+  expect(social.profile('bob','alice').outfits.map(outfit=>outfit.id)).toEqual(['two'])
  })
  it('only recipients vote; vote changes replace rather than accumulate',()=>{
   const p=poll()
@@ -63,6 +72,17 @@ describe('Social access and voting',()=>{
   expect(social.snapshot('bob').notifications).toHaveLength(0)
   expect(social.search('bob','user_alice')).toHaveLength(0)
   expect(()=>social.act('bob','request',{targetId:'alice',inviteCode:social.snapshot('alice').me.inviteCode})).toThrow()
+ })
+ it('searches by display name or username and ranks exact usernames first',()=>{
+  auth.createUser({id:'viet',email:'viet@test.local',displayName:'Nguyễn Nam',passwordHash:'test',passwordSalt:'test',createdAt:new Date().toISOString()})
+  social.snapshot('viet')
+  social.act('alice','settings',{username:'alice_style',invitePolicy:'known'})
+  social.act('carol','settings',{username:'alice_style_daily',invitePolicy:'known'})
+  expect(social.search('bob','@ALICE_STYLE').map(person=>person.id)).toEqual(['alice','carol'])
+  expect(social.search('bob','ice').map(person=>person.id)).toContain('alice')
+  expect(social.search('bob','nguyen nam').map(person=>person.id)).toContain('viet')
+  expect(social.search('alice','alice')).not.toContainEqual(expect.objectContaining({id:'alice'}))
+  expect(social.search('bob','a')).toEqual([])
  })
  it('group membership gates media; leaving revokes access',()=>{
   connect('alice','bob');connect('alice','carol')
@@ -97,10 +117,15 @@ describe('Social access and voting',()=>{
   expect(()=>social.act('bob','poll-delete',{id:p.id})).toThrow()
  })
  it('stores reports and limits minor invitation settings',()=>{
-  const result=social.act('alice','settings',{username:'alice_1',avatar:'🌸',birthDate:'2015-01-01',invitePolicy:'everyone'})
+  const result=social.act('alice','settings',{username:'alice_1',birthDate:'2015-01-01',invitePolicy:'everyone'})
   expect(result.me.invitePolicy).toBe('known')
   expect(()=>social.act('bob','report',{targetId:'alice',reason:'Unsafe content'})).not.toThrow()
   const code=result.me.inviteCode;social.act('alice','rotate-invite',{})
   expect(()=>social.resolveInvite('bob',code)).toThrow()
+ })
+ it('accepts only stored image URLs for avatars and grants authenticated image access',()=>{
+  expect(()=>social.act('alice','settings',{username:'alice_style',avatar:'🌿',invitePolicy:'known'})).toThrow()
+  social.act('alice','settings',{username:'alice_style',avatar:'/uploads/avatar.webp',invitePolicy:'known'})
+  expect(social.canReadImage('bob','avatar.webp')).toBe(true)
  })
 })

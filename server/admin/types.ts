@@ -1,0 +1,31 @@
+export type UserRole = 'user' | 'koc' | 'moderator' | 'admin'
+export type UserStatus = 'active' | 'suspended'
+
+export type AdminUser = {
+  id: string
+  email: string
+  displayName: string
+  role: UserRole
+  status: UserStatus
+  createdAt: string
+  lastSeenAt: string | null
+}
+
+export type AdminAuditEntry = {
+  id: string
+  actorId: string
+  actorEmail: string
+  action: 'user.role_changed' | 'user.status_changed'
+  targetId: string
+  details: Record<string, string>
+  createdAt: string
+}
+
+export type AdminSummary = {
+  users: number
+  activeUsers: number
+  suspendedUsers: number
+  kocUsers: number
+  moderators: number
+  admins: number
+}

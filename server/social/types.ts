@@ -1,5 +1,10 @@
 export type SocialPerson = { id: string; username: string; name: string; avatar: string }
-export type SocialProfile = SocialPerson & { birthDate: string | null; inviteCode: string; invitePolicy: 'everyone' | 'known' | 'code' }
+export type SocialProfile = SocialPerson & {
+  birthDate: string | null
+  inviteCode: string
+  invitePolicy: 'everyone' | 'known' | 'code'
+  defaultVisibility: 'private' | 'friends'
+}
 export type FriendRequest = { id: string; from: SocialPerson; to: SocialPerson; createdAt: number }
 export type FriendGroup = { id: string; ownerId: string; name: string; members: SocialPerson[] }
 export type SharedOutfit = { id: string; frontImageUrl: string; backImageUrl: string | null; official: boolean }

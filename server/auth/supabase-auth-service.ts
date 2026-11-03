@@ -2,6 +2,7 @@ import { createClient, type User } from '@supabase/supabase-js'
 import type { AuthBackend, AuthResult } from './auth-backend.js'
 import { AuthError } from './auth-service.js'
 import type { PublicUser } from './auth-store.js'
+import type { UserRole } from '../admin/types.js'
 
 const toPublicUser = (user: User): PublicUser => ({
   id: user.id,
@@ -10,6 +11,10 @@ const toPublicUser = (user: User): PublicUser => ({
     ? user.user_metadata.display_name
     : (user.email?.split('@')[0] ?? 'Người dùng'),
   createdAt: user.created_at,
+  role: (['user', 'koc', 'moderator', 'admin'].includes(String(user.app_metadata.role))
+    ? user.app_metadata.role
+    : 'user') as UserRole,
+  status: 'active',
 })
 
 const validate = (email: string, displayName: string, password: string): void => {
@@ -127,6 +132,58 @@ export class SupabaseAuthService implements AuthBackend {
   async logout(_token: string | null): Promise<void> {
     // Cookie is authoritative for this backend. Supabase access tokens expire quickly;
     // clearing both HttpOnly cookies prevents this browser from reusing the session.
+  }
+
+  async updateProfile(userId: string, input: { displayName: string }, token?: string | null): Promise<PublicUser> {
+    const displayName = input.displayName.trim()
+    if (displayName.length < 2 || displayName.length > 50) {
+      throw new AuthError(400, 'Tên hiển thị phải từ 2 đến 50 ký tự.')
+    }
+    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    const authedClient = createClient(this.url, this.publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+    const { data, error } = await authedClient.auth.updateUser({
+      data: { display_name: displayName },
+    })
+    if (error || !data.user) {
+      throw new AuthError(400, error?.message || 'Không thể cập nhật tên hiển thị.')
+    }
+    return toPublicUser(data.user)
+  }
+
+  async changeEmail(userId: string, input: { newEmail: string; password: string }, token?: string | null): Promise<PublicUser> {
+    const newEmail = input.newEmail.trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) || newEmail.length > 254) {
+      throw new AuthError(400, 'Email không hợp lệ.')
+    }
+    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    const authedClient = createClient(this.url, this.publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+    const { data, error } = await authedClient.auth.updateUser({ email: newEmail })
+    if (error || !data.user) {
+      const duplicate = /already|registered|exists/i.test(error?.message ?? '')
+      throw new AuthError(duplicate ? 409 : 400, duplicate ? 'Email này đã được sử dụng.' : (error?.message || 'Không thể đổi email.'))
+    }
+    return toPublicUser(data.user)
+  }
+
+  async changePassword(userId: string, input: { currentPassword: string; newPassword: string }, token?: string | null): Promise<void> {
+    if (input.newPassword.length < 8 || input.newPassword.length > 128) {
+      throw new AuthError(400, 'Mật khẩu mới phải từ 8 đến 128 ký tự.')
+    }
+    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    const authedClient = createClient(this.url, this.publishableKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    })
+    const { error } = await authedClient.auth.updateUser({ password: input.newPassword })
+    if (error) {
+      throw new AuthError(400, error.message || 'Không thể đổi mật khẩu.')
+    }
   }
 
   private fromSession(

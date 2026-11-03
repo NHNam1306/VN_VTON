@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import QRCode from 'qrcode'
-import { Search, UserPlus, Users, Link2, QrCode, Shield, Loader2, Check } from 'lucide-react'
+import { Search, UserPlus, Users, Link2, QrCode, Shield, Loader2, Check, X } from 'lucide-react'
 import type { SocialSnapshot, SocialPerson } from '../../../server/social/types'
 import { socialApi } from '../../services/social-api'
+import { Avatar } from './Avatar'
 import type { Act } from './SocialPage'
 
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
@@ -16,9 +17,7 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 function PersonRow({ person, action }: { person: SocialPerson; action: React.ReactNode }) {
   return (
     <div className="flex items-center gap-3 py-3 border-b border-black/[0.05] last:border-0">
-      <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sage-100 to-sage-200 text-xl">
-        {person.avatar}
-      </span>
+      <Avatar name={person.name} src={person.avatar} className="size-10 text-xs" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-ink">{person.name}</p>
         <p className="truncate text-xs text-ink/40">@{person.username}</p>
@@ -38,15 +37,74 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
   const [groupName, setGroupName] = useState('')
   const [members, setMembers] = useState<string[]>([])
   const [searching, setSearching] = useState(false)
+  const [searched, setSearched] = useState(false)
+  const searchVersion = useRef(0)
   const link = location.origin + '/ban-be?invite=' + encodeURIComponent(data.me.inviteCode)
 
   useEffect(() => {
     void QRCode.toDataURL(link, { width: 200, margin: 2 }).then(setQr).catch(() => setError('Không thể tạo QR.'))
   }, [link])
 
-  const search = async () => {
+  const runSearch = async (value: string, version: number) => {
+    const normalized = value.trim().replace(/^@/, '').trim()
+    if (normalized.length < 2 || version !== searchVersion.current) return
     setSearching(true)
-    try { setResults(await socialApi.search(query)); setError('') } catch (e) { setError(String(e)) } finally { setSearching(false) }
+    try {
+      const next = await socialApi.search(value)
+      if (version !== searchVersion.current) return
+      setResults(next)
+      setSearched(true)
+      setError('')
+    } catch (e) {
+      if (version !== searchVersion.current) return
+      setResults([])
+      setSearched(true)
+      setError(e instanceof Error ? e.message : 'Không thể tìm bạn lúc này.')
+    } finally {
+      if (version === searchVersion.current) setSearching(false)
+    }
+  }
+
+  useEffect(() => {
+    const value = query.trim()
+    const normalized = value.replace(/^@/, '').trim()
+    const version = ++searchVersion.current
+    if (normalized.length < 2) {
+      setResults([])
+      setSearched(false)
+      setSearching(false)
+      return
+    }
+    setSearching(true)
+    const timer = window.setTimeout(() => { void runSearch(value, version) }, 350)
+    return () => window.clearTimeout(timer)
+  }, [query])
+
+  const submitSearch = () => {
+    const version = ++searchVersion.current
+    void runSearch(query, version)
+  }
+
+  const resultAction = (person: SocialPerson) => {
+    if (data.friends.some(friend => friend.id === person.id)) {
+      return <button onClick={() => onProfile(person.id)} className={btnGhost}>Xem hồ sơ</button>
+    }
+    const incoming = data.incoming.find(request => request.from.id === person.id)
+    if (incoming) {
+      return (
+        <button onClick={() => void act('request-response', { id: incoming.id, decision: 'accept' })} className={btnPrimary}>
+          <Check size={12} /> Chấp nhận
+        </button>
+      )
+    }
+    if (data.outgoing.some(request => request.to.id === person.id)) {
+      return <span className={btnBase + ' bg-sage-50 text-sage-800'}><Check size={12} /> Đã gửi</span>
+    }
+    return (
+      <button onClick={() => void act('request', { targetId: person.id })} className={btnPrimary}>
+        <UserPlus size={12} /> Kết bạn
+      </button>
+    )
   }
 
   const invite = async () => {
@@ -75,40 +133,63 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
         <>
           <Card>
             <h2 className="mb-3 flex items-center gap-2 text-sm font-bold text-ink">
-              <Search size={15} className="text-ink/40" /> Tìm bạn theo username
+              <Search size={15} className="text-ink/40" /> Tìm bạn bè
             </h2>
-            <form className="flex gap-2" onSubmit={e => { e.preventDefault(); void search() }}>
-              <input
-                aria-label="Username bạn bè"
-                placeholder="@username"
-                value={query}
-                minLength={2}
-                maxLength={40}
-                onChange={e => setQuery(e.target.value)}
-                className="flex-1 min-w-0 rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400 placeholder:text-ink/30"
-              />
+            <p id="friend-search-help" className="mb-3 text-xs leading-5 text-ink/40">
+              Nhập tên hiển thị hoặc <span className="font-semibold">@username</span>. Kết quả tự cập nhật sau 2 ký tự.
+            </p>
+            <form className="flex gap-2" onSubmit={e => { e.preventDefault(); submitSearch() }}>
+              <div className="relative min-w-0 flex-1">
+                <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink/30" />
+                <input
+                  aria-label="Tìm bạn theo tên hoặc username"
+                  aria-describedby="friend-search-help"
+                  placeholder="Ví dụ: Nguyễn Nam hoặc @nam"
+                  value={query}
+                  maxLength={50}
+                  autoComplete="off"
+                  onChange={e => setQuery(e.target.value)}
+                  className="w-full rounded-xl border border-black/[0.09] bg-white py-2 pl-9 pr-9 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400 placeholder:text-ink/30"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    aria-label="Xoá nội dung tìm kiếm"
+                    className="absolute right-2 top-1/2 grid size-7 -translate-y-1/2 place-items-center rounded-full text-ink/35 transition hover:bg-black/[0.05] hover:text-ink"
+                  >
+                    <X size={13} />
+                  </button>
+                )}
+              </div>
               <button type="submit" disabled={searching} className={btnPrimary}>
                 {searching ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
                 Tìm
               </button>
             </form>
-            {results.length > 0 && (
-              <div className="mt-3 divide-y divide-black/[0.05]">
-                {results.map(p => (
-                  <PersonRow key={p.id} person={p} action={
-                    data.friends.some(f => f.id === p.id)
-                      ? <button onClick={() => onProfile(p.id)} className={btnGhost}>Xem hồ sơ</button>
-                      : <button
-                          disabled={data.incoming.some(r => r.from.id === p.id) || data.outgoing.some(r => r.to.id === p.id)}
-                          onClick={() => void act('request', { targetId: p.id })}
-                          className={btnPrimary}
-                        >
-                          <UserPlus size={12} /> Kết bạn
-                        </button>
-                  } />
-                ))}
-              </div>
-            )}
+            <div className="mt-3" aria-live="polite" aria-busy={searching}>
+              {searching && results.length === 0 && (
+                <div className="flex items-center justify-center gap-2 rounded-xl bg-sage-50 px-4 py-5 text-xs text-ink/45">
+                  <Loader2 size={14} className="animate-spin" /> Đang tìm trong cộng đồng…
+                </div>
+              )}
+              {!searching && searched && results.length === 0 && (
+                <div className="rounded-xl border border-dashed border-black/10 px-4 py-5 text-center">
+                  <p className="text-sm font-semibold text-ink/65">Không tìm thấy tài khoản phù hợp</p>
+                  <p className="mt-1 text-xs leading-5 text-ink/40">Kiểm tra lại tên, thử nhập @username hoặc dùng link mời.</p>
+                </div>
+              )}
+              {results.length > 0 && (
+                <>
+                  <p className="mb-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ink/30">
+                    {results.length} kết quả
+                  </p>
+                  <div className="divide-y divide-black/[0.05]">
+                    {results.map(person => <PersonRow key={person.id} person={person} action={resultAction(person)} />)}
+                  </div>
+                </>
+              )}
+            </div>
           </Card>
 
           <Card>
@@ -179,7 +260,7 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
                 {data.friends.map(p => (
                   <label key={p.id} className="flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-sage-50 transition">
                     <input type="checkbox" checked={members.includes(p.id)} onChange={() => setMembers(members.includes(p.id) ? members.filter(id => id !== p.id) : [...members, p.id])} className="accent-sage-700" />
-                    <span className="text-lg">{p.avatar}</span>
+                    <Avatar name={p.name} src={p.avatar} className="size-7 text-[9px]" />
                     <span className="text-sm font-medium text-ink">{p.name}</span>
                   </label>
                 ))}
@@ -238,10 +319,6 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
                 <input name="username" defaultValue={data.me.username} pattern="[a-z0-9_]{3,40}" required className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-ink/50 mb-1">Avatar (emoji)</label>
-                <input name="avatar" defaultValue={data.me.avatar} maxLength={8} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400" />
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-ink/50 mb-1">Ngày sinh (riêng tư, chỉ khai một lần)</label>
                 <input type="date" name="birthDate" defaultValue={data.me.birthDate ?? ''} disabled={!!data.me.birthDate} max={new Date().toISOString().slice(0, 10)} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400 disabled:opacity-50" />
               </div>
@@ -251,6 +328,13 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
                   <option value="known">Bạn chung hoặc có mã mời</option>
                   <option value="code">Chỉ người có mã mời</option>
                   <option value="everyone">Mọi người (18+)</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-ink/50 mb-1">Outfit mới mặc định hiển thị với</label>
+                <select name="defaultVisibility" defaultValue={data.me.defaultVisibility} className="w-full rounded-xl border border-black/[0.09] bg-white px-3 py-2 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400">
+                  <option value="private">Chỉ mình tôi</option>
+                  <option value="friends">Bạn bè</option>
                 </select>
               </div>
               <p className="text-[10px] leading-relaxed text-ink/35">Chưa khai tuổi hoặc dưới 18: luôn cần bạn chung hoặc mã mời.</p>

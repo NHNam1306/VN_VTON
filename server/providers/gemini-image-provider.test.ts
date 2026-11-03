@@ -70,7 +70,7 @@ describe('GeminiImageProvider', () => {
     expect(request.model).toBe('test-image-model')
     expect(request.config.responseModalities).toEqual(['IMAGE'])
     expect(request.config.imageConfig.aspectRatio).toBe('4:5')
-    expect(request.contents[0]?.text).toContain('back view')
+    expect(request.contents[0]?.text).toMatch(/back view/i)
     expect(request.contents.filter((part) => part.inlineData)).toHaveLength(4)
   })
 

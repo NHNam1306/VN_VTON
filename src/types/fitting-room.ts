@@ -19,6 +19,10 @@ export type OutfitSelection = {
   accessories: string[]
 }
 
+export const MAX_SELECTED_GARMENTS = 8
+export const MAX_WARDROBE_GARMENTS = 20
+export const MAX_SAVED_OUTFITS = 10
+
 export type PersonImage = {
   id: 'current'
   imageUrl: string

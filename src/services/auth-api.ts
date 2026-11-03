@@ -62,6 +62,36 @@ export const authApi = {
     return ((await response.json()) as { user: AuthUser }).user
   },
 
+  async updateProfile(input: { displayName: string }): Promise<AuthUser> {
+    const response = await apiFetch('/api/auth/profile', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { user: AuthUser }).user
+  },
+
+  async changePassword(input: { currentPassword: string; newPassword: string }): Promise<string> {
+    const response = await apiFetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { message: string }).message
+  },
+
+  async changeEmail(input: { newEmail: string; password: string }): Promise<AuthUser> {
+    const response = await apiFetch('/api/auth/change-email', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+    return ((await response.json()) as { user: AuthUser }).user
+  },
+
   async logout(): Promise<void> {
     const response = await apiFetch('/api/auth/logout', { method: 'POST' })
     if (!response.ok) throw new Error(await parseError(response))

@@ -60,7 +60,9 @@ npm start
 | `AUTH_SESSION_DAYS` | `30` | Số ngày duy trì phiên đăng nhập |
 | `COOKIE_SECURE` | theo `NODE_ENV` | Production mặc định bật; local HTTP đặt `false` |
 | `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Railway thường cấu hình `1` sau khi xác minh topology |
-| `AI_REQUESTS_PER_15_MIN` | `10` | Giới hạn tạm theo user + IP cho route AI; production nhiều replica cần limiter dùng chung |
+| `API_REQUESTS_PER_MINUTE` | `600` | Tốc độ token bucket theo IP trên mỗi instance |
+| `API_RATE_LIMIT_BURST` | `120` | Burst API tối đa theo IP trên mỗi instance |
+| `AI_REQUESTS_PER_15_MIN` | `10` | Quota tạo ảnh theo user; production dùng bộ đếm PostgreSQL chung |
 | `LEGACY_DATA_CLAIM_TOKEN` | trống | Token backend một lần để account đầu tiên claim dữ liệu bản cũ; xoá sau migration |
 | `IMAGE_PROVIDER` | `openrouter` | Provider tạo ảnh; hỗ trợ `openrouter`, `gemini` và `mock` |
 | `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock để kiểm thử loading |
@@ -79,7 +81,7 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 
 ## Deploy production: Render + Supabase + Cloudflare R2
 
-1. Trong Supabase SQL Editor, chạy toàn bộ [`supabase/migrations/001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql) một lần. File này tự tạo bảng, index, RLS và trigger đồng bộ `auth.users` sang `profiles`; không tạo bảng thủ công.
+1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql) và [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql). Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
 2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode. Trong **Database Settings → SSL Configuration**, tải certificate, chuyển file sang Base64 và đặt vào `DATABASE_CA_CERT_BASE64` để Render xác minh TLS đầy đủ.
 3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
 4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:
@@ -104,6 +106,8 @@ R2_PREFIX=production
 ```
 
 Không đặt `PORT`; Render tự cấp. `APP_BASE_URL` cũng có thể bỏ qua trên Render vì backend dùng biến hệ thống `RENDER_EXTERNAL_URL`; chỉ đặt thủ công khi chạy ở nền tảng khác. Ảnh R2 không có URL public: frontend đọc qua `/uploads/:key`, backend kiểm tra phiên và quyền sở hữu trước khi tải object.
+
+Rate limiting dùng token bucket nhanh tại từng instance và PostgreSQL atomic cho auth/AI để scale nhiều replica. Cấu hình và hướng nâng lên Redis/Valkey nằm trong [`docs/rate-limiting.md`](docs/rate-limiting.md).
 
 Module social hiện được lưu trong một hàng `social_state` dạng JSONB và dùng `SELECT ... FOR UPDATE` cho mọi mutation. Cách này an toàn cho một Render instance/MVP; trước khi scale ngang nhiều instance hoặc có lượng người dùng lớn, nên chuẩn hoá thành các bảng quan hệ riêng.
 

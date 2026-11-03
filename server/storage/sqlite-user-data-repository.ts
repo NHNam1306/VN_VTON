@@ -252,6 +252,23 @@ export class SqliteUserDataRepository implements UserDataRepository {
     `).run({ userId, ...record, garmentIdsJson: JSON.stringify(record.garmentIds) })
   }
 
+  saveOutfitIfBelowLimit(userId: string, record: SavedOutfitRecord, maxItems: number): boolean {
+    const saveWithinLimit = this.database.transaction(() => {
+      const existing = this.database
+        .prepare('SELECT 1 FROM saved_outfits WHERE user_id = ? AND id = ?')
+        .get(userId, record.id)
+      if (!existing) {
+        const row = this.database
+          .prepare('SELECT count(*) AS count FROM saved_outfits WHERE user_id = ?')
+          .get(userId) as { count: number }
+        if (row.count >= maxItems) return false
+      }
+      this.saveOutfit(userId, record)
+      return true
+    })
+    return saveWithinLimit()
+  }
+
   deleteSavedOutfit(userId: string, id: string): SavedOutfitRecord | null {
     const outfit = this.listSavedOutfits(userId).find((item) => item.id === id) ?? null
     if (outfit) this.database.prepare('DELETE FROM saved_outfits WHERE user_id = ? AND id = ?').run(userId, id)

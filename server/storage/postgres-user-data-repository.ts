@@ -98,6 +98,36 @@ export class PostgresUserDataRepository implements UserDataRepository {
       record.backImageKey, record.garmentIds, record.createdAt])
   }
 
+  async saveOutfitIfBelowLimit(userId: string, record: SavedOutfitRecord, maxItems: number): Promise<boolean> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,1))', [userId])
+      const existing = await client.query('SELECT 1 FROM saved_outfits WHERE user_id=$1 AND id=$2', [userId, record.id])
+      if ((existing.rowCount ?? 0) === 0) {
+        const countResult = await client.query<{ count: string }>(
+          'SELECT count(*)::text AS count FROM saved_outfits WHERE user_id=$1',
+          [userId],
+        )
+        if (Number(countResult.rows[0]?.count ?? 0) >= maxItems) {
+          await client.query('ROLLBACK')
+          return false
+        }
+      }
+      await client.query(
+        'INSERT INTO saved_outfits(id,user_id,front_image_url,front_image_key,back_image_url,back_image_key,garment_ids,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT(id) DO UPDATE SET front_image_url=EXCLUDED.front_image_url,front_image_key=EXCLUDED.front_image_key,back_image_url=EXCLUDED.back_image_url,back_image_key=EXCLUDED.back_image_key,garment_ids=EXCLUDED.garment_ids,created_at=EXCLUDED.created_at WHERE saved_outfits.user_id=EXCLUDED.user_id',
+        [record.id, userId, record.frontImageUrl, record.frontImageKey, record.backImageUrl, record.backImageKey, record.garmentIds, record.createdAt],
+      )
+      await client.query('COMMIT')
+      return true
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
   async deleteSavedOutfit(userId: string, id: string): Promise<SavedOutfitRecord | null> {
     const existing = (await this.listSavedOutfits(userId)).find((item) => item.id === id) ?? null
     if (existing) await this.pool.query('DELETE FROM saved_outfits WHERE user_id = $1 AND id = $2', [userId, id])

@@ -1,8 +1,9 @@
-import { Home, LogOut, Search, Shirt, Sparkles, UserRound, Users, MessageSquare } from 'lucide-react'
+import { BadgeDollarSign, Home, LogOut, Search, Settings, ShieldCheck, Shirt, Sparkles, UserRound, Users, MessageSquare } from 'lucide-react'
 import { startTransition, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { appViewPaths, type AppView } from '../navigation'
 import type { AuthUser } from '../types/auth'
 import { NotificationBell } from './social/NotificationBell'
+import { Avatar } from './social/Avatar'
 
 type HeaderProps = {
   activeView: AppView
@@ -12,6 +13,7 @@ type HeaderProps = {
   user: AuthUser
   isLoggingOut: boolean
   onLogout: () => void
+  avatarUrl?: string | null
 }
 
 const navigationItems: Array<{
@@ -25,6 +27,7 @@ const navigationItems: Array<{
     { view: 'profile', label: 'Tài khoản', icon: UserRound },
     { view: 'feed', label: 'Bảng tin', icon: MessageSquare },
     { view: 'friends', label: 'Bạn bè', icon: Users },
+    { view: 'koc', label: 'KOC Studio', icon: BadgeDollarSign },
   ]
 
 export function Header({
@@ -35,8 +38,10 @@ export function Header({
   user,
   isLoggingOut,
   onLogout,
+  avatarUrl,
 }: HeaderProps) {
-  const targetIndex = Math.max(0, navigationItems.findIndex((item) => item.view === activeView))
+  const navigationView = activeView === 'settings' ? 'profile' : activeView
+  const targetIndex = Math.max(0, navigationItems.findIndex((item) => item.view === navigationView))
 
   const [slider, setSlider] = useState<{
     current: number
@@ -108,15 +113,15 @@ export function Header({
           </span>
           <span>
             <span className="flex items-center gap-2">
-              <span className="font-display text-lg font-bold tracking-tight text-ink">Fitting Room</span>
-              <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-ink/70">Atelier Studio</span>
+              <span className="font-display text-lg font-bold tracking-tight text-ink">Tryoh</span>
+              <span className="rounded-full border border-black/[0.08] bg-black/[0.04] px-2 py-0.5 text-[8px] font-bold uppercase tracking-[0.18em] text-ink/70">Tủ đồ cá nhân</span>
             </span>
-            <span className="hidden text-[10px] font-medium text-ink/40 sm:block">Virtual Try-On · Studio Edition</span>
+            <span className="hidden text-[10px] font-medium text-ink/40 sm:block">Tủ đồ · Phòng thử · Bạn bè</span>
           </span>
         </a>
 
         {/* Capsule Navigation Bar */}
-        <nav className="order-3 flex w-full justify-center lg:order-2 lg:w-auto" aria-label="Điều hướng chính">
+        <nav className="order-3 hidden w-full justify-center lg:order-2 lg:flex lg:w-auto" aria-label="Điều hướng chính">
           <div className="relative flex h-12 w-full max-w-[360px] items-center rounded-full border border-white/10 bg-[#16171a] p-1.5 shadow-[0_10px_35px_rgba(0,0,0,0.35)] sm:h-13 sm:w-[420px]">
             {/* Sliding translucent gray capsule box with stretch physics */}
             <span
@@ -137,10 +142,10 @@ export function Header({
             />
 
             {/* 4 Tabs */}
-            <div className="relative z-10 grid h-full w-full grid-cols-6">
+            <div className="relative z-10 grid h-full w-full grid-cols-7">
               {navigationItems.map((item, index) => {
                 const Icon = item.icon
-                const isActive = activeView === item.view || (slider.isAnimating && slider.to === index)
+                const isActive = navigationView === item.view || (slider.isAnimating && slider.to === index)
                 const count = item.view === 'outfits' ? historyCount : item.view === 'fitting' ? selectedCount : 0
                 return (
                   <a
@@ -192,14 +197,20 @@ export function Header({
 
         <div className="order-2 flex items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/80 py-1 pl-1.5 pr-2 shadow-sm backdrop-blur-md lg:order-3">
           <NotificationBell />
-          <span className="relative grid size-8 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sage-100 to-sage-200 text-sage-900 font-bold text-xs shadow-xs">
-            {user.displayName.trim().slice(0, 1).toUpperCase()}
+          {(user.role === 'admin' || user.role === 'moderator') && (
+            <button type="button" onClick={() => onViewChange('admin')} className="grid size-8 place-items-center rounded-full bg-amber-50 text-amber-800 transition hover:bg-amber-100" aria-label="Mở trang quản trị" title="Quản trị">
+              <ShieldCheck size={15} />
+            </button>
+          )}
+          <button type="button" onClick={() => onViewChange('profile')} className="relative shrink-0 rounded-full transition hover:scale-105" aria-label="Mở hồ sơ">
+            <Avatar name={user.displayName} src={avatarUrl} className="size-8 text-[10px] shadow-xs" />
             <span className="absolute bottom-0 right-0 size-2.5 rounded-full border-2 border-white bg-emerald-500" />
-          </span>
+          </button>
           <div className="hidden min-w-0 pr-1 sm:block">
             <p className="max-w-28 truncate text-[11px] font-bold text-ink leading-tight">{user.displayName}</p>
             <p className="max-w-28 truncate text-[8.5px] font-medium text-ink/40">{user.email}</p>
           </div>
+          <button type="button" onClick={() => onViewChange('settings')} className={`grid size-7 shrink-0 place-items-center rounded-full transition ${activeView === 'settings' ? 'bg-sage-100 text-sage-800' : 'text-ink/35 hover:bg-sage-50 hover:text-ink/70'}`} aria-label="Mở cài đặt" title="Cài đặt"><Settings size={13} /></button>
           <button type="button" onClick={onLogout} disabled={isLoggingOut} className="grid size-7 shrink-0 place-items-center rounded-full text-ink/35 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40" aria-label="Đăng xuất" title="Đăng xuất"><LogOut size={13} /></button>
         </div>
       </div>

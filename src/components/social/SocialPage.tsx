@@ -4,6 +4,7 @@ import type { SocialSnapshot, SocialPerson, SharedOutfit } from '../../../server
 import { socialApi } from '../../services/social-api'
 import { tryOnApi } from '../../services/try-on-api'
 import { FriendsPanel } from './FriendsPanel'
+import { Avatar } from './Avatar'
 import { PollCard, PollComposer } from './Voting'
 import { SharingPanel } from './SharingPanel'
 import './social.css'
@@ -14,7 +15,7 @@ function UnreadDot() {
   return <span className="inline-block size-2 rounded-full bg-sage-600 shrink-0 mt-1" aria-hidden="true" />
 }
 
-export function SocialPage({ mode, onCreateOutfit }: { mode: 'feed' | 'friends'; onCreateOutfit: () => void }) {
+export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 'feed' | 'friends'; onCreateOutfit: () => void; composeSignal?: number }) {
   const [data, setData] = useState<SocialSnapshot | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -25,6 +26,10 @@ export function SocialPage({ mode, onCreateOutfit }: { mode: 'feed' | 'friends';
   const [profile, setProfile] = useState<{ person: SocialPerson; outfits: SharedOutfit[] } | null>(null)
   const [zoom, setZoom] = useState<string | null>(null)
   const [reportText, setReportText] = useState('')
+
+  useEffect(() => {
+    if (composeSignal > 0 && mode === 'feed') setCompose(true)
+  }, [composeSignal, mode])
 
   const refresh = useCallback(async () => {
     try { setData(await socialApi.snapshot()); setError('') } catch (e) { setError(e instanceof Error ? e.message : 'Không thể tải dữ liệu.') }
@@ -138,9 +143,7 @@ export function SocialPage({ mode, onCreateOutfit }: { mode: 'feed' | 'friends';
             {/* Profile card */}
             <div className="rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
               <div className="mb-3 flex items-center gap-3">
-                <span className="grid size-12 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sage-100 to-sage-200 text-2xl shadow-inner">
-                  {data.me.avatar}
-                </span>
+                <Avatar name={data.me.name} src={data.me.avatar} className="size-12 text-sm shadow-inner" />
                 <div className="min-w-0">
                   <p className="truncate font-bold text-ink">{data.me.name}</p>
                   <p className="truncate text-xs text-ink/40">@{data.me.username}</p>
@@ -274,7 +277,7 @@ export function SocialPage({ mode, onCreateOutfit }: { mode: 'feed' | 'friends';
           >
             <button autoFocus onClick={() => setProfile(null)} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-black/[0.06] text-ink/50 hover:bg-black/10 transition" aria-label="Đóng">✕</button>
             <div className="mb-5 flex items-center gap-3">
-              <span className="grid size-12 shrink-0 place-items-center rounded-full bg-sage-100 text-2xl">{profile.person.avatar}</span>
+              <Avatar name={profile.person.name} src={profile.person.avatar} className="size-12 text-sm" />
               <div>
                 <h2 className="font-bold text-ink text-lg">{profile.person.name}</h2>
                 <p className="text-xs text-ink/40">@{profile.person.username}</p>

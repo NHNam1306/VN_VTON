@@ -11,7 +11,7 @@ vi.mock('../../services/social-api', () => ({
 }))
 
 const snapshot = {
-  me: { id: 'me', name: 'An', username: 'an', avatar: '🌿', birthDate: null, inviteCode: 'code', invitePolicy: 'known' as const },
+  me: { id: 'me', name: 'An', username: 'an', avatar: '🌿', birthDate: null, inviteCode: 'code', invitePolicy: 'known' as const, defaultVisibility: 'private' as const },
   friends: [], incoming: [], outgoing: [], groups: [], polls: [], blocked: [], policies: [],
   notifications: [
     { id: 'new', kind: 'request' as const, text: 'Bình gửi lời mời kết bạn', targetId: 'request', read: false, createdAt: 1_700_000_000_000 },

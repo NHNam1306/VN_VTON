@@ -17,6 +17,13 @@ import type { SocialService } from './social/social-service.js'
 import { createSocialRouter } from './social/router.js'
 import { runtimeConfig } from './config/runtime-config.js'
 import { requireMutationHeader, setSecurityHeaders } from './http/security.js'
+import type { AdminService } from './admin/admin-service.js'
+import { createAdminRouter } from './admin/router.js'
+import {
+  createTokenBucketRateLimit,
+  MemoryRateLimitStore,
+  type RateLimitStore,
+} from './http/rate-limit.js'
 
 export function createApp(
   repository: GarmentRepository,
@@ -28,11 +35,19 @@ export function createApp(
   secureCookies = false,
   garmentExtractor?: GarmentExtractorService,
   social?: SocialService,
+  admin?: AdminService,
+  rateLimitStore?: RateLimitStore,
 ) {
   const app = express()
+  const sharedRateLimits = rateLimitStore ?? new MemoryRateLimitStore()
   app.disable('x-powered-by')
   if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
   app.use(setSecurityHeaders)
+  app.use('/api', createTokenBucketRateLimit({
+    requestsPerMinute: runtimeConfig.apiRequestsPerMinute,
+    burst: runtimeConfig.apiBurst,
+    skip: (request) => request.path === '/health',
+  }))
   app.use(express.json({ limit: '32kb' }))
   app.use('/api', requireMutationHeader)
 
@@ -48,8 +63,9 @@ export function createApp(
   app.get('/api/health', (_request, response) => {
     response.json({ status: 'ok' })
   })
-  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays))
-  const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays)
+  const decorateUser = admin ? (user: Parameters<AdminService['resolveAuthenticatedUser']>[0]) => admin.resolveAuthenticatedUser(user) : undefined
+  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits))
+  const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser)
   app.get('/uploads/:key', requireAuth, async (request, response, next) => {
     try {
       const rawKey = request.params.key
@@ -82,10 +98,11 @@ export function createApp(
       next(error)
     }
   })
-  if (social) app.use('/api/social', requireAuth, createSocialRouter(social))
+  if (social) app.use('/api/social', requireAuth, createSocialRouter(social, images))
+  if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin))
   app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social))
   app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
-  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images))
+  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, sharedRateLimits))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())
 
   app.use('/api', (_request, response) => {

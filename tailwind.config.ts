@@ -1,13 +1,14 @@
 import type { Config } from 'tailwindcss'
 
 export default {
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        ink: '#17211d',
-        canvas: '#f5f2eb',
-        panel: '#fcfbf8',
+        ink: 'rgb(var(--color-ink) / <alpha-value>)',
+        canvas: 'rgb(var(--color-canvas) / <alpha-value>)',
+        panel: 'rgb(var(--color-panel) / <alpha-value>)',
         sage: {
           50: '#f1f5f0',
           100: '#e2ebe0',
@@ -20,8 +21,8 @@ export default {
       },
       boxShadow: { soft: '0 18px 50px rgba(40, 54, 47, 0.08)' },
       fontFamily: {
-        sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
-        display: ['Segoe UI', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        sans: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', 'sans-serif'],
+        display: ['"Plus Jakarta Sans"', 'Inter', '-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'sans-serif'],
       },
     },
   },

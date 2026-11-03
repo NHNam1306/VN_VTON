@@ -25,6 +25,7 @@
 
 - Routes: /ban-be, /bang-tin, /bang-tin?poll=ID. Notification lời mời mở /ban-be?tab=requests.
 - API có auth: /api/social, /search, /invite, /profile/:id và POST /:action. Validation và quyền nằm ở backend, không tin dữ liệu client.
+- Tìm bạn tự động sau khi nhập 2 ký tự, hỗ trợ tên hiển thị không dấu và `@username`. Kết quả ưu tiên username khớp chính xác/khớp đầu, loại tài khoản hiện tại và người đã chặn.
 - SocialStore là adapter SQLite riêng: một document JSON trong bảng social_state, transaction cho mỗi mutation. Phù hợp MVP local; cần chuyển sang bảng quan hệ/index và phân trang trước khi có nhiều người dùng. Không thay provider tạo ảnh.
 - Kết quả polling 8 giây khi trang social đang hiện; badge thông báo 15 giây. Không phải push notification hệ điều hành hay websocket.
 - Thời hạn do server kiểm tra mỗi vote. Thông báo hết hạn được tạo khi có lần đọc/mutation social tiếp theo; không cần cron.
@@ -36,4 +37,3 @@
 
 - Xin quyền đọc danh bạ để tìm bạn.
 - Reaction nhanh / tin nhắn ngắn trong bình chọn.
-

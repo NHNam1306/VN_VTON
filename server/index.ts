@@ -23,6 +23,15 @@ import { SocialStore } from './social/social-store.js'
 import { PostgresSocialStore } from './social/postgres-social-store.js'
 import type { SocialService } from './social/social-service.js'
 import { runtimeConfig } from './config/runtime-config.js'
+import { AdminService } from './admin/admin-service.js'
+import type { AdminRepository } from './admin/admin-repository.js'
+import { SqliteAdminRepository } from './admin/sqlite-admin-repository.js'
+import { PostgresAdminRepository } from './admin/postgres-admin-repository.js'
+import {
+  MemoryRateLimitStore,
+  PostgresRateLimitStore,
+  type RateLimitStore,
+} from './http/rate-limit.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const isDevelopment = process.argv.includes('--dev')
@@ -42,6 +51,7 @@ let userDataRepository: UserDataRepository
 let authStore: AuthStore | undefined
 let authService: AuthBackend
 let imageStorage: ImageStorage
+let sqliteDatabasePath: string | undefined
 
 if (persistenceBackend === 'postgres') {
   postgresPool = createPostgresPool(process.env.DATABASE_URL ?? '')
@@ -50,9 +60,9 @@ if (persistenceBackend === 'postgres') {
   userDataRepository = new PostgresUserDataRepository(postgresPool)
 } else if (persistenceBackend === 'sqlite') {
   await mkdir(dataDirectory, { recursive: true })
-  const databasePath = path.join(dataDirectory, 'fitting-room.sqlite')
-  repository = new SqliteGarmentRepository(databasePath)
-  userDataRepository = new SqliteUserDataRepository(databasePath)
+  sqliteDatabasePath = path.join(dataDirectory, 'fitting-room.sqlite')
+  repository = new SqliteGarmentRepository(sqliteDatabasePath)
+  userDataRepository = new SqliteUserDataRepository(sqliteDatabasePath)
 } else {
   throw new Error(`PERSISTENCE_BACKEND="${persistenceBackend}" không được hỗ trợ.`)
 }
@@ -94,6 +104,13 @@ const imageProvider = createImageProvider(imageStorage, { port })
 const social: SocialService = persistenceBackend === 'sqlite'
   ? new SocialStore(path.join(dataDirectory, 'fitting-room.sqlite'), userDataRepository as SqliteUserDataRepository)
   : new PostgresSocialStore(postgresPool!)
+const adminRepository:AdminRepository=persistenceBackend==='sqlite'
+  ? new SqliteAdminRepository(sqliteDatabasePath!)
+  : new PostgresAdminRepository(postgresPool!)
+const admin=new AdminService(adminRepository,runtimeConfig.adminEmails)
+const rateLimitStore: RateLimitStore = persistenceBackend === 'postgres'
+  ? new PostgresRateLimitStore(postgresPool!)
+  : new MemoryRateLimitStore()
 const app = createApp(
   repository,
   userDataRepository,
@@ -104,6 +121,8 @@ const app = createApp(
   runtimeConfig.secureCookies,
   undefined,
   social,
+  admin,
+  rateLimitStore,
 )
 const server = createHttpServer(app)
 let closeVite: (() => Promise<void>) | undefined
@@ -146,6 +165,8 @@ const shutdown = async () => {
     userDataRepository.close()
     authStore?.close()
     void social.close()
+    void admin.close()
+    void rateLimitStore.close?.()
     void postgresPool?.end()
     process.exit(0)
   })

@@ -95,4 +95,22 @@ describe('SqliteUserDataRepository', () => {
     expect(repository.findPendingOutfit(userId, frontOnly.frontImageUrl)).toBeNull()
     repository.close()
   })
+
+  it('giới hạn số bộ đã lưu nhưng vẫn cho cập nhật bộ hiện có', () => {
+    const repository = new SqliteUserDataRepository(':memory:')
+    const first = {
+      id: 'outfit-1',
+      frontImageUrl: '/uploads/front-1.png',
+      frontImageKey: 'front-1.png',
+      backImageUrl: null,
+      backImageKey: null,
+      garmentIds: ['shirt-1'],
+      createdAt: '2026-01-03T00:00:00.000Z',
+    }
+    expect(repository.saveOutfitIfBelowLimit(userId, first, 1)).toBe(true)
+    expect(repository.saveOutfitIfBelowLimit(userId, { ...first, backImageUrl: '/uploads/back-1.png' }, 1)).toBe(true)
+    expect(repository.saveOutfitIfBelowLimit(userId, { ...first, id: 'outfit-2' }, 1)).toBe(false)
+    expect(repository.listSavedOutfits(userId)).toHaveLength(1)
+    repository.close()
+  })
 })

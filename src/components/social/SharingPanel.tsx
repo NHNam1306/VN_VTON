@@ -8,7 +8,7 @@ export function SharingPanel({ data, outfits, act }: { data: SocialSnapshot; out
     <div className="rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
       <h2 className="mb-1 text-sm font-bold text-ink">Quyền xem outfit</h2>
       <p className="mb-4 text-xs leading-relaxed text-ink/45">
-        Mặc định chỉ mình bạn. Bình chọn chia sẻ riêng với người nhận đã chọn.
+        Outfit chưa đặt riêng sẽ dùng quyền mặc định trong hồ sơ của bạn. Bình chọn chia sẻ riêng với người nhận đã chọn.
         Chuyển về riêng tư cũng xoá bình chọn chứa outfit đó.
       </p>
       {outfits.length === 0 ? (
@@ -27,7 +27,7 @@ export function SharingPanel({ data, outfits, act }: { data: SocialSnapshot; out
 
 function Policy({ outfit, data, act }: { outfit: SharedOutfit; data: SocialSnapshot; act: Act }) {
   const policy = data.policies.find(p => p.outfitId === outfit.id)
-  const [visibility, setVisibility] = useState(policy?.visibility ?? 'private')
+  const [visibility, setVisibility] = useState(policy?.visibility ?? data.me.defaultVisibility)
   const [groups, setGroups] = useState(policy?.groupIds ?? [])
 
   const visibilityIcon = {

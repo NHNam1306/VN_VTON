@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from 'node:crypto'
 import { AuthError } from '../auth/auth-service.js'
 import type { SqliteUserDataRepository } from '../storage/sqlite-user-data-repository.js'
 import type { SocialPerson, SocialProfile, SocialPoll, SocialSnapshot, OutfitPolicy } from './types.js'
+import { prepareSocialSearch, socialSearchScore } from './search.js'
 
 type Profile = Omit<SocialProfile, 'name'>
 type RequestRow = { id: string; from: string; to: string; createdAt: number }
@@ -14,6 +15,10 @@ const fresh = (): State => ({ profiles: [], friends: [], requests: [], groups: [
 const fail = (message: string, code = 400): never => { throw new AuthError(code, message) }
 const str = (v: unknown, max = 120): string => typeof v === 'string' && v.trim().length <= max ? v.trim() : fail('Dữ liệu văn bản không hợp lệ.')
 const ids = (v: unknown, max = 100): string[] => Array.isArray(v) && v.length <= max && v.every(x => typeof x === 'string' && x.length < 150) ? [...new Set(v as string[])] : fail('Danh sách không hợp lệ.')
+const imageKeyFromUrl = (value: string): string | null => {
+  if (!value.startsWith('/uploads/')) return null
+  try { return decodeURIComponent(value.slice('/uploads/'.length)) } catch { return null }
+}
 
 /** Local SQLite implementation. All mutations use a transaction; no content or images in logs. */
 export class SocialStore {
@@ -30,7 +35,8 @@ export class SocialStore {
   private change<T>(f: (s: State) => T): T { return this.db.transaction(() => { const s = this.load(); const result = f(s); this.write(s); return result })() }
   private users() { return this.db.prepare('SELECT id, display_name AS name FROM users').all() as { id: string; name: string }[] }
   private seed(s: State) {
-    for (const u of this.users()) if (!s.profiles.some(p => p.id === u.id)) s.profiles.push({ id: u.id, username: `user_${u.id.replace(/-/g, '')}`, avatar: '🌿', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url') })
+    for (const u of this.users()) if (!s.profiles.some(p => p.id === u.id)) s.profiles.push({ id: u.id, username: `user_${u.id.replace(/-/g, '')}`, avatar: '', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url'), defaultVisibility: 'private' })
+    for (const profile of s.profiles) if (profile.defaultVisibility !== 'friends') profile.defaultVisibility = 'private'
   }
   private person(s: State, id: string): SocialPerson {
     const p = s.profiles.find(p => p.id === id)
@@ -80,16 +86,29 @@ export class SocialStore {
     })
   }
   search(user: string, query: string) {
-    const s = this.load(); const q = query.toLowerCase().trim().replace(/^@/,'')
-    if (q.length < 2) return []
-    return s.profiles.filter(p => p.id !== user && !this.blocked(s,user,p.id) && p.username.startsWith(q)).slice(0,20).map(p => this.person(s,p.id))
+    const search = prepareSocialSearch(query)
+    if (!search) return []
+    return this.change(s => {
+      this.seed(s)
+      return s.profiles
+        .filter(p => p.id !== user && !this.blocked(s,user,p.id))
+        .map(p => {
+          const person = this.person(s,p.id)
+          return { person, score: socialSearchScore(person.username, person.name, search) }
+        })
+        .filter((result): result is { person: SocialPerson; score: number } => result.score !== null)
+        .sort((a,b) => a.score-b.score || a.person.username.localeCompare(b.person.username, 'vi'))
+        .slice(0,20)
+        .map(result => result.person)
+    })
   }
   resolveInvite(user: string, code: string) { const s = this.load(); const p = s.profiles.find(p => p.inviteCode === code && !this.blocked(s,user,p.id)); return p ? this.person(s,p.id) : fail('Mã mời không còn hiệu lực.',404) }
   private canViewOutfit(s: State, viewer: string, owner: string, outfitId: string) {
     if (viewer === owner) return true
     if (!this.friend(s,viewer,owner)) return false
     const policy = s.policies.find(p => p.ownerId === owner && p.outfitId === outfitId)
-    if (policy?.visibility === 'friends') return true
+    const visibility = policy?.visibility ?? s.profiles.find(p => p.id === owner)?.defaultVisibility ?? 'private'
+    if (visibility === 'friends') return true
     if (policy?.visibility === 'groups' && s.groups.some(g => policy.groupIds.includes(g.id) && g.members.includes(owner) && g.members.includes(viewer))) return true
     return s.polls.some(p => p.ownerId === owner && p.outfitIds.includes(outfitId) && p.recipients.includes(viewer) && this.visiblePoll(s,p,viewer))
   }
@@ -101,6 +120,7 @@ export class SocialStore {
   trackTemporaryImage(user: string, key: string) { this.change(s => { s.temporaryImages.push({ownerId:user,key}) }) }
   canReadImage(user: string, key: string): boolean {
     const s = this.load()
+    if (s.profiles.some(profile => imageKeyFromUrl(profile.avatar) === key)) return true
     if (s.temporaryImages.some(x => x.ownerId === user && x.key === key)) return true
     const own = this.db.prepare(`SELECT 1 FROM garments WHERE user_id = ? AND (front_original_key = ? OR front_processed_key = ? OR back_original_key = ? OR back_processed_key = ?)`).get(user,key,key,key,key)
     if (own || this.outfits.getPersonImage(user)?.imageKey === key || this.outfits.listTryOnResults(user).some(o => o.imageKey === key)) return true
@@ -125,7 +145,17 @@ export class SocialStore {
         if (body.birthDate && !me.birthDate) { const d=str(body.birthDate,10); if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||!Number.isFinite(Date.parse(d))||new Date(d).toISOString().slice(0,10)!==d||Date.parse(d)>Date.now()||Date.parse(d)<Date.parse('1900-01-01')) fail('Ngày sinh không hợp lệ.'); me.birthDate=d }
         const policy = body.invitePolicy
         if(policy!=='everyone'&&policy!=='known'&&policy!=='code') fail('Quyền lời mời không hợp lệ.')
-        me.username=username; me.avatar=str(body.avatar,8) || '🌿'; me.invitePolicy=policy as SocialProfile['invitePolicy']
+        me.username=username
+        if (body.avatar !== undefined) {
+          const avatar = str(body.avatar, 500)
+          if (avatar && !avatar.startsWith('/uploads/')) fail('Ảnh đại diện không hợp lệ.')
+          me.avatar = avatar
+        }
+        me.invitePolicy=policy as SocialProfile['invitePolicy']
+        if (body.defaultVisibility !== undefined) {
+          if (body.defaultVisibility !== 'private' && body.defaultVisibility !== 'friends') fail('Quyền xem mặc định không hợp lệ.')
+          me.defaultVisibility = body.defaultVisibility as SocialProfile['defaultVisibility']
+        }
         if(this.restricted(me)&&me.invitePolicy==='everyone') me.invitePolicy='known'
       } else if(action==='rotate-invite') { me.inviteCode=randomBytes(24).toString('base64url')
       } else if(action==='request') {

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { Garment, GarmentCategory, OutfitSelection, PersonImage } from '../types/fitting-room'
+import { MAX_SELECTED_GARMENTS, type Garment, type GarmentCategory, type OutfitSelection, type PersonImage } from '../types/fitting-room'
 
 const emptyOutfit: OutfitSelection = {
   tops: null,
@@ -8,6 +8,9 @@ const emptyOutfit: OutfitSelection = {
   shoes: null,
   accessories: [],
 }
+
+const selectedGarmentCount = (outfit: OutfitSelection) =>
+  [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes].filter(Boolean).length + outfit.accessories.length
 
 type FittingRoomState = {
   activeCategory: GarmentCategory
@@ -83,6 +86,7 @@ export const useFittingRoomStore = create<FittingRoomState>((set) => ({
     set((state) => {
       if (category === 'accessories') {
         const isSelected = state.outfit.accessories.includes(garmentId)
+        if (!isSelected && selectedGarmentCount(state.outfit) >= MAX_SELECTED_GARMENTS) return state
         return {
           outfit: {
             ...state.outfit,
@@ -92,10 +96,12 @@ export const useFittingRoomStore = create<FittingRoomState>((set) => ({
           },
         }
       }
+      const current = state.outfit[category]
+      if (current !== garmentId && !current && selectedGarmentCount(state.outfit) >= MAX_SELECTED_GARMENTS) return state
       return {
         outfit: {
           ...state.outfit,
-          [category]: state.outfit[category] === garmentId ? null : garmentId,
+          [category]: current === garmentId ? null : garmentId,
         },
       }
     }),

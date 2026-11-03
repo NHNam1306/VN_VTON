@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import type { UserRole, UserStatus } from '../admin/types.js'
 
 export type AuthUser = {
   id: string
@@ -7,9 +8,12 @@ export type AuthUser = {
   passwordHash: string
   passwordSalt: string
   createdAt: string
+  role: UserRole
+  status: UserStatus
 }
 
-export type PublicUser = Pick<AuthUser, 'id' | 'email' | 'displayName' | 'createdAt'>
+export type PublicUser = Pick<AuthUser, 'id' | 'email' | 'displayName' | 'createdAt' | 'role' | 'status'>
+export type CreateAuthUser = Omit<AuthUser, 'role' | 'status'> & Partial<Pick<AuthUser, 'role' | 'status'>>
 
 export class AuthStore {
   private readonly database: Database.Database
@@ -38,18 +42,29 @@ export class AuthStore {
       CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_id ON auth_sessions(user_id);
       CREATE INDEX IF NOT EXISTS idx_auth_sessions_expires_at ON auth_sessions(expires_at);
     `)
+    const userColumns = this.database.pragma('table_info(users)') as Array<{ name: string }>
+    if (!userColumns.some(column => column.name === 'role')) {
+      this.database.exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'")
+    }
+    if (!userColumns.some(column => column.name === 'status')) {
+      this.database.exec("ALTER TABLE users ADD COLUMN status TEXT NOT NULL DEFAULT 'active'")
+    }
   }
 
   countUsers(): number {
     return (this.database.prepare('SELECT COUNT(*) AS count FROM users').get() as { count: number }).count
   }
 
-  createUser(user: AuthUser): PublicUser {
+  createUser(user: CreateAuthUser): PublicUser {
     this.database.prepare(`
-      INSERT INTO users (id, email, display_name, password_hash, password_salt, created_at)
-      VALUES (@id, @email, @displayName, @passwordHash, @passwordSalt, @createdAt)
-    `).run(user)
-    const { passwordHash: _hash, passwordSalt: _salt, ...publicUser } = user
+      INSERT INTO users (id, email, display_name, password_hash, password_salt, created_at, role, status)
+      VALUES (@id, @email, @displayName, @passwordHash, @passwordSalt, @createdAt, @role, @status)
+    `).run({ ...user, role: user.role ?? 'user', status: user.status ?? 'active' })
+    const { passwordHash: _hash, passwordSalt: _salt, ...publicUser } = {
+      ...user,
+      role: user.role ?? 'user' as UserRole,
+      status: user.status ?? 'active' as UserStatus,
+    }
     return publicUser
   }
 
@@ -62,6 +77,28 @@ export class AuthStore {
     if (!user) return null
     const { passwordHash: _hash, passwordSalt: _salt, ...publicUser } = user
     return publicUser
+  }
+
+  findUserWithSecretsById(id: string): AuthUser | null {
+    return this.fromRow(this.database.prepare('SELECT * FROM users WHERE id = ?').get(id))
+  }
+
+  updateDisplayName(id: string, displayName: string): PublicUser {
+    this.database.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(displayName, id)
+    const updated = this.findUserById(id)
+    if (!updated) throw new Error('Không tìm thấy người dùng.')
+    return updated
+  }
+
+  updateEmail(id: string, email: string): PublicUser {
+    this.database.prepare('UPDATE users SET email = ? WHERE id = ?').run(email, id)
+    const updated = this.findUserById(id)
+    if (!updated) throw new Error('Không tìm thấy người dùng.')
+    return updated
+  }
+
+  updatePassword(id: string, passwordHash: string, passwordSalt: string): void {
+    this.database.prepare('UPDATE users SET password_hash = ?, password_salt = ? WHERE id = ?').run(passwordHash, passwordSalt, id)
   }
 
   createSession(tokenHash: string, userId: string, expiresAt: string): void {
@@ -118,7 +155,8 @@ export class AuthStore {
       passwordHash: value.password_hash!,
       passwordSalt: value.password_salt!,
       createdAt: value.created_at!,
+      role: value.role === 'koc' || value.role === 'moderator' || value.role === 'admin' ? value.role : 'user',
+      status: value.status === 'suspended' ? 'suspended' : 'active',
     }
   }
 }
-

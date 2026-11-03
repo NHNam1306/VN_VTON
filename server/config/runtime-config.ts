@@ -17,5 +17,13 @@ export const runtimeConfig = {
   trustProxyHops: optionalPositiveInteger(process.env.TRUST_PROXY_HOPS),
   aiRequestsPerWindow: positiveInteger(process.env.AI_REQUESTS_PER_15_MIN, 10),
   aiRequestWindowMs: 15 * 60 * 1000,
+  apiRequestsPerMinute: positiveInteger(process.env.API_REQUESTS_PER_MINUTE, 600),
+  apiBurst: positiveInteger(process.env.API_RATE_LIMIT_BURST, 120),
+  authLoginAccountPerWindow: positiveInteger(process.env.AUTH_LOGIN_ACCOUNT_PER_15_MIN, 10),
+  authLoginIpPerWindow: positiveInteger(process.env.AUTH_LOGIN_IP_PER_15_MIN, 60),
+  authRegisterIpPerHour: positiveInteger(process.env.AUTH_REGISTER_IP_PER_HOUR, 20),
+  passwordResetAccountPerWindow: positiveInteger(process.env.AUTH_RESET_ACCOUNT_PER_15_MIN, 5),
+  passwordResetIpPerWindow: positiveInteger(process.env.AUTH_RESET_IP_PER_15_MIN, 30),
   legacyDataClaimToken: process.env.LEGACY_DATA_CLAIM_TOKEN?.trim() || undefined,
+  adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean),
 }

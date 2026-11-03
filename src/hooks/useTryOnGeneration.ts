@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { tryOnApi } from '../services/try-on-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
-import type { AngleGenerationState, SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
+import { MAX_SAVED_OUTFITS, type AngleGenerationState, type SavedOutfit, type TryOnAngle, type TryOnResult } from '../types/fitting-room'
 
 const angles: TryOnAngle[] = ['front', 'back']
 
@@ -81,6 +81,17 @@ export function useTryOnGeneration() {
 
   const generateAll = useCallback(async () => {
     if (!garmentIds.length) return
+    if (history.length >= MAX_SAVED_OUTFITS) {
+      setStates((current) => ({
+        ...current,
+        front: {
+          ...current.front,
+          status: 'error',
+          error: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS} bộ. Hãy xoá bớt một bộ trước.`,
+        },
+      }))
+      return
+    }
     setStates(createInitialState())
     try {
       await runAngle('front', garmentIds)
@@ -97,10 +108,21 @@ export function useTryOnGeneration() {
         }
       })
     }
-  }, [garmentIds, refreshHistory, runAngle])
+  }, [garmentIds, history.length, refreshHistory, runAngle])
 
   const regenerate = useCallback(async (angle: TryOnAngle) => {
     if (!garmentIds.length) return
+    if (angle === 'front' && history.length >= MAX_SAVED_OUTFITS) {
+      setStates((current) => ({
+        ...current,
+        front: {
+          ...current.front,
+          status: 'error',
+          error: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS} bộ. Hãy xoá bớt một bộ trước.`,
+        },
+      }))
+      return
+    }
     if (angle === 'front') {
       setStates((current) => ({
         ...current,
@@ -113,7 +135,7 @@ export function useTryOnGeneration() {
     } catch {
       // ResultStage hiển thị lỗi và cho phép thử lại.
     }
-  }, [garmentIds, refreshHistory, runAngle])
+  }, [garmentIds, history.length, refreshHistory, runAngle])
 
   const deleteOutfit = useCallback(async (id: string) => {
     await tryOnApi.deleteOutfit(id)

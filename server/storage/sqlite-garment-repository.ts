@@ -121,6 +121,17 @@ export class SqliteGarmentRepository implements GarmentRepository {
     return garment
   }
 
+  createIfBelowLimit(garment: GarmentRecord, maxItems: number): GarmentRecord | null {
+    const createWithinLimit = this.database.transaction(() => {
+      const row = this.database
+        .prepare('SELECT count(*) AS count FROM garments WHERE user_id = ?')
+        .get(garment.userId) as { count: number }
+      if (row.count >= maxItems) return null
+      return this.create(garment)
+    })
+    return createWithinLimit()
+  }
+
   update(userId: string, id: string, input: UpdateGarmentInput): GarmentRecord | null {
     const existing = this.findById(userId, id)
     if (!existing) return null

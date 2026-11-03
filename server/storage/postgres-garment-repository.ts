@@ -59,6 +59,37 @@ export class PostgresGarmentRepository implements GarmentRepository {
     return garment
   }
 
+  async createIfBelowLimit(garment: GarmentRecord, maxItems: number): Promise<GarmentRecord | null> {
+    const client = await this.pool.connect()
+    try {
+      await client.query('BEGIN')
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))', [garment.userId])
+      const countResult = await client.query<{ count: string }>(
+        'SELECT count(*)::text AS count FROM garments WHERE user_id=$1',
+        [garment.userId],
+      )
+      if (Number(countResult.rows[0]?.count ?? 0) >= maxItems) {
+        await client.query('ROLLBACK')
+        return null
+      }
+      await client.query(
+        'INSERT INTO garments(id,user_id,name,category,front_original_key,front_processed_key,back_original_key,back_processed_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [
+          garment.id, garment.userId, garment.name, garment.category,
+          garment.frontOriginalKey, garment.frontProcessedKey,
+          garment.backOriginalKey, garment.backProcessedKey, garment.createdAt,
+        ],
+      )
+      await client.query('COMMIT')
+      return garment
+    } catch (error) {
+      await client.query('ROLLBACK').catch(() => undefined)
+      throw error
+    } finally {
+      client.release()
+    }
+  }
+
   async update(userId: string, id: string, input: UpdateGarmentInput): Promise<GarmentRecord | null> {
     const result = await this.pool.query<GarmentRow>(`
       UPDATE garments

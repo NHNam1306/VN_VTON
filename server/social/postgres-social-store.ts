@@ -5,6 +5,7 @@ import type { PostgresPool } from '../storage/postgres.js'
 import type { SavedOutfitRecord } from '../domain/saved-outfit.js'
 import type { SocialService } from './social-service.js'
 import type { OutfitPolicy, SocialPerson, SocialPoll, SocialProfile, SocialSnapshot } from './types.js'
+import { prepareSocialSearch, socialSearchScore } from './search.js'
 
 type Profile = Omit<SocialProfile, 'name'>
 type RequestRow = { id: string; from: string; to: string; createdAt: number }
@@ -18,6 +19,10 @@ type Context = { users: { id: string; name: string }[]; outfits: DbOutfit[]; own
 const fail = (message: string, code = 400): never => { throw new AuthError(code, message) }
 const str = (value: unknown, max = 120): string => typeof value === 'string' && value.trim().length <= max ? value.trim() : fail('Dữ liệu văn bản không hợp lệ.')
 const ids = (value: unknown, max = 100): string[] => Array.isArray(value) && value.length <= max && value.every(x => typeof x === 'string' && x.length < 150) ? [...new Set(value as string[])] : fail('Danh sách không hợp lệ.')
+const imageKeyFromUrl = (value: string): string | null => {
+  if (!value.startsWith('/uploads/')) return null
+  try { return decodeURIComponent(value.slice('/uploads/'.length)) } catch { return null }
+}
 
 export class PostgresSocialStore implements SocialService {
   constructor(private readonly pool: PostgresPool) {}
@@ -90,8 +95,9 @@ export class PostgresSocialStore implements SocialService {
 
   private seed(state: State, context: Context) {
     for (const user of context.users) if (!state.profiles.some(profile => profile.id === user.id)) {
-      state.profiles.push({ id: user.id, username: `user_${user.id.replace(/-/g, '')}`, avatar: '🌿', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url') })
+      state.profiles.push({ id: user.id, username: `user_${user.id.replace(/-/g, '')}`, avatar: '', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url'), defaultVisibility: 'private' })
     }
+    for (const profile of state.profiles) if (profile.defaultVisibility !== 'friends') profile.defaultVisibility = 'private'
   }
   private person(state: State, context: Context, id: string): SocialPerson {
     const profile = state.profiles.find(item => item.id === id)
@@ -132,17 +138,33 @@ export class PostgresSocialStore implements SocialService {
     })
   }
 
-  async search(user: string, query: string): Promise<SocialPerson[]> { return this.change((state,context)=>{this.seed(state,context);const q=query.toLowerCase().trim().replace(/^@/,'');if(q.length<2)return [];return state.profiles.filter(profile=>profile.id!==user&&!this.blocked(state,user,profile.id)&&profile.username.startsWith(q)).slice(0,20).map(profile=>this.person(state,context,profile.id))}) }
+  async search(user: string, query: string): Promise<SocialPerson[]> {
+    const search = prepareSocialSearch(query)
+    if (!search) return []
+    return this.change((state,context)=>{
+      this.seed(state,context)
+      return state.profiles
+        .filter(profile=>profile.id!==user&&!this.blocked(state,user,profile.id))
+        .map(profile=>{
+          const person=this.person(state,context,profile.id)
+          return {person,score:socialSearchScore(person.username,person.name,search)}
+        })
+        .filter((result):result is {person:SocialPerson;score:number}=>result.score!==null)
+        .sort((a,b)=>a.score-b.score||a.person.username.localeCompare(b.person.username,'vi'))
+        .slice(0,20)
+        .map(result=>result.person)
+    })
+  }
   async resolveInvite(user: string, code: string): Promise<SocialPerson> { return this.change((state,context)=>{this.seed(state,context);const profile=state.profiles.find(item=>item.inviteCode===code&&!this.blocked(state,user,item.id));return profile?this.person(state,context,profile.id):fail('Mã mời không còn hiệu lực.',404)}) }
-  private canViewOutfit(state: State, context: Context, viewer: string, owner: string, outfitId: string) { if(viewer===owner)return true;if(!this.friend(state,viewer,owner))return false;const policy=state.policies.find(item=>item.ownerId===owner&&item.outfitId===outfitId);if(policy?.visibility==='friends')return true;if(policy?.visibility==='groups'&&state.groups.some(group=>policy.groupIds.includes(group.id)&&group.members.includes(owner)&&group.members.includes(viewer)))return true;return state.polls.some(poll=>poll.ownerId===owner&&poll.outfitIds.includes(outfitId)&&poll.recipients.includes(viewer)&&this.visiblePoll(state,context,poll,viewer)) }
+  private canViewOutfit(state: State, context: Context, viewer: string, owner: string, outfitId: string) { if(viewer===owner)return true;if(!this.friend(state,viewer,owner))return false;const policy=state.policies.find(item=>item.ownerId===owner&&item.outfitId===outfitId);const visibility=policy?.visibility??state.profiles.find(profile=>profile.id===owner)?.defaultVisibility??'private';if(visibility==='friends')return true;if(policy?.visibility==='groups'&&state.groups.some(group=>policy.groupIds.includes(group.id)&&group.members.includes(owner)&&group.members.includes(viewer)))return true;return state.polls.some(poll=>poll.ownerId===owner&&poll.outfitIds.includes(outfitId)&&poll.recipients.includes(viewer)&&this.visiblePoll(state,context,poll,viewer)) }
   async profile(user: string, target: string) { return this.change((state,context)=>{this.seed(state,context);if(user!==target&&!this.friend(state,user,target))return fail('Hồ sơ không khả dụng.',404);return {person:this.person(state,context,target),outfits:this.ownerOutfits(context,target).filter(outfit=>this.canViewOutfit(state,context,user,target,outfit.id)).map(outfit=>({id:outfit.id,frontImageUrl:outfit.frontImageUrl,backImageUrl:outfit.backImageUrl,official:state.policies.some(policy=>policy.outfitId===outfit.id&&policy.official)}))}}) }
   async trackTemporaryImage(user: string, key: string): Promise<void> { await this.change(state=>{state.temporaryImages=state.temporaryImages.filter(item=>item.key!==key);state.temporaryImages.push({ownerId:user,key})}) }
-  async canReadImage(user: string, key: string): Promise<boolean> { return this.read((state,context)=>{if(state.temporaryImages.some(item=>item.ownerId===user&&item.key===key))return true;if(context.ownImageKeys.get(user)?.has(key))return true;for(const outfit of context.outfits)if((outfit.frontImageKey===key||outfit.backImageKey===key)&&this.canViewOutfit(state,context,user,outfit.ownerId,outfit.id))return true;return false}) }
+  async canReadImage(user: string, key: string): Promise<boolean> { return this.read((state,context)=>{if(state.profiles.some(profile=>imageKeyFromUrl(profile.avatar)===key))return true;if(state.temporaryImages.some(item=>item.ownerId===user&&item.key===key))return true;if(context.ownImageKeys.get(user)?.has(key))return true;for(const outfit of context.outfits)if((outfit.frontImageKey===key||outfit.backImageKey===key)&&this.canViewOutfit(state,context,user,outfit.ownerId,outfit.id))return true;return false}) }
   private sever(state: State,a:string,b:string){state.friends=state.friends.filter(([x,y])=>!((x===a&&y===b)||(x===b&&y===a)));state.requests=state.requests.filter(row=>!((row.from===a&&row.to===b)||(row.from===b&&row.to===a)));for(const group of state.groups){if(group.ownerId===a)group.members=group.members.filter(id=>id!==b);if(group.ownerId===b)group.members=group.members.filter(id=>id!==a)}for(const poll of state.polls){if(poll.ownerId===a){poll.recipients=poll.recipients.filter(id=>id!==b);delete poll.votes[b]}if(poll.ownerId===b){poll.recipients=poll.recipients.filter(id=>id!==a);delete poll.votes[a]}}}
 
   async act(user:string,action:string,body:Record<string,unknown>):Promise<SocialSnapshot>{
     await this.change((state,context)=>{this.seed(state,context);const me=state.profiles.find(profile=>profile.id===user)!;const target=typeof body.targetId==='string'?body.targetId:''
-      if(action==='settings'){const username=str(body.username,40).toLowerCase();if(!/^[a-z0-9_]{3,40}$/.test(username))fail('Username cần 3–40 chữ thường, số hoặc dấu _.');if(state.profiles.some(profile=>profile.id!==user&&profile.username===username))fail('Username đã được sử dụng.',409);if(body.birthDate&&!me.birthDate){const date=str(body.birthDate,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||Date.parse(date)>Date.now()||Date.parse(date)<Date.parse('1900-01-01'))fail('Ngày sinh không hợp lệ.');me.birthDate=date}const policy=body.invitePolicy;if(policy!=='everyone'&&policy!=='known'&&policy!=='code')fail('Quyền lời mời không hợp lệ.');me.username=username;me.avatar=str(body.avatar,8)||'🌿';me.invitePolicy=policy as SocialProfile['invitePolicy'];if(this.restricted(me)&&me.invitePolicy==='everyone')me.invitePolicy='known'
+      if(action==='settings'){const username=str(body.username,40).toLowerCase();if(!/^[a-z0-9_]{3,40}$/.test(username))fail('Username cần 3–40 chữ thường, số hoặc dấu _.');if(state.profiles.some(profile=>profile.id!==user&&profile.username===username))fail('Username đã được sử dụng.',409);if(body.birthDate&&!me.birthDate){const date=str(body.birthDate,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(Date.parse(date))||new Date(date).toISOString().slice(0,10)!==date||Date.parse(date)>Date.now()||Date.parse(date)<Date.parse('1900-01-01'))fail('Ngày sinh không hợp lệ.');me.birthDate=date}const policy=body.invitePolicy;if(policy!=='everyone'&&policy!=='known'&&policy!=='code')fail('Quyền lời mời không hợp lệ.');me.username=username;if(body.avatar!==undefined){const avatar=str(body.avatar,500);if(avatar&&!avatar.startsWith('/uploads/'))fail('Ảnh đại diện không hợp lệ.');me.avatar=avatar}me.invitePolicy=policy as SocialProfile['invitePolicy'];if(body.defaultVisibility!==undefined){if(body.defaultVisibility!=='private'&&body.defaultVisibility!=='friends')fail('Quyền xem mặc định không hợp lệ.');me.defaultVisibility=body.defaultVisibility as SocialProfile['defaultVisibility']}if(this.restricted(me)&&me.invitePolicy==='everyone')me.invitePolicy='known'
       }else if(action==='rotate-invite'){me.inviteCode=randomBytes(24).toString('base64url')
       }else if(action==='request'){const other=state.profiles.find(profile=>profile.id===target);if(!other||target===user||this.blocked(state,user,target))fail('Không thể gửi lời mời.');if(this.friend(state,user,target))fail('Hai bạn đã kết bạn.');if(state.requests.some(row=>(row.from===user&&row.to===target)||(row.from===target&&row.to===user)))fail('Đã có lời mời đang chờ.');const validCode=body.inviteCode===other!.inviteCode;const known=this.friends(state,user).some(id=>this.friend(state,target,id));if(!validCode&&(other!.invitePolicy==='code'||((this.restricted(other!)||other!.invitePolicy==='known')&&!known)))fail('Người này chỉ nhận lời mời có mã mời hoặc từ bạn chung.',403);if(state.notices.filter(notice=>notice.actor===user&&notice.kind==='request'&&notice.createdAt>Date.now()-86400000).length>=30)fail('Đã đạt giới hạn lời mời hôm nay.',429);const request={id:randomUUID(),from:user,to:target,createdAt:Date.now()};state.requests.push(request);this.notice(state,target,user,'request',request.id)
       }else if(action==='request-response'){const request=state.requests.find(row=>row.id===body.id);if(!request)fail('Lời mời không còn tồn tại.',404);if(body.decision==='cancel'){if(request!.from!==user)fail('Không có quyền.',403)}else{if(request!.to!==user)fail('Không có quyền.',403);if(body.decision!=='accept'&&body.decision!=='decline')fail('Thao tác không hợp lệ.')}if(body.decision==='accept'&&!this.blocked(state,request!.from,request!.to))state.friends.push([request!.from,request!.to]);state.requests=state.requests.filter(row=>row.id!==request!.id)

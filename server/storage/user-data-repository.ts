@@ -16,6 +16,7 @@ export interface UserDataRepository {
   listSavedOutfits(userId: string): MaybePromise<SavedOutfitRecord[]>
   findPendingOutfit(userId: string, frontImageUrl: string): MaybePromise<SavedOutfitRecord | null>
   saveOutfit(userId: string, record: SavedOutfitRecord): MaybePromise<void>
+  saveOutfitIfBelowLimit(userId: string, record: SavedOutfitRecord, maxItems: number): MaybePromise<boolean>
   deleteSavedOutfit(userId: string, id: string): MaybePromise<SavedOutfitRecord | null>
   isImageKeySaved(userId: string, key: string): MaybePromise<boolean>
   clearAllUserData(userId: string): MaybePromise<DeletedUserData>

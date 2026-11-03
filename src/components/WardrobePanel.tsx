@@ -1,8 +1,8 @@
-import { Check, ImagePlus, LoaderCircle, Maximize2, Pencil, Plus, RotateCcw, Shirt, Trash2 } from 'lucide-react'
+import { Check, ImagePlus, LoaderCircle, Maximize2, Pencil, Plus, RotateCcw, Search, Shirt, Trash2 } from 'lucide-react'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { garmentApi } from '../services/garment-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
-import { garmentCategoryLabels, type Garment, type GarmentCategory } from '../types/fitting-room'
+import { garmentCategoryLabels, MAX_SELECTED_GARMENTS, MAX_WARDROBE_GARMENTS, type Garment, type GarmentCategory } from '../types/fitting-room'
 import { ConfirmDialog } from './ConfirmDialog'
 import { EditGarmentModal } from './EditGarmentModal'
 import { ImageLightbox } from './ImageLightbox'
@@ -185,10 +185,12 @@ type WardrobePanelProps = {
 }
 
 export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelProps) {
+  const [query, setQuery] = useState('')
   const [editingGarment, setEditingGarment] = useState<Garment | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null)
+  const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
   const activeCategory = useFittingRoomStore((state) => state.activeCategory)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
@@ -202,7 +204,16 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
   const tabListRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Partial<Record<GarmentCategory, HTMLButtonElement | null>>>({})
 
-  const visibleGarments = garments.filter((garment) => garment.category === activeCategory)
+  const normalizedQuery = query.trim().toLocaleLowerCase('vi')
+  const visibleGarments = garments.filter((garment) => (
+    garment.category === activeCategory &&
+    (!normalizedQuery || garment.name.toLocaleLowerCase('vi').includes(normalizedQuery))
+  ))
+  const wardrobeTarget = MAX_WARDROBE_GARMENTS
+  const isWardrobeFull = garments.length >= MAX_WARDROBE_GARMENTS
+  const wardrobeProgress = Math.min(100, Math.round((garments.length / wardrobeTarget) * 100))
+  const selectedCount = [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes]
+    .filter(Boolean).length + outfit.accessories.length
   const isGarmentSelected = (garment: Garment) =>
     garment.category === 'accessories'
       ? outfit.accessories.includes(garment.id)
@@ -212,6 +223,17 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
     activeCategory === 'accessories'
       ? outfit.accessories.length > 0
       : Boolean(outfit[activeCategory])
+
+  const handleSelect = (garment: Garment) => {
+    const isSelected = isGarmentSelected(garment)
+    const replacesCurrent = garment.category !== 'accessories' && Boolean(outfit[garment.category])
+    if (!isSelected && !replacesCurrent && selectedCount >= MAX_SELECTED_GARMENTS) {
+      setSelectionNotice(`Bạn chỉ có thể chọn tối đa ${MAX_SELECTED_GARMENTS} món cho một bộ đồ.`)
+      return
+    }
+    setSelectionNotice(null)
+    selectGarment(garment.category, garment.id)
+  }
 
   useLayoutEffect(() => {
     const tabList = tabListRef.current
@@ -284,15 +306,37 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
         <button
           type="button"
           onClick={onAddGarment}
-          className="group relative flex h-10 items-center gap-1.5 overflow-hidden rounded-full bg-ink px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,33,29,0.18)] transition-all hover:-translate-y-0.5 hover:bg-sage-800 hover:shadow-[0_12px_24px_rgba(23,33,29,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500"
+          disabled={isWardrobeFull}
+          className="group relative flex h-10 items-center gap-1.5 overflow-hidden rounded-full bg-ink px-4 text-xs font-bold text-white shadow-[0_8px_20px_rgba(23,33,29,0.18)] transition-all hover:-translate-y-0.5 hover:bg-sage-800 hover:shadow-[0_12px_24px_rgba(23,33,29,0.25)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500 disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0"
           aria-label={`Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}
         >
           <Plus size={16} className="transition-transform duration-200 group-hover:rotate-90" />
-          <span>Thêm {garmentCategoryLabels[activeCategory].toLowerCase()}</span>
+          <span>{isWardrobeFull ? 'Tủ đồ đã đầy' : `Thêm ${garmentCategoryLabels[activeCategory].toLowerCase()}`}</span>
         </button>
       </div>
 
       <div className="px-4 pb-3">
+        <div className="mb-3 grid gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+          <label className="relative block">
+            <span className="sr-only">Tìm trong tủ đồ</span>
+            <Search size={15} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-ink/35" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Tìm theo tên món đồ…"
+              className="w-full rounded-2xl border border-black/[0.07] bg-white/80 py-2.5 pl-10 pr-4 text-sm text-ink outline-none transition focus:border-sage-300 focus:ring-2 focus:ring-sage-300/40"
+            />
+          </label>
+          <div className="rounded-2xl border border-black/[0.06] bg-sage-50/80 px-3.5 py-2.5" aria-label={`Tiến độ tủ đồ ${garments.length} trên ${wardrobeTarget} món`}>
+            <div className="flex items-center justify-between text-[10px] font-bold text-ink/55">
+              <span>{isWardrobeFull ? 'Tủ đồ đã đầy' : 'Dung lượng tủ đồ'}</span>
+              <span>{Math.min(garments.length, wardrobeTarget)}/{wardrobeTarget}</span>
+            </div>
+            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-black/[0.07]">
+              <span className="block h-full rounded-full bg-sage-600 transition-[width] duration-500" style={{ width: `${wardrobeProgress}%` }} />
+            </div>
+          </div>
+        </div>
         <div
           ref={tabListRef}
           className="wardrobe-tab-track scrollbar-none flex gap-1 overflow-x-auto rounded-2xl border border-black/[0.04] bg-black/[0.03] p-1"
@@ -335,8 +379,9 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
                 <span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl border border-black/[0.05] bg-white text-sage-800 shadow-[0_4px_12px_rgba(0,0,0,0.05)]">
                   <ImagePlus size={20} />
                 </span>
-                <p className="text-sm font-bold text-ink">Chưa có {garmentCategoryLabels[activeCategory].toLowerCase()}</p>
-                <p className="mt-1 text-xs leading-5 text-ink/45">Tải ảnh trang phục lên</p>
+                <p className="text-sm font-bold text-ink">{normalizedQuery ? 'Không tìm thấy món phù hợp' : `Chưa có ${garmentCategoryLabels[activeCategory].toLowerCase()}`}</p>
+                <p className="mt-1 text-xs leading-5 text-ink/45">{normalizedQuery ? 'Thử tên khác hoặc chuyển danh mục.' : 'Tải ảnh trang phục lên'}</p>
+                {!normalizedQuery && (
                 <button
                   type="button"
                   onClick={onAddGarment}
@@ -345,6 +390,7 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
                   <Plus size={14} />
                   <span>Thêm {garmentCategoryLabels[activeCategory].toLowerCase()} đầu tiên</span>
                 </button>
+                )}
               </div>
             </div>
           ) : (
@@ -354,7 +400,7 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
                   key={garment.id}
                   garment={garment}
                   isSelected={isGarmentSelected(garment)}
-                  onSelect={() => selectGarment(garment.category, garment.id)}
+                  onSelect={() => handleSelect(garment)}
                   onEdit={(g) => setEditingGarment(g)}
                   onDelete={handleDelete}
                   onZoom={(url, title) => setZoomImage({ url, title })}
@@ -366,9 +412,23 @@ export function WardrobePanel({ onAddGarment, mode = 'compact' }: WardrobePanelP
       </div>
 
       <div className="border-t border-black/[0.055] p-4">
+        <div className="mb-3 flex items-center justify-between rounded-xl bg-black/[0.035] px-3 py-2 text-xs text-ink/60">
+          <span>Đồ đang chọn</span>
+          <strong className={selectedCount >= MAX_SELECTED_GARMENTS ? 'text-coral' : 'text-ink'}>
+            {selectedCount}/{MAX_SELECTED_GARMENTS}
+          </strong>
+        </div>
+        {selectionNotice && (
+          <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800" role="alert">
+            {selectionNotice}
+          </p>
+        )}
         <button
           type="button"
-          onClick={() => clearSelection(activeCategory)}
+          onClick={() => {
+            setSelectionNotice(null)
+            clearSelection(activeCategory)
+          }}
           disabled={!hasSelectionInActiveCategory}
           className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-4 py-2.5 text-xs font-bold text-ink transition hover:border-coral/40 hover:bg-red-50/30 hover:text-coral disabled:cursor-not-allowed disabled:opacity-35"
         >

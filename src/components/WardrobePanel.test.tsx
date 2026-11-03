@@ -102,4 +102,17 @@ describe('WardrobePanel - Trước / Sau swap', () => {
     expect(screen.getByRole('dialog', { name: 'Chỉnh sửa món đồ' })).toBeInTheDocument()
     expect(screen.getByDisplayValue('Áo phông 2 mặt')).toBeInTheDocument()
   })
+
+  it('vô hiệu hóa thêm món khi tủ đồ đủ 20 món', () => {
+    useFittingRoomStore.setState({
+      garments: Array.from({ length: 20 }, (_, index) => ({
+        ...mockGarment1Goc,
+        id: `garment-${index}`,
+        name: `Món ${index + 1}`,
+      })),
+    })
+    render(<WardrobePanel onAddGarment={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Thêm áo trong' })).toBeDisabled()
+    expect(screen.getAllByText('Tủ đồ đã đầy')).toHaveLength(2)
+  })
 })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Clock, ChevronRight, Star, Trophy, Users, Send, X, Plus } from 'lucide-react'
 import type { SharedOutfit, SocialPoll, SocialSnapshot } from '../../../server/social/types'
+import { Avatar } from './Avatar'
 import type { Act } from './SocialPage'
 
 const btnBase = 'inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-semibold transition'
@@ -97,7 +98,7 @@ export function PollComposer({ data, outfits, act, onDone, onCreateOutfit }: { d
                 : data.friends.map(f => (
                     <label key={f.id} className="flex cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2 text-sm hover:bg-sage-50 transition">
                       <input type="checkbox" checked={people.includes(f.id)} onChange={() => setPeople(people.includes(f.id) ? people.filter(id => id !== f.id) : [...people, f.id])} className="accent-sage-700" />
-                      <span className="text-base">{f.avatar}</span>
+                      <Avatar name={f.name} src={f.avatar} className="size-7 text-[9px]" />
                       <span className="text-sm font-medium text-ink">{f.name}</span>
                     </label>
                   ))
@@ -142,9 +143,7 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
     <article id={`poll-${poll.id}`} className="social-poll mb-5 rounded-[22px] border border-black/[0.07] bg-white/80 p-5 shadow-sm backdrop-blur-sm">
       {/* Header */}
       <header className="mb-4 flex items-center gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-full bg-gradient-to-br from-sage-100 to-sage-200 text-xl">
-          {poll.owner.avatar}
-        </span>
+        <Avatar name={poll.owner.name} src={poll.owner.avatar} className="size-10 text-xs" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-ink">{poll.owner.name}</p>
           <p className="flex items-center gap-1 text-xs text-ink/40">
@@ -212,7 +211,7 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
                   <div className="mt-2 flex flex-wrap gap-1">
                     {voters.map(v => (
                       <span key={v.user.id} title={v.user.username} className="flex items-center gap-1 rounded-full border border-black/[0.06] bg-white px-2 py-0.5 text-[10px] text-ink/60">
-                        {v.user.avatar} {v.user.name}
+                        <Avatar name={v.user.name} src={v.user.avatar} className="size-4 text-[6px]" /> {v.user.name}
                       </span>
                     ))}
                   </div>

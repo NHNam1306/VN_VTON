@@ -10,6 +10,7 @@ import { createImageUpload, validateImageContent } from '../http/image-upload.js
 import { createFixedWindowRateLimit } from '../http/rate-limit.js'
 
 const upload = createImageUpload(4)
+export const MAX_GARMENTS_PER_USER = 20
 
 const uploadFields = upload.fields([
   { name: 'frontOriginal', maxCount: 1 },
@@ -56,6 +57,10 @@ export function createGarmentRouter(
 
   router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
     try {
+      if ((await repository.list(request.authUser.id)).length >= MAX_GARMENTS_PER_USER) {
+        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+        return
+      }
       const file = request.file
       if (!file) {
         response.status(400).json({ message: 'Vui lòng tải lên một ảnh để tách nền và tái tạo bằng FLUX.' })
@@ -107,6 +112,10 @@ export function createGarmentRouter(
   router.post('/', uploadFields, async (request, response, next) => {
     const savedKeys: string[] = []
     try {
+      if ((await repository.list(request.authUser.id)).length >= MAX_GARMENTS_PER_USER) {
+        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+        return
+      }
       const name = typeof request.body.name === 'string' ? request.body.name.trim() : ''
       const category = request.body.category
       const files = request.files as GarmentFiles
@@ -156,7 +165,13 @@ export function createGarmentRouter(
         createdAt: new Date().toISOString(),
       }
 
-      await repository.create(record)
+      const created = await repository.createIfBelowLimit(record, MAX_GARMENTS_PER_USER)
+      if (!created) {
+        await Promise.all(savedKeys.map((key) => images.delete(key)))
+        savedKeys.length = 0
+        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+        return
+      }
       response.status(201).json(toResponse(record, images))
     } catch (error) {
       await Promise.all(savedKeys.map((key) => images.delete(key)))

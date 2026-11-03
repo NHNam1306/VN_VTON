@@ -64,6 +64,24 @@ describe('useFittingRoomStore', () => {
     expect(useFittingRoomStore.getState().outfit.accessories).toEqual([])
   })
 
+  it('không cho chọn quá 8 món nhưng vẫn cho thay món cùng nhóm', () => {
+    useFittingRoomStore.setState({
+      outfit: {
+        tops: 'shirt-1',
+        outerwear: 'jacket-1',
+        bottoms: 'pants-1',
+        shoes: 'shoes-1',
+        accessories: ['a-1', 'a-2', 'a-3', 'a-4'],
+      },
+    })
+    const { selectGarment } = useFittingRoomStore.getState()
+    selectGarment('accessories', 'a-5')
+    expect(useFittingRoomStore.getState().outfit.accessories).toHaveLength(4)
+
+    selectGarment('tops', 'shirt-2')
+    expect(useFittingRoomStore.getState().outfit.tops).toBe('shirt-2')
+  })
+
   it('xóa món đồ cũng bỏ chọn món đó', () => {
     const store = useFittingRoomStore.getState()
     store.addGarment(shirt)

@@ -5,19 +5,26 @@ import type { ImageStorage } from '../storage/image-storage.js'
 import type { UserDataRepository } from '../storage/user-data-repository.js'
 import { TRY_ON_ANGLES, type ImageProvider, type TryOnAngle } from '../providers/image-provider.js'
 import { runtimeConfig } from '../config/runtime-config.js'
-import { createFixedWindowRateLimit } from '../http/rate-limit.js'
+import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../http/rate-limit.js'
+
+export const MAX_GARMENTS_PER_GENERATION = 8
+export const MAX_SAVED_OUTFITS_PER_USER = 10
 
 export function createGenerationRouter(
   provider: ImageProvider,
   garments: GarmentRepository,
   userData: UserDataRepository,
   images: ImageStorage,
+  rateLimits: RateLimitStore = new MemoryRateLimitStore(),
 ) {
   const router = Router()
   const aiRateLimit = createFixedWindowRateLimit({
     max: runtimeConfig.aiRequestsPerWindow,
     windowMs: runtimeConfig.aiRequestWindowMs,
-    key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
+    namespace: 'ai.generate.user',
+    store: rateLimits,
+    key: (request) => 'user:' + request.authUser.id,
+    message: 'Bạn đã dùng hết lượt tạo ảnh trong khoảng thời gian này. Vui lòng thử lại sau.',
   })
 
   const toResponse = (item: { angle: TryOnAngle; imageUrl: string; createdAt: string }) => ({
@@ -84,17 +91,25 @@ export function createGenerationRouter(
         response.status(400).json({ message: 'Góc ảnh không hợp lệ.' })
         return
       }
+      if (angle === 'front' && (await userData.listSavedOutfits(userId)).length >= MAX_SAVED_OUTFITS_PER_USER) {
+        response.status(409).json({ message: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS_PER_USER} bộ. Hãy xoá bớt một bộ trước.` })
+        return
+      }
       if (request.body.privacyConfirmed !== true) {
         response.status(400).json({ message: 'Cần xác nhận quyền riêng tư trước khi tạo ảnh.' })
         return
       }
-      const garmentIds: string[] = Array.isArray(request.body.garmentIds)
+      const requestedGarmentIds: string[] = Array.isArray(request.body.garmentIds)
         ? request.body.garmentIds
-          .filter((id: unknown): id is string => typeof id === 'string')
-          .slice(0, 10)
+          .filter((id: unknown): id is string => typeof id === 'string' && id.trim().length > 0)
         : []
+      const garmentIds = [...new Set(requestedGarmentIds)]
       if (garmentIds.length === 0) {
         response.status(400).json({ message: 'Cần chọn ít nhất một món đồ.' })
+        return
+      }
+      if (garmentIds.length > MAX_GARMENTS_PER_GENERATION) {
+        response.status(400).json({ message: `Chỉ được chọn tối đa ${MAX_GARMENTS_PER_GENERATION} món đồ.` })
         return
       }
       const person = await userData.getPersonImage(userId)
@@ -159,7 +174,7 @@ export function createGenerationRouter(
       }
 
       if (angle === 'front') {
-        await userData.saveOutfit(userId, {
+        const saved = await userData.saveOutfitIfBelowLimit(userId, {
           id: randomUUID(),
           frontImageUrl: result.imageUrl,
           frontImageKey: result.imageKey,
@@ -167,12 +182,16 @@ export function createGenerationRouter(
           backImageKey: null,
           garmentIds,
           createdAt: result.createdAt,
-        })
+        }, MAX_SAVED_OUTFITS_PER_USER)
+        if (!saved) {
+          response.status(409).json({ message: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS_PER_USER} bộ. Hãy xoá bớt một bộ trước.` })
+          return
+        }
       } else {
         const front = (await userData.listTryOnResults(userId)).find((item) => item.angle === 'front')
         if (front) {
           const pending = await userData.findPendingOutfit(userId, front.imageUrl)
-          await userData.saveOutfit(userId, {
+          const saved = await userData.saveOutfitIfBelowLimit(userId, {
             id: pending?.id ?? randomUUID(),
             frontImageUrl: front.imageUrl,
             frontImageKey: front.imageKey,
@@ -180,7 +199,11 @@ export function createGenerationRouter(
             backImageKey: result.imageKey,
             garmentIds,
             createdAt: result.createdAt,
-          })
+          }, MAX_SAVED_OUTFITS_PER_USER)
+          if (!saved) {
+            response.status(409).json({ message: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS_PER_USER} bộ. Hãy xoá bớt một bộ trước.` })
+            return
+          }
         }
       }
       response.json(toResponse(result))

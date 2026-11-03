@@ -25,4 +25,7 @@ export interface AuthBackend {
   authenticate(token: string | null): MaybePromise<PublicUser | null>
   refresh?(refreshToken: string | null): Promise<AuthResult | null>
   logout(token: string | null): MaybePromise<void>
+  updateProfile?(userId: string, input: { displayName: string }, token?: string | null): Promise<PublicUser>
+  changeEmail?(userId: string, input: { newEmail: string; password: string }, token?: string | null): Promise<PublicUser>
+  changePassword?(userId: string, input: { currentPassword: string; newPassword: string }, token?: string | null): Promise<void>
 }

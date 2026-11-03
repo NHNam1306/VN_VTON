@@ -14,7 +14,7 @@ export const setSecurityHeaders = (_request: Request, response: Response, next: 
   if (process.env.NODE_ENV === 'production') {
     response.setHeader(
       'Content-Security-Policy',
-      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; connect-src 'self' https://staticimgly.com; worker-src 'self' blob:; form-action 'self'",
+      "default-src 'self'; base-uri 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; media-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://staticimgly.com; worker-src 'self' blob:; form-action 'self'",
     )
   }
   next()

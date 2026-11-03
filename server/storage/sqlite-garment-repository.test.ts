@@ -19,6 +19,25 @@ const garment: GarmentRecord = {
 }
 
 describe('SqliteGarmentRepository', () => {
+  it('không tạo món mới khi tủ đồ đã chạm giới hạn', () => {
+    const repository = new SqliteGarmentRepository(':memory:')
+    const garment = (id: string): GarmentRecord => ({
+      id,
+      userId: 'user-limit',
+      name: id,
+      category: 'tops',
+      frontOriginalKey: id + '-original',
+      frontProcessedKey: id + '-processed',
+      backOriginalKey: null,
+      backProcessedKey: null,
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    expect(repository.createIfBelowLimit(garment('one'), 1)).not.toBeNull()
+    expect(repository.createIfBelowLimit(garment('two'), 1)).toBeNull()
+    expect(repository.list('user-limit')).toHaveLength(1)
+    repository.close()
+  })
+
   it('tạo, đọc và xóa món đồ', () => {
     const repository = new SqliteGarmentRepository(':memory:')
     repository.create(garment)

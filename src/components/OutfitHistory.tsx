@@ -1,7 +1,7 @@
 import { ArrowLeft, CalendarDays, Images, LoaderCircle, Maximize2, Sparkles, Trash2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { socialApi } from '../services/social-api'
-import type { SavedOutfit } from '../types/fitting-room'
+import { MAX_SAVED_OUTFITS, type SavedOutfit } from '../types/fitting-room'
 
 type OutfitHistoryProps = {
   outfits: SavedOutfit[]
@@ -56,14 +56,19 @@ export function OutfitHistory({ outfits, isLoading, error, onDelete, onBack }: O
               Mỗi bộ ảnh thử đồ lưu trữ kết quả studio chân thực. Bạn có thể mở rộng xem ở độ phân giải gốc hoặc xoá bất cứ lúc nào.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-2 self-start rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm transition hover:border-black/20 hover:bg-black/[0.02] sm:self-auto"
-          >
-            <ArrowLeft size={15} />
-            <span>Về phòng thử</span>
-          </button>
+          <div className="flex items-center gap-3 self-start sm:self-auto">
+            <span className="rounded-full border border-black/[0.07] bg-black/[0.035] px-3 py-2 text-xs font-bold text-ink/65">
+              {outfits.length}/{MAX_SAVED_OUTFITS} bộ
+            </span>
+            <button
+              type="button"
+              onClick={onBack}
+              className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm transition hover:border-black/20 hover:bg-black/[0.02]"
+            >
+              <ArrowLeft size={15} />
+              <span>Về phòng thử</span>
+            </button>
+          </div>
         </div>
 
         {(error || deleteError) && (
