@@ -1,7 +1,5 @@
 import {
-  AlertTriangle,
   Check,
-  CheckCircle2,
   ImagePlus,
   LoaderCircle,
   Maximize2,
@@ -12,11 +10,12 @@ import {
   Upload,
   UserRound,
 } from 'lucide-react'
-import { useRef, useState, type ChangeEvent } from 'react'
+import { forwardRef, useImperativeHandle, useRef, useState, type ChangeEvent } from 'react'
 import { personApi } from '../services/person-api'
 import { processPersonImage, validatePersonImage } from '../services/person-image-processing'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
 import { garmentCategoryLabels, MAX_SELECTED_GARMENTS, type GarmentCategory } from '../types/fitting-room'
+import { ConfirmDialog } from './ConfirmDialog'
 import { ImageLightbox } from './ImageLightbox'
 
 const categories = Object.keys(garmentCategoryLabels) as GarmentCategory[]
@@ -28,10 +27,18 @@ type PersonPanelProps = {
   isGenerating: boolean
 }
 
-export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isGenerating }: PersonPanelProps) {
+export type PersonPanelHandle = {
+  chooseImage: () => void
+}
+
+export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(function PersonPanel(
+  { onGenerate, onClearResults, onClearAllResults, isGenerating },
+  ref,
+) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
   const [processingLabel, setProcessingLabel] = useState('Đang xử lý ảnh…')
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -56,6 +63,10 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
   ].filter(Boolean).length
   const canGenerate = Boolean(personImage && privacyConsent && selectedCount > 0)
 
+  useImperativeHandle(ref, () => ({
+    chooseImage: () => inputRef.current?.click(),
+  }), [])
+
   const uploadPersonImage = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null
     event.target.value = ''
@@ -76,7 +87,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
       const saved = await personApi.upload(processed)
       setPersonImage(saved)
       onClearResults()
-      setNotice('Đã resize ảnh về cạnh dài tối đa 1024px. Nền ảnh được giữ nguyên.')
+      setNotice('Ảnh đã sẵn sàng để thử đồ.')
     } catch (uploadError) {
       setError(uploadError instanceof Error ? uploadError.message : 'Không thể xử lý ảnh.')
     } finally {
@@ -86,7 +97,6 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
   }
 
   const deleteUserData = async () => {
-    if (!window.confirm('Xoá ảnh của bạn và toàn bộ kết quả thử đồ? Hành động này không thể hoàn tác.')) return
     setIsDeleting(true)
     setError(null)
     try {
@@ -98,11 +108,12 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
       setError(deleteError instanceof Error ? deleteError.message : 'Không thể xoá dữ liệu.')
     } finally {
       setIsDeleting(false)
+      setIsDeleteConfirmOpen(false)
     }
   }
 
   return (
-    <aside className="flex min-h-0 flex-col overflow-hidden rounded-[32px] border border-black/[0.06] bg-panel/85 shadow-[0_20px_50px_rgba(23,33,29,0.06)] backdrop-blur-md lg:h-full">
+    <aside id="fitting-setup" className="flex min-h-0 scroll-mt-24 flex-col overflow-hidden rounded-[28px] border border-black/[0.06] bg-panel/85 shadow-[0_16px_42px_rgba(23,33,29,0.06)] backdrop-blur-md lg:h-full">
       <div className="border-b border-black/[0.05] px-6 pb-4 pt-5">
         <div className="mb-1 flex items-center justify-between">
           <div className="flex items-center gap-2 text-ink">
@@ -136,7 +147,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
                 <button type="button" onClick={() => inputRef.current?.click()} disabled={isProcessing || isDeleting} className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-black/[0.06] bg-white/95 px-3.5 py-2 text-xs font-bold text-ink shadow-xs backdrop-blur-md transition hover:bg-white hover:shadow-sm">
                   <Upload size={13} /> Đổi ảnh
                 </button>
-                <button type="button" onClick={() => void deleteUserData()} disabled={isDeleting} className="grid size-9 place-items-center rounded-full border border-black/[0.06] bg-white/95 text-red-600 shadow-xs backdrop-blur-md transition hover:bg-red-50" aria-label="Xoá ảnh và kết quả">
+                <button type="button" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting} className="grid size-9 place-items-center rounded-full border border-black/[0.06] bg-white/95 text-red-600 shadow-xs backdrop-blur-md transition hover:bg-red-50" aria-label="Xoá ảnh và kết quả">
                   {isDeleting ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 </button>
               </div>
@@ -148,7 +159,7 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
                 <span className="mx-auto mb-3 grid size-13 place-items-center rounded-2xl border border-black/[0.08] bg-white text-ink shadow-xs transition-transform duration-300 group-hover:scale-110">
                   {isProcessing ? <LoaderCircle size={22} className="animate-spin text-ink" /> : <ImagePlus size={22} className="text-ink/65" />}
                 </span>
-                <p className="text-sm font-bold text-ink">{isProcessing ? processingLabel : 'Tải ảnh toàn thân mẫu'}</p>
+                <p className="text-sm font-bold text-ink">{isProcessing ? processingLabel : 'Tải ảnh toàn thân'}</p>
 
               </div>
             </button>
@@ -162,8 +173,8 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
 
         <details className="mx-5 border-t border-black/[0.05] pt-4">
           <summary className="mb-3 flex cursor-pointer list-none items-center justify-between">
-            <div className="flex items-center gap-2 text-xs font-bold text-ink uppercase tracking-wider font-mono">
-              <Shirt size={14} className="text-ink/50" /> BỘ HIỆN TẠI
+            <div className="flex items-center gap-2 text-xs font-bold text-ink">
+              <Shirt size={14} className="text-ink/50" /> Bộ đồ đã chọn
             </div>
             <span className="rounded-full bg-black/[0.05] px-2 py-0.5 font-mono text-[10px] font-bold text-ink">
               {selectedCount}/{MAX_SELECTED_GARMENTS}
@@ -219,30 +230,33 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
           </div>
         </details>
 
-        <div className="mx-5 mt-4 flex items-center justify-between rounded-2xl border border-black/[0.06] bg-black/[0.025] px-4 py-3">
-          <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={preservePoseFront}
-              onChange={(event) => setPreservePoseFront(event.target.checked)}
-              className="size-4 rounded border-black/20 text-ink focus:ring-ink"
-            />
-            <span>Giữ pose trước</span>
-          </label>
-          <div className="h-4 w-px bg-black/10" />
-          <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={preservePoseBack}
-              onChange={(event) => setPreservePoseBack(event.target.checked)}
-              className="size-4 rounded border-black/20 text-ink focus:ring-ink"
-            />
-            <span>Giữ pose sau</span>
-          </label>
-        </div>
+        <details className="mx-5 mt-3 rounded-2xl border border-black/[0.06] bg-black/[0.025]">
+          <summary className="cursor-pointer list-none px-4 py-3 text-xs font-bold text-ink/65">Tùy chọn ảnh</summary>
+          <div className="flex items-center justify-between border-t border-black/[0.05] px-4 py-3">
+            <label className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={preservePoseFront}
+                onChange={(event) => setPreservePoseFront(event.target.checked)}
+                className="size-4 rounded border-black/20 text-ink focus:ring-ink"
+              />
+              <span>Giữ dáng trước</span>
+            </label>
+            <div className="h-4 w-px bg-black/10" />
+            <label className="flex cursor-pointer select-none items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                checked={preservePoseBack}
+                onChange={(event) => setPreservePoseBack(event.target.checked)}
+                className="size-4 rounded border-black/20 text-ink focus:ring-ink"
+              />
+              <span>Giữ dáng sau</span>
+            </label>
+          </div>
+        </details>
 
         <div className="mx-5 mt-3 rounded-2xl border border-black/[0.06] bg-black/[0.025] p-3.5">
-          <div className="mb-1.5 flex items-center gap-2 text-xs font-bold text-ink"><ShieldCheck size={14} className="text-ink/60" /> Bảo mật | Quyền riêng tư</div>
+          <div className="mb-1.5 flex items-center gap-2 text-xs font-bold text-ink"><ShieldCheck size={14} className="text-ink/60" /> Xác nhận sử dụng ảnh</div>
           <label className={'flex items-start gap-2.5 text-[11px] leading-5 ' + (personImage ? 'cursor-pointer text-ink/75' : 'cursor-not-allowed text-ink/35')}>
             <input
               type="checkbox"
@@ -251,12 +265,12 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
               disabled={!personImage}
               className="mt-1 size-4 rounded border-black/20 text-ink focus:ring-ink"
             />
-            <span>Ảnh sẽ được gửi tới dịch vụ AI bên thứ ba; tôi xác nhận đây là ảnh của chính mình và đồng ý xử lý để thử đồ.</span>
+            <span>Tôi xác nhận đây là ảnh của mình và đồng ý gửi ảnh tới dịch vụ AI để tạo kết quả thử đồ.</span>
           </label>
         </div>
       </div>
 
-      <div className="p-5 border-t border-black/[0.05] bg-white/50 backdrop-blur-sm">
+      <div id="generate-try-on" className="scroll-mt-28 border-t border-black/[0.05] bg-white/50 p-5 backdrop-blur-sm">
         <button
           type="button"
           disabled={!canGenerate || isGenerating}
@@ -293,6 +307,17 @@ export function PersonPanel({ onGenerate, onClearResults, onClearAllResults, isG
           onClose={() => setIsPreviewOpen(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={isDeleteConfirmOpen}
+        title="Xoá ảnh và kết quả?"
+        description="Ảnh của bạn và toàn bộ kết quả thử đồ sẽ bị xoá vĩnh viễn. Hành động này không thể hoàn tác."
+        confirmLabel="Xoá tất cả"
+        cancelLabel="Giữ lại"
+        isBusy={isDeleting}
+        onCancel={() => setIsDeleteConfirmOpen(false)}
+        onConfirm={() => void deleteUserData()}
+      />
     </aside>
   )
-}
+})

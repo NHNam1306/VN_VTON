@@ -1,5 +1,5 @@
-import { ChevronRight, LayoutGrid, LoaderCircle, Shirt, Sparkles, WandSparkles } from 'lucide-react'
-import { useCallback, useEffect, useState } from 'react'
+import { LoaderCircle, Shirt, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { AuthPage } from './components/AuthPage'
 import { AdminPage } from './components/admin/AdminPage'
 import { Header } from './components/Header'
@@ -7,7 +7,7 @@ import { KocStudioPage } from './components/KocStudioPage'
 import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
 import { OnboardingFlow } from './components/OnboardingFlow'
 import { OutfitHistory } from './components/OutfitHistory'
-import { PersonPanel } from './components/PersonPanel'
+import { PersonPanel, type PersonPanelHandle } from './components/PersonPanel'
 import { ProfilePage } from './components/ProfilePage'
 import { SettingsPage } from './components/SettingsPage'
 import { SocialPage } from './components/social/SocialPage'
@@ -35,6 +35,7 @@ const runViewTransition = (update: () => void) => {
 }
 
 function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps) {
+  const personPanelRef = useRef<PersonPanelHandle>(null)
   const [isUploadOpen, setIsUploadOpen] = useState(false)
   const [isQuickActionOpen, setIsQuickActionOpen] = useState(false)
   const [composeSignal, setComposeSignal] = useState(0)
@@ -46,6 +47,8 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const activeCategory = useFittingRoomStore((state) => state.activeCategory)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
+  const personImage = useFittingRoomStore((state) => state.personImage)
+  const privacyConsent = useFittingRoomStore((state) => state.privacyConsent)
   const setGarments = useFittingRoomStore((state) => state.setGarments)
   const addGarment = useFittingRoomStore((state) => state.addGarment)
   const setLoading = useFittingRoomStore((state) => state.setLoadingGarments)
@@ -173,9 +176,10 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
 
         {activeView === 'fitting' && (
           <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
-            <section className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <section className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Phòng thử đồ ảo</h2>
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Tạo ảnh thử đồ</h2>
+                <p className="mt-1 text-xs text-ink/45 sm:text-sm">Hoàn thành lần lượt ba bước dưới đây.</p>
               </div>
               <button
                 type="button"
@@ -190,24 +194,59 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
               </button>
             </section>
 
-            {selectedCount === 0 && (
-              <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-amber-200/80 bg-amber-50/70 p-4 text-xs sm:text-sm text-amber-950/80 shadow-xs backdrop-blur-sm sm:flex-row sm:items-center sm:justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="grid size-7 place-items-center rounded-xl bg-amber-100 text-amber-800 shrink-0 font-bold text-xs">!</span>
-                  <span>Chưa có món đồ nào được chọn</span>
-                </div>
-                <button type="button" onClick={() => navigate('wardrobe')} className="flex items-center gap-1.5 self-start font-bold text-amber-900 transition hover:underline sm:self-auto">
-                  Đến tủ đồ <ChevronRight size={15} />
-                </button>
-              </div>
-            )}
+            <nav className="mb-5 grid grid-cols-3 overflow-hidden rounded-[22px] border border-black/[0.07] bg-white/75 p-1.5 shadow-xs backdrop-blur-sm" aria-label="Các bước tạo ảnh">
+              <button
+                type="button"
+                onClick={() => document.getElementById('fitting-setup')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                className="flex min-w-0 items-center gap-2 rounded-2xl px-2 py-2.5 text-left transition hover:bg-black/[0.035] sm:px-4"
+              >
+                <span className={'grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ' + (personImage && privacyConsent ? 'bg-sage-700 text-white' : 'bg-amber-100 text-amber-800')}>
+                  {personImage && privacyConsent ? '✓' : '1'}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-bold text-ink sm:text-xs">Ảnh của bạn</span>
+                  <span className="hidden truncate text-[10px] text-ink/40 sm:block">
+                    {!personImage ? 'Chưa tải ảnh' : !privacyConsent ? 'Cần xác nhận' : 'Đã sẵn sàng'}
+                  </span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('wardrobe')}
+                className="flex min-w-0 items-center gap-2 rounded-2xl px-2 py-2.5 text-left transition hover:bg-black/[0.035] sm:px-4"
+              >
+                <span className={'grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ' + (selectedCount > 0 ? 'bg-sage-700 text-white' : 'bg-black/[0.06] text-ink/55')}>
+                  {selectedCount > 0 ? '✓' : '2'}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-bold text-ink sm:text-xs">Chọn đồ</span>
+                  <span className="hidden truncate text-[10px] text-ink/40 sm:block">{selectedCount}/{MAX_SELECTED_GARMENTS} món</span>
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => document.getElementById('generate-try-on')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}
+                className="flex min-w-0 items-center gap-2 rounded-2xl px-2 py-2.5 text-left transition hover:bg-black/[0.035] sm:px-4"
+              >
+                <span className={'grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold ' + (personImage && privacyConsent && selectedCount > 0 ? 'bg-[#16171b] text-white' : 'bg-black/[0.06] text-ink/55')}>3</span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[11px] font-bold text-ink sm:text-xs">Tạo ảnh</span>
+                  <span className="hidden truncate text-[10px] text-ink/40 sm:block">{personImage && privacyConsent && selectedCount > 0 ? 'Sẵn sàng' : 'Chưa sẵn sàng'}</span>
+                </span>
+              </button>
+            </nav>
 
             <div className="grid grid-cols-1 gap-5 lg:h-[calc(100dvh-250px)] lg:min-h-[620px] lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_340px]">
               <div className="order-2 min-h-0 lg:order-1">
-                <ResultStage states={generation.states} onRegenerate={generation.regenerate} />
+                <ResultStage
+                  states={generation.states}
+                  onRegenerate={generation.regenerate}
+                  onSelectImage={() => personPanelRef.current?.chooseImage()}
+                />
               </div>
               <div className="order-1 min-h-0 lg:order-2">
                 <PersonPanel
+                  ref={personPanelRef}
                   onGenerate={generation.generateAll}
                   onClearResults={generation.clearResults}
                   onClearAllResults={generation.clearAllResults}

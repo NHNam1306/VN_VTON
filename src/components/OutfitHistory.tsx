@@ -5,6 +5,7 @@ import type { SocialSnapshot } from '../../server/social/types'
 import { getOutfitCustomizations, removeOutfitCustomization, saveOutfitCustomization, type OutfitCustomization } from '../services/outfit-customizations'
 import { socialApi } from '../services/social-api'
 import { MAX_SAVED_OUTFITS, type SavedOutfit } from '../types/fitting-room'
+import { ConfirmDialog } from './ConfirmDialog'
 import { EditOutfitModal } from './EditOutfitModal'
 import { ImageLightbox } from './ImageLightbox'
 
@@ -45,17 +46,16 @@ export function OutfitHistory({
   const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null)
   const [customizations, setCustomizations] = useState<Record<string, OutfitCustomization>>(() => getOutfitCustomizations())
   const [editingOutfit, setEditingOutfit] = useState<SavedOutfit | null>(null)
+  const [pendingDelete, setPendingDelete] = useState<SavedOutfit | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const remove = async (outfit: SavedOutfit) => {
-    const title = customizations[outfit.id]?.title || `Bộ thử`
-    if (!window.confirm(`Xoá “${title}” khỏi Bộ đồ của tôi?`)) return
     setDeletingId(outfit.id)
     setDeleteError(null)
     try {
-      removeOutfitCustomization(outfit.id)
       await onDelete(outfit.id)
+      removeOutfitCustomization(outfit.id)
       if (preview?.id === outfit.id) setPreview(null)
       if (editingOutfit?.id === outfit.id) setEditingOutfit(null)
       setCustomizations(getOutfitCustomizations())
@@ -63,6 +63,7 @@ export function OutfitHistory({
       setDeleteError(removeError instanceof Error ? removeError.message : 'Không thể xoá bộ ảnh.')
     } finally {
       setDeletingId(null)
+      setPendingDelete(null)
     }
   }
 
@@ -317,7 +318,7 @@ export function OutfitHistory({
                         {/* Nút Xoá bộ thử */}
                         <button
                           type="button"
-                          onClick={() => void remove(outfit)}
+                          onClick={() => setPendingDelete(outfit)}
                           disabled={deletingId === outfit.id}
                           className="grid size-9 shrink-0 place-items-center rounded-xl text-ink/30 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                           aria-label={`Xoá ${displayTitle}`}
@@ -341,6 +342,19 @@ export function OutfitHistory({
         src={lightbox?.src ?? ''}
         alt={lightbox?.alt ?? ''}
         onClose={() => setLightbox(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Xoá bộ đồ?"
+        description={pendingDelete ? `“${customizations[pendingDelete.id]?.title || 'Bộ thử'}” sẽ bị xoá khỏi Bộ đồ của tôi. Hành động này không thể hoàn tác.` : ''}
+        confirmLabel="Xoá bộ đồ"
+        cancelLabel="Giữ lại"
+        isBusy={deletingId !== null}
+        onCancel={() => setPendingDelete(null)}
+        onConfirm={() => {
+          if (pendingDelete) void remove(pendingDelete)
+        }}
       />
 
       {/* Modal Chỉnh sửa bộ thử */}

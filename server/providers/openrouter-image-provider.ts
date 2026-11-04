@@ -91,7 +91,7 @@ const mapHttpError = (status: number, detail: string): ImageProviderError => {
     return new ImageProviderError(
       'invalid_input',
       400,
-      'OpenRouter không chấp nhận ảnh hoặc tham số tạo ảnh này.',
+      'Dịch vụ chưa được hỗ trợ, vui lòng thử ảnh khác.',
       { cause: new Error(detail) },
     )
   }

@@ -1,4 +1,4 @@
-import { Camera, Image, Maximize2, RefreshCw, Sparkles } from 'lucide-react'
+import { Camera, Maximize2, RefreshCw, Sparkles, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
 import { MAX_SELECTED_GARMENTS, type AngleGenerationState, type Garment, type TryOnAngle } from '../types/fitting-room'
@@ -12,6 +12,7 @@ const angles: Array<{ key: TryOnAngle; label: string; number: string; subLabel: 
 type ResultStageProps = {
   states: Record<TryOnAngle, AngleGenerationState>
   onRegenerate: (angle: TryOnAngle) => Promise<void>
+  onSelectImage: () => void
 }
 
 function GenerationPlaceholder({ label }: { label: string }) {
@@ -50,10 +51,11 @@ function GenerationPlaceholder({ label }: { label: string }) {
   )
 }
 
-export function ResultStage({ states, onRegenerate }: ResultStageProps) {
+export function ResultStage({ states, onRegenerate, onSelectImage }: ResultStageProps) {
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
+  const selectGarment = useFittingRoomStore((state) => state.selectGarment)
   const selectedIds = [
     outfit.tops,
     outfit.outerwear,
@@ -149,9 +151,15 @@ export function ResultStage({ states, onRegenerate }: ResultStageProps) {
                   </div>
                 ) : (
                   <div className="text-center px-6">
-                    <div className="mx-auto mb-3 grid size-14 place-items-center rounded-3xl border border-black/[0.07] bg-white/60 text-ink/25 shadow-xs backdrop-blur-xs">
+                    <button
+                      type="button"
+                      onClick={onSelectImage}
+                      className="mx-auto mb-3 grid size-14 place-items-center rounded-3xl border border-black/[0.07] bg-white/60 text-ink/25 shadow-xs backdrop-blur-xs transition hover:border-sage-300 hover:bg-white hover:text-sage-700 hover:shadow-sm"
+                      aria-label={`Chọn ảnh toàn thân cho ${angle.label.toLowerCase()}`}
+                      title="Chọn ảnh toàn thân"
+                    >
                       <Camera size={24} strokeWidth={1.5} />
-                    </div>
+                    </button>
                     {angle.key === 'back' && states.front.status === 'success' ? (
                       <div className="space-y-2">
                         <p className="text-xs font-bold text-ink/70">Ảnh góc sau chưa tạo</p>
@@ -183,10 +191,10 @@ export function ResultStage({ states, onRegenerate }: ResultStageProps) {
       {/* Lookbook ribbon */}
       <div className="shrink-0 border-t border-black/[0.05] bg-white/40 px-6 py-3.5 backdrop-blur-sm">
         <div className="mb-2 flex items-center justify-between">
-          <p className="font-mono text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink/40">
-            BỘ ĐỒ ĐÃ CHỌN · {selected.length}/{MAX_SELECTED_GARMENTS} MÓN
+          <p className="text-[11px] font-bold text-ink/55">
+            Bộ đồ đã chọn · {selected.length}/{MAX_SELECTED_GARMENTS} món
           </p>
-          <span className="text-[10px] font-medium text-ink/40">Mặc theo lớp layer</span>
+          <span className="text-[10px] font-medium text-ink/40">Theo thứ tự phối</span>
         </div>
         {selected.length ? (
           <div className="flex gap-2.5 overflow-x-auto pb-1 scrollbar-none">
@@ -204,6 +212,15 @@ export function ResultStage({ states, onRegenerate }: ResultStageProps) {
                 <div className="min-w-0">
                   <p className="truncate max-w-32 text-[11px] font-bold text-ink">{garment.name}</p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => selectGarment(garment.category, garment.id)}
+                  className="grid size-6 place-items-center rounded-full text-ink/35 transition hover:bg-red-50 hover:text-red-600"
+                  aria-label={`Bỏ ${garment.name} khỏi bộ đồ`}
+                  title="Bỏ món này"
+                >
+                  <X size={12} />
+                </button>
               </div>
             ))}
           </div>
