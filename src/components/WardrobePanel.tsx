@@ -285,7 +285,7 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact' }:
   }
 
   return (
-    <aside className={'flex min-h-0 flex-col overflow-hidden rounded-[32px] border border-black/[0.065] bg-white/80 shadow-[0_16px_40px_rgba(23,33,29,0.06)] backdrop-blur-md ' + (mode === 'page' ? 'min-h-[620px]' : 'lg:h-full')}>
+    <aside className={'flex min-h-0 flex-col overflow-hidden rounded-[24px] border border-black/[0.065] bg-white/80 shadow-[0_16px_40px_rgba(23,33,29,0.06)] backdrop-blur-md sm:rounded-[32px] ' + (mode === 'page' ? 'min-h-[520px] sm:min-h-[620px]' : 'lg:h-full')}>
       <div className="flex flex-wrap items-center justify-between gap-3 px-5 pb-3.5 pt-5 sm:px-6">
         <div className="flex items-center gap-3">
           <h2 className="font-display text-2xl font-bold tracking-tight text-ink">Tủ đồ</h2>

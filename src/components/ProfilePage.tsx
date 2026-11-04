@@ -338,7 +338,7 @@ export function ProfilePage({
           </div>
 
           {savedOutfits.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-[28px] border border-dashed border-black/[0.1] bg-panel/60 p-12 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[28px] border border-dashed border-black/[0.1] bg-panel/60 p-8 text-center sm:p-12">
               <span className="grid size-14 place-items-center rounded-2xl bg-sage-50 text-sage-700 shadow-xs">
                 <Images size={26} strokeWidth={1.7} />
               </span>
@@ -450,7 +450,7 @@ export function ProfilePage({
           </div>
 
           {filteredGarments.length === 0 ? (
-            <div className="flex flex-col items-center justify-center rounded-[28px] border border-dashed border-black/[0.1] bg-panel/60 p-12 text-center">
+            <div className="flex flex-col items-center justify-center rounded-[28px] border border-dashed border-black/[0.1] bg-panel/60 p-8 text-center sm:p-12">
               <span className="grid size-14 place-items-center rounded-2xl bg-sage-50 text-sage-700 shadow-xs">
                 <Shirt size={26} strokeWidth={1.7} />
               </span>

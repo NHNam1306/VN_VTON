@@ -110,8 +110,8 @@ export function OutfitHistory({
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      <section className="overflow-hidden rounded-[32px] border border-black/[0.065] bg-white/80 shadow-[0_20px_50px_rgba(23,33,29,0.06)] backdrop-blur-md">
+    <main className="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
+      <section className="overflow-hidden rounded-[24px] border border-black/[0.065] bg-white/80 shadow-[0_20px_50px_rgba(23,33,29,0.06)] backdrop-blur-md sm:rounded-[32px]">
         <div className="flex flex-col gap-4 border-b border-black/[0.055] px-6 py-6 sm:flex-row sm:items-end sm:justify-between sm:px-8 sm:py-8">
           <div>
             <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Bộ đồ của tôi</h2>
@@ -395,7 +395,7 @@ export function OutfitHistory({
 
         return createPortal(
           <div
-            className="fixed inset-0 z-[100] grid place-items-center bg-black/85 p-4 backdrop-blur-xl"
+            className="fixed inset-0 z-[100] grid place-items-end bg-black/85 p-0 backdrop-blur-xl sm:place-items-center sm:p-4"
             role="presentation"
             onMouseDown={(event) => event.target === event.currentTarget && setPreview(null)}
           >
@@ -403,7 +403,7 @@ export function OutfitHistory({
               role="dialog"
               aria-modal="true"
               aria-label="Xem bộ ảnh"
-              className="relative w-full max-w-4xl overflow-hidden rounded-[32px] border border-white/10 bg-[#16171b] shadow-2xl"
+              className="relative max-h-[100dvh] w-full max-w-4xl overflow-y-auto border border-white/10 bg-[#16171b] shadow-2xl sm:max-h-[92dvh] sm:rounded-[32px]"
             >
               <div className="flex items-center justify-between border-b border-white/10 px-6 py-4 text-white">
                 <div className="flex items-center gap-2.5">
@@ -435,7 +435,7 @@ export function OutfitHistory({
                 </div>
               </div>
 
-              <div className={'grid gap-px bg-white/10 ' + (previewBack ? 'grid-cols-2' : 'grid-cols-1 max-w-lg mx-auto')}>
+              <div className={'grid gap-px bg-white/10 ' + (previewBack ? 'grid-cols-1 sm:grid-cols-2' : 'grid-cols-1 max-w-lg mx-auto')}>
                 <div
                   className="group/p relative aspect-[4/5] cursor-zoom-in bg-[#111215]"
                   onClick={() => setLightbox({ src: previewFront, alt: `${previewTitle} - Góc trước` })}

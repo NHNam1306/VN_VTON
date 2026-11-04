@@ -433,7 +433,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-6"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-6"
       role="presentation"
       onMouseDown={(event) => event.target === event.currentTarget && close()}
     >
@@ -441,12 +441,12 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         role="dialog"
         aria-modal="true"
         aria-labelledby="upload-title"
-        className="flex max-h-[92vh] h-[840px] w-full max-w-5xl flex-col overflow-hidden rounded-t-[36px] border border-white/60 bg-white/95 shadow-[0_30px_90px_rgba(23,33,29,0.28)] backdrop-blur-2xl sm:rounded-[36px]"
+        className="flex h-[100dvh] max-h-[100dvh] w-full max-w-5xl flex-col overflow-hidden border-0 bg-white/95 shadow-[0_30px_90px_rgba(23,33,29,0.28)] backdrop-blur-2xl sm:h-[840px] sm:max-h-[92dvh] sm:rounded-[36px] sm:border sm:border-white/60"
       >
         <form onSubmit={(event) => void saveGarment(event)} className="flex h-full flex-col overflow-hidden">
-          <header className="shrink-0 flex items-center justify-between border-b border-black/[0.055] bg-white/90 px-6 py-4 backdrop-blur-xl sm:px-8 sm:py-5">
+          <header className="flex shrink-0 items-center justify-between border-b border-black/[0.055] bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-8 sm:py-5">
             <div className="flex min-w-0 items-center gap-3.5">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sage-100 text-sage-800 shadow-[inset_0_0_0_1px_rgba(64,86,60,0.08)]">
+              <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sage-100 text-sage-800 shadow-[inset_0_0_0_1px_rgba(64,86,60,0.08)] sm:size-11">
                 <ImagePlus size={20} />
               </span>
               <div className="min-w-0">
@@ -455,10 +455,10 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
                     Tủ đồ · {categoryLabel}
                   </span>
                 </div>
-                <h2 id="upload-title" className="font-display text-2xl font-bold leading-tight text-ink">
+                <h2 id="upload-title" className="font-display text-xl font-bold leading-tight text-ink sm:text-2xl">
                   Thêm {categoryLabelLower}
                 </h2>
-                <p className="mt-1 text-xs text-ink/45">
+                <p className="mt-1 hidden text-xs text-ink/45 sm:block">
                   Ảnh rõ nét, phẳng và đủ sáng sẽ cho kết quả thử đồ studio chân thực nhất.
                 </p>
               </div>
@@ -474,9 +474,9 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
             </button>
           </header>
 
-          <div className="flex-1 min-h-0 grid gap-5 p-4 sm:p-5 lg:grid-cols-[330px_minmax(0,1fr)] lg:gap-6 overflow-y-auto lg:overflow-hidden items-stretch">
+          <div className="grid min-h-0 flex-1 items-stretch gap-4 overflow-y-auto overscroll-contain p-3 pb-6 sm:p-5 lg:grid-cols-[330px_minmax(0,1fr)] lg:gap-6 lg:overflow-hidden">
             {/* Left Column: Form inputs and Action Buttons (LOCKED KHÔNG CHO SCROLL) */}
-            <div className="shrink-0 space-y-3.5 rounded-3xl border border-black/[0.06] bg-[#faf9f6] p-4 sm:p-4.5 shadow-[0_12px_34px_rgba(40,54,47,0.04)] flex flex-col justify-between h-full overflow-hidden">
+            <div className="flex h-auto shrink-0 flex-col justify-between space-y-3.5 overflow-visible rounded-3xl border border-black/[0.06] bg-[#faf9f6] p-4 shadow-[0_12px_34px_rgba(40,54,47,0.04)] sm:p-4.5 lg:h-full lg:overflow-hidden">
               <div className="space-y-3">
                 <div>
                   <div className="mb-1.5 flex items-center justify-between">
@@ -598,8 +598,8 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
             </div>
 
             {/* Right Column: 4 preview cards filling the entire right frame (CHỈ SCROLL CỘT NÀY) */}
-            <div className="flex h-full min-w-0 flex-col overflow-y-auto pr-1 space-y-4 scrollbar-thin">
-              <div className="grid flex-1 min-h-[360px] grid-cols-2 gap-3.5 sm:gap-4">
+            <div className="flex h-auto min-w-0 flex-col space-y-4 overflow-visible pr-0 lg:h-full lg:overflow-y-auto lg:pr-1 scrollbar-thin">
+              <div className="grid min-h-0 flex-1 grid-cols-2 gap-3 sm:min-h-[360px] sm:gap-4">
                 <PreviewCard
                   label="Trước · Gốc"
                   url={frontOriginalUrl}
@@ -802,23 +802,23 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
             </div>
           </div>
 
-          <footer className="shrink-0 flex items-center justify-between gap-3 border-t border-black/[0.055] bg-white/90 px-6 py-4 backdrop-blur-xl sm:px-8">
+          <footer className="flex shrink-0 items-center justify-between gap-3 border-t border-black/[0.055] bg-white/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl sm:px-8 sm:py-4">
             <p className="hidden text-xs text-ink/40 sm:block">
               Ảnh đã tách nền sẽ được dùng để phối vào cơ thể ở phòng thử đồ.
             </p>
-            <div className="ml-auto flex items-center gap-3">
+            <div className="ml-auto flex w-full items-center gap-2 sm:w-auto sm:gap-3">
               <button
                 type="button"
                 onClick={close}
                 disabled={isRemoving || isSaving}
-                className="rounded-full px-5 py-2.5 text-xs font-bold text-ink/60 transition hover:bg-black/5 hover:text-ink"
+                className="flex-1 rounded-full px-5 py-3 text-xs font-bold text-ink/60 transition hover:bg-black/5 hover:text-ink sm:flex-none sm:py-2.5"
               >
                 Huỷ
               </button>
               <button
                 type="submit"
                 disabled={!frontProcessed || isRemoving || isSaving}
-                className="flex min-w-36 items-center justify-center gap-2 rounded-full bg-ink px-6 py-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(23,33,29,0.18)] transition hover:-translate-y-0.5 hover:bg-sage-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0"
+                className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-full bg-ink px-5 py-3 text-xs font-bold text-white shadow-[0_10px_24px_rgba(23,33,29,0.18)] transition hover:-translate-y-0.5 hover:bg-sage-800 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:translate-y-0 sm:min-w-36 sm:flex-none sm:px-6"
               >
                 {isSaving && <LoaderCircle size={15} className="animate-spin" />}
                 <span>{isSaving ? 'Đang lưu' : `Lưu ${categoryLabelLower}`}</span>
@@ -831,14 +831,14 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
       {/* Lightbox Modal: Phóng to ảnh khi nhấn vào bất kỳ ảnh nào */}
       {zoomImage && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/85 p-4 sm:p-8 backdrop-blur-md animate-in fade-in duration-200"
+          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-3 sm:p-8 backdrop-blur-md animate-in fade-in duration-200"
           role="dialog"
           aria-modal="true"
           aria-label={`Phóng to ${zoomImage.title}`}
           onClick={() => setZoomImage(null)}
         >
           <div
-            className="relative flex max-h-[92vh] max-w-4xl w-full flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-[#161616]/95 p-4 sm:p-6 shadow-2xl backdrop-blur-2xl"
+            className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-[#161616]/95 p-4 shadow-2xl backdrop-blur-2xl sm:max-h-[92dvh] sm:p-6"
             onClick={(e) => e.stopPropagation()}
           >
             <header className="mb-3 flex w-full items-center justify-between gap-3 border-b border-white/10 pb-3 text-white">
@@ -864,11 +864,11 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
             </header>
 
             {/* Image Preview Container */}
-            <div className="relative flex max-h-[72vh] w-full items-center justify-center overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_center,#262626_0%,#0f0f0f_100%)] p-4 shadow-inner">
+            <div className="relative flex max-h-[72dvh] w-full items-center justify-center overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_center,#262626_0%,#0f0f0f_100%)] p-3 shadow-inner sm:p-4">
               <img
                 src={zoomImage.url}
                 alt={zoomImage.title}
-                className="max-h-[68vh] w-auto max-w-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)] select-none"
+                className="max-h-[68dvh] w-auto max-w-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)] select-none"
               />
             </div>
 

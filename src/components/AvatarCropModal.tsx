@@ -23,6 +23,15 @@ const VIEWPORT_SIZE = 320
 const CROP_DIAMETER = 260
 const OUTPUT_SIZE = 512
 
+const toCanvasPoint = (canvas: HTMLCanvasElement, clientX: number, clientY: number) => {
+  const rect = canvas.getBoundingClientRect()
+  const scale = VIEWPORT_SIZE / rect.width
+  return {
+    x: (clientX - rect.left) * scale,
+    y: (clientY - rect.top) * scale,
+  }
+}
+
 export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModalProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const imageRef = useRef<HTMLImageElement | null>(null)
@@ -135,15 +144,17 @@ export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModa
 
   // Chuột: Kéo để di chuyển vị trí (Pan)
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const point = toCanvasPoint(e.currentTarget, e.clientX, e.clientY)
     setIsDragging(true)
-    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y })
+    setDragStart({ x: point.x - pan.x, y: point.y - pan.y })
   }
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
     if (!isDragging) return
+    const point = toCanvasPoint(e.currentTarget, e.clientX, e.clientY)
     setPan({
-      x: e.clientX - dragStart.x,
-      y: e.clientY - dragStart.y,
+      x: point.x - dragStart.x,
+      y: point.y - dragStart.y,
     })
   }
 
@@ -155,17 +166,19 @@ export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModa
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (e.touches.length === 1) {
       const touch = e.touches[0]
+      const point = toCanvasPoint(e.currentTarget, touch.clientX, touch.clientY)
       setIsDragging(true)
-      setDragStart({ x: touch.clientX - pan.x, y: touch.clientY - pan.y })
+      setDragStart({ x: point.x - pan.x, y: point.y - pan.y })
     }
   }
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
     if (!isDragging || e.touches.length !== 1) return
     const touch = e.touches[0]
+    const point = toCanvasPoint(e.currentTarget, touch.clientX, touch.clientY)
     setPan({
-      x: touch.clientX - dragStart.x,
-      y: touch.clientY - dragStart.y,
+      x: point.x - dragStart.x,
+      y: point.y - dragStart.y,
     })
   }
 
@@ -248,11 +261,11 @@ export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModa
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-200"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/70 p-0 backdrop-blur-sm animate-in fade-in duration-200 sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[420px] rounded-[32px] border border-black/[0.08] bg-panel p-5 shadow-2xl sm:p-6 space-y-4"
+        className="max-h-[100dvh] w-full max-w-[420px] space-y-4 overflow-y-auto rounded-t-[28px] border border-black/[0.08] bg-panel p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[92dvh] sm:rounded-[32px] sm:p-6"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -276,7 +289,7 @@ export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModa
 
         {/* Viewport Canvas Area */}
         <div className="relative mx-auto flex flex-col items-center">
-          <div className="relative overflow-hidden rounded-2xl bg-neutral-900 shadow-inner select-none cursor-grab active:cursor-grabbing border border-black/10">
+          <div className="relative aspect-square w-full max-w-[320px] overflow-hidden rounded-2xl border border-black/10 bg-neutral-900 shadow-inner select-none cursor-grab active:cursor-grabbing">
             <canvas
               ref={canvasRef}
               width={VIEWPORT_SIZE}
@@ -289,7 +302,7 @@ export function AvatarCropModal({ open, file, onClose, onApply }: AvatarCropModa
               onTouchMove={handleTouchMove}
               onTouchEnd={handleTouchEnd}
               onWheel={handleWheel}
-              className="touch-none"
+              className="aspect-square h-auto w-full touch-none"
             />
 
             {!imageLoaded && (

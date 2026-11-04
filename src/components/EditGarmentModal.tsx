@@ -70,7 +70,7 @@ export function EditGarmentModal({ garment, onClose, onSaved }: EditGarmentModal
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[100] flex items-end justify-center bg-black/60 p-0 backdrop-blur-md sm:items-center sm:p-4"
       role="presentation"
       onMouseDown={(e) => e.target === e.currentTarget && onClose()}
     >
@@ -78,9 +78,9 @@ export function EditGarmentModal({ garment, onClose, onSaved }: EditGarmentModal
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-garment-title"
-        className="w-full max-w-md overflow-hidden rounded-[28px] border border-white/60 bg-white/95 shadow-[0_24px_70px_rgba(23,33,29,0.22)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200"
+        className="flex max-h-[100dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[28px] border border-white/60 bg-white/95 shadow-[0_24px_70px_rgba(23,33,29,0.22)] backdrop-blur-xl animate-in fade-in zoom-in-95 duration-200 sm:max-h-[92dvh] sm:rounded-[28px]"
       >
-        <form onSubmit={(e) => void handleSubmit(e)}>
+        <form onSubmit={(e) => void handleSubmit(e)} className="flex min-h-0 flex-1 flex-col">
           <header className="flex items-center justify-between border-b border-black/[0.06] px-6 py-4">
             <div className="flex items-center gap-2.5">
               <span className="grid size-9 place-items-center rounded-xl bg-ink text-white shadow-xs">
@@ -103,7 +103,7 @@ export function EditGarmentModal({ garment, onClose, onSaved }: EditGarmentModal
             </button>
           </header>
 
-          <div className="p-6 space-y-4">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 sm:p-6">
             {/* Preview image */}
             <div className="flex flex-col items-center">
               <div className="relative aspect-square w-36 overflow-hidden rounded-2xl border border-black/[0.08] bg-[radial-gradient(circle_at_center,#ffffff_0%,#f1efe9_100%)] p-2 shadow-xs">
@@ -191,7 +191,7 @@ export function EditGarmentModal({ garment, onClose, onSaved }: EditGarmentModal
             )}
           </div>
 
-          <footer className="flex items-center justify-end gap-2.5 border-t border-black/[0.06] bg-black/[0.015] px-6 py-4">
+          <footer className="flex shrink-0 items-center justify-end gap-2.5 border-t border-black/[0.06] bg-black/[0.015] px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-6 sm:py-4">
             <button
               type="button"
               onClick={onClose}

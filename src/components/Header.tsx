@@ -105,14 +105,14 @@ export function Header({
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-black/[0.055] bg-panel/90 px-4 py-3 backdrop-blur-xl sm:px-6">
+    <header className="sticky top-0 z-40 border-b border-black/[0.055] bg-panel/90 px-3 py-2.5 backdrop-blur-xl sm:px-6 sm:py-3">
       <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr]">
         <div className="flex items-center justify-start">
           <a href={appViewPaths.feed} onClick={(event) => openView(event, 'feed', 0)} className="group flex items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
-            <span className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-[#16171b] to-[#2c2f38] text-white shadow-[0_8px_20px_rgba(22,23,27,0.22)] transition-transform duration-300 group-hover:scale-105">
+            <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#16171b] to-[#2c2f38] text-white shadow-[0_8px_20px_rgba(22,23,27,0.22)] transition-transform duration-300 group-hover:scale-105 sm:size-10 sm:rounded-2xl">
               <Sparkles size={18} strokeWidth={2} className="text-amber-300" aria-hidden="true" />
             </span>
-            <span className="font-display text-xl font-extrabold tracking-tight text-ink">Tryoh</span>
+            <span className="font-display text-lg font-extrabold tracking-tight text-ink sm:text-xl">Tryoh</span>
           </a>
         </div>
 
@@ -191,7 +191,7 @@ export function Header({
         </nav>
 
         <div className="flex items-center justify-end">
-          <div className="flex items-center gap-2.5 rounded-full border border-black/[0.06] bg-white/80 py-1 pl-1.5 pr-2 shadow-sm backdrop-blur-md">
+          <div className="flex items-center gap-1 rounded-full border border-black/[0.06] bg-white/80 py-1 pl-1 pr-1.5 shadow-sm backdrop-blur-md sm:gap-2.5 sm:pl-1.5 sm:pr-2">
             <NotificationBell />
             {(user.role === 'admin' || user.role === 'moderator') && (
               <button type="button" onClick={() => onViewChange('admin')} className="grid size-8 place-items-center rounded-full bg-amber-50 text-amber-800 transition hover:bg-amber-100" aria-label="Mở trang quản trị" title="Quản trị">
@@ -206,8 +206,8 @@ export function Header({
               <p className="max-w-28 truncate text-[11px] font-bold text-ink leading-tight">{user.displayName}</p>
               <p className="max-w-28 truncate text-[8.5px] font-medium text-ink/40">{user.email}</p>
             </div>
-            <button type="button" onClick={() => onViewChange('settings')} className={`grid size-7 shrink-0 place-items-center rounded-full transition ${activeView === 'settings' ? 'bg-sage-100 text-sage-800' : 'text-ink/35 hover:bg-sage-50 hover:text-ink/70'}`} aria-label="Mở cài đặt" title="Cài đặt"><Settings size={13} /></button>
-            <button type="button" onClick={onLogout} disabled={isLoggingOut} className="grid size-7 shrink-0 place-items-center rounded-full text-ink/35 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40" aria-label="Đăng xuất" title="Đăng xuất"><LogOut size={13} /></button>
+            <button type="button" onClick={() => onViewChange('settings')} className={`grid size-9 shrink-0 place-items-center rounded-full transition sm:size-7 ${activeView === 'settings' ? 'bg-sage-100 text-sage-800' : 'text-ink/35 hover:bg-sage-50 hover:text-ink/70'}`} aria-label="Mở cài đặt" title="Cài đặt"><Settings size={13} /></button>
+            <button type="button" onClick={onLogout} disabled={isLoggingOut} className="grid size-9 shrink-0 place-items-center rounded-full text-ink/35 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 sm:size-7" aria-label="Đăng xuất" title="Đăng xuất"><LogOut size={13} /></button>
           </div>
         </div>
       </div>

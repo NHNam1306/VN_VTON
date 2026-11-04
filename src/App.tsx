@@ -150,7 +150,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   }, [setError, setGarments, setLoading, setPersonImage])
 
   return (
-    <div className="min-h-screen bg-canvas pb-24 text-ink bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(215,223,212,0.32),transparent_70%),radial-gradient(circle_at_bottom_right,rgba(235,230,220,0.35),transparent_50%)] lg:pb-0">
+    <div className="min-h-[100dvh] bg-canvas pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-ink bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(215,223,212,0.32),transparent_70%),radial-gradient(circle_at_bottom_right,rgba(235,230,220,0.35),transparent_50%)] lg:pb-0">
       <Header
         activeView={activeView}
         historyCount={generation.history.length}
@@ -165,7 +165,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
       <div key={activeView} className="app-page-transition">
         {(activeView === 'feed' || activeView === 'friends') && <SocialPage mode={activeView} composeSignal={composeSignal} onCreateOutfit={() => navigate('fitting')} />}
         {activeView === 'wardrobe' && (
-          <main className="mx-auto w-full max-w-[1680px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+          <main className="mx-auto w-full max-w-[1680px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
             <WardrobePanel
               mode="page"
               onAddGarment={openGarmentUpload}
@@ -175,7 +175,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         )}
 
         {activeView === 'fitting' && (
-          <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-7">
+          <main className="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-7">
             <section className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Tạo ảnh thử đồ</h2>
@@ -343,11 +343,11 @@ function App() {
   }, [])
 
   if (user === undefined) {
-    return <div className="grid min-h-screen place-items-center bg-canvas"><div className="text-center text-ink/40"><span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-ink text-white"><Sparkles size={20} /></span><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
+    return <div className="grid min-h-[100dvh] place-items-center bg-canvas"><div className="text-center text-ink/40"><span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-ink text-white"><Sparkles size={20} /></span><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
   }
 
   if (!user) {
-    return <><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} />{startupError && <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-xl bg-red-600 px-4 py-2 text-xs text-white shadow-lg">{startupError}</div>}</>
+    return <><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} />{startupError && <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[120] rounded-xl bg-red-600 px-4 py-2 text-center text-xs text-white shadow-lg sm:left-1/2 sm:right-auto sm:-translate-x-1/2">{startupError}</div>}</>
   }
 
   return <FittingRoomApp user={user} onLoggedOut={() => setUser(null)} onUserUpdate={(updated) => setUser(updated)} />

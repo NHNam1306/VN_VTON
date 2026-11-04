@@ -82,11 +82,11 @@ export function OnboardingFlow({ user, hasGarments, onComplete }: OnboardingFlow
   }
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-y-auto bg-canvas/95 p-4 backdrop-blur-xl sm:p-6">
+    <div className="fixed inset-0 z-[100] overflow-y-auto bg-canvas/95 p-0 backdrop-blur-xl sm:p-6">
       <div className="mx-auto flex min-h-full max-w-3xl items-center">
-        <section className="w-full overflow-hidden rounded-[32px] border border-black/[0.07] bg-panel shadow-[0_30px_90px_rgba(23,33,29,0.18)]">
+        <section className="min-h-[100dvh] w-full overflow-hidden border border-black/[0.07] bg-panel shadow-[0_30px_90px_rgba(23,33,29,0.18)] sm:min-h-0 sm:rounded-[32px]">
           <div className="h-1.5 bg-black/[0.05]"><div className="h-full bg-sage-600 transition-[width] duration-500" style={{ width: `${progress}%` }} /></div>
-          <div className="p-6 sm:p-10">
+          <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:p-10">
             <div className="mb-7 flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-sage-700">Thiết lập {step + 1}/5</span>
               <span className="text-xs font-semibold text-ink/35">Tryoh</span>

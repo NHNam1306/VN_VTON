@@ -134,7 +134,7 @@ export function EditOutfitModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-black/80 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[100] grid place-items-end bg-black/80 p-0 backdrop-blur-md sm:place-items-center sm:p-4"
       role="presentation"
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !pendingRemoval) onClose()
@@ -144,10 +144,10 @@ export function EditOutfitModal({
         role="dialog"
         aria-modal="true"
         aria-label="Chỉnh sửa bộ thử"
-        className="relative flex max-h-[92vh] w-full max-w-lg flex-col overflow-hidden rounded-[28px] border border-black/10 bg-panel shadow-2xl"
+        className="relative flex h-[100dvh] max-h-[100dvh] w-full max-w-lg flex-col overflow-hidden border border-black/10 bg-panel shadow-2xl sm:h-auto sm:max-h-[92dvh] sm:rounded-[28px]"
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-black/[0.06] px-5 py-3.5 sm:px-6">
+        <div className="flex shrink-0 items-center justify-between border-b border-black/[0.06] px-4 py-3.5 sm:px-6">
           <div className="flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-2xl bg-sage-100 text-sage-800">
               <Pencil size={15} />
@@ -168,7 +168,7 @@ export function EditOutfitModal({
         </div>
 
         {/* Content */}
-        <form onSubmit={handleSubmit} className="flex flex-1 flex-col overflow-y-auto p-5 sm:p-6">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:p-6">
           {error && (
             <div className="mb-4 rounded-2xl border border-red-100 bg-red-50 px-4 py-2.5 text-xs text-red-700" role="alert">
               {error}
@@ -186,7 +186,7 @@ export function EditOutfitModal({
 
             <div className={'grid gap-3 ' + (hasBack ? 'grid-cols-2' : 'max-w-[240px] mx-auto')}>
               {/* Front view */}
-              <div className="group relative h-52 sm:h-56 w-full overflow-hidden rounded-2xl bg-[#eeece6] transition">
+              <div className="group relative h-44 w-full overflow-hidden rounded-2xl bg-[#eeece6] transition sm:h-56">
                 <img
                   src={currentOutfit.frontImageUrl}
                   alt="Góc trước"
@@ -223,7 +223,7 @@ export function EditOutfitModal({
 
               {/* Back view if exists */}
               {hasBack && currentOutfit.backImageUrl && (
-                <div className="group relative h-52 sm:h-56 w-full overflow-hidden rounded-2xl bg-[#eeece6] transition">
+                <div className="group relative h-44 w-full overflow-hidden rounded-2xl bg-[#eeece6] transition sm:h-56">
                   <img
                     src={currentOutfit.backImageUrl}
                     alt="Góc sau"

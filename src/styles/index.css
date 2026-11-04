@@ -21,14 +21,17 @@ html.dark {
 }
 
 * { box-sizing: border-box; }
-html { min-width: 320px; background: rgb(var(--color-canvas)); }
+html { min-width: 320px; overflow-x: clip; background: rgb(var(--color-canvas)); }
 body {
   min-width: 320px;
-  min-height: 100vh;
+  min-height: 100dvh;
   margin: 0;
+  overflow-x: clip;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+#root { min-height: 100dvh; }
+body:has([aria-modal="true"]) { overflow: hidden; }
 .dark body { background: rgb(var(--color-canvas)); }
 .dark :where(.bg-white, .bg-white\/40, .bg-white\/50, .bg-white\/60, .bg-white\/70, .bg-white\/80, .bg-white\/85, .bg-white\/90, .bg-white\/95) {
   background-color: rgba(31, 36, 34, 0.94) !important;
@@ -47,10 +50,19 @@ body {
 button, input { font: inherit; }
 button { -webkit-tap-highlight-color: transparent; }
 button:not(:disabled) { cursor: pointer; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
 img { display: block; }
 ::selection { color: #17211d; background: #dfe9dc; }
 .scrollbar-none { scrollbar-width: none; }
 .scrollbar-none::-webkit-scrollbar { display: none; }
+
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
 
 @keyframes shimmer-slow {
   0% { transform: translateX(-100%); }

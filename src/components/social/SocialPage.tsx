@@ -94,9 +94,9 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
   ]
 
   return (
-    <main className={`social-page mx-auto px-4 pb-20 pt-8 text-ink sm:px-6 ${mode === 'feed' ? 'max-w-[1080px]' : 'max-w-[1320px]'}`}>
+    <main className={`social-page mx-auto px-3 pb-6 pt-4 text-ink sm:px-6 sm:pb-20 sm:pt-8 ${mode === 'feed' ? 'max-w-[1080px]' : 'max-w-[1320px]'}`}>
       {/* Page header */}
-      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <header className="mb-5 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">
             {mode === 'feed' ? 'Bảng tin' : 'Bạn bè'}
@@ -153,7 +153,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
                 {compose && <PollComposer data={data} outfits={mine} act={act} onDone={() => setCompose(false)} onCreateOutfit={onCreateOutfit} />}
 
                 {data.polls.length === 0 && (
-                  <div className="flex flex-col items-center gap-4 rounded-[22px] border border-black/[0.07] bg-white/70 p-12 text-center backdrop-blur-sm">
+                  <div className="flex flex-col items-center gap-4 rounded-[22px] border border-black/[0.07] bg-white/70 p-8 text-center backdrop-blur-sm sm:p-12">
                     <span className="grid size-14 place-items-center rounded-2xl bg-sage-50 text-sage-600">
                       <MessageSquare size={26} strokeWidth={1.5} />
                     </span>
@@ -194,10 +194,10 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
 
       {/* Profile overlay */}
       {profile && (
-        <div className="social-overlay fixed inset-0 z-70 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm" onClick={() => setProfile(null)}>
+        <div className="social-overlay fixed inset-0 z-[90] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setProfile(null)}>
           <section
             role="dialog" aria-modal="true" aria-label="Hồ sơ bạn bè"
-            className="relative w-full max-w-lg max-h-[90dvh] overflow-auto rounded-[28px] bg-white p-6 shadow-2xl"
+            className="relative max-h-[92dvh] w-full max-w-lg overflow-auto rounded-t-[28px] bg-white p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:rounded-[28px] sm:p-6"
             onClick={e => e.stopPropagation()}
           >
             <button autoFocus onClick={() => setProfile(null)} className="absolute right-4 top-4 grid size-8 place-items-center rounded-full bg-black/[0.06] text-ink/50 hover:bg-black/10 transition" aria-label="Đóng">✕</button>

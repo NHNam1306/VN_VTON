@@ -43,7 +43,7 @@ export function ConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-[100] grid place-items-center bg-black/60 p-3 backdrop-blur-md sm:p-4"
       role="presentation"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget && !isBusy) onCancel()
@@ -54,7 +54,7 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-description"
-        className="relative w-full max-w-md overflow-hidden rounded-[32px] border border-white/60 bg-white/95 shadow-[0_30px_90px_rgba(23,33,29,0.28)] backdrop-blur-xl"
+        className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-md flex-col overflow-hidden rounded-[28px] border border-white/60 bg-white/95 shadow-[0_30px_90px_rgba(23,33,29,0.28)] backdrop-blur-xl sm:rounded-[32px]"
       >
         <button
           type="button"
@@ -66,7 +66,7 @@ export function ConfirmDialog({
           <X size={18} />
         </button>
 
-        <div className="px-6 pb-5 pt-7 sm:px-8">
+        <div className="min-h-0 overflow-y-auto px-5 pb-5 pt-6 sm:px-8 sm:pt-7">
           <span className="mb-4 grid size-12 place-items-center rounded-2xl bg-red-50 text-red-600 shadow-sm">
             <AlertTriangle size={22} aria-hidden="true" />
           </span>
@@ -91,7 +91,7 @@ export function ConfirmDialog({
           )}
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-black/[0.055] bg-[#faf9f6] px-6 py-4 sm:px-8">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-black/[0.055] bg-[#faf9f6] px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:px-8 sm:py-4">
           <button
             type="button"
             onClick={onCancel}

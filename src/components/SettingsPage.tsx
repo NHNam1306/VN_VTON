@@ -217,14 +217,14 @@ export function SettingsPage({
   ]
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <main className="mx-auto w-full max-w-6xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <div className="mb-6 flex items-center gap-4">
         <button type="button" onClick={() => onNavigate('profile')} className="grid size-10 shrink-0 place-items-center rounded-full border border-black/[0.08] bg-white text-ink/60 shadow-xs transition hover:bg-sage-50" aria-label="Quay lại hồ sơ"><ArrowLeft size={17} /></button>
-        <h1 className="font-display text-3xl font-bold tracking-tight text-ink">Cài đặt</h1>
+        <h1 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Cài đặt</h1>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-        <nav className="flex gap-2 overflow-x-auto lg:sticky lg:top-24 lg:flex-col lg:self-start" aria-label="Danh mục cài đặt">
+        <nav className="scrollbar-none flex gap-2 overflow-x-auto pb-1 lg:sticky lg:top-24 lg:flex-col lg:self-start lg:pb-0" aria-label="Danh mục cài đặt">
           {sections.map(item => {
             const Icon = item.icon
             const active = section === item.id

@@ -31,7 +31,7 @@ describe('UploadGarmentModal', () => {
     expect(screen.queryByLabelText(/Tách phụ kiện/i)).not.toBeInTheDocument()
   })
 
-  it('khóa khung tách nền và hiển thị đầy đủ 4 ô xem trước', () => {
+  it('dùng một vùng cuộn trên mobile và tách vùng cuộn trên desktop', () => {
     const { container } = render(
       <UploadGarmentModal
         open
@@ -41,12 +41,15 @@ describe('UploadGarmentModal', () => {
       />,
     )
 
-    // Khung tách nền bên trái có class overflow-hidden (khóa scroll)
-    const leftCol = container.querySelector('.lg\\:grid-cols-\\[330px_minmax\\(0\\,1fr\\)\\] > div:first-child')
-    expect(leftCol).toHaveClass('overflow-hidden')
+    const content = container.querySelector('.lg\\:grid-cols-\\[330px_minmax\\(0\\,1fr\\)\\]')
+    expect(content).toHaveClass('overflow-y-auto', 'lg:overflow-hidden')
 
-    // Cột ảnh bên phải có class overflow-y-auto (cho phép scroll)
+    // Mobile để nội dung chảy tự nhiên; desktop mới khóa cột form.
+    const leftCol = container.querySelector('.lg\\:grid-cols-\\[330px_minmax\\(0\\,1fr\\)\\] > div:first-child')
+    expect(leftCol).toHaveClass('overflow-visible', 'lg:overflow-hidden')
+
+    // Mobile dùng vùng cuộn chung; desktop cho phép riêng cột ảnh cuộn.
     const rightCol = container.querySelector('.lg\\:grid-cols-\\[330px_minmax\\(0\\,1fr\\)\\] > div:last-child')
-    expect(rightCol).toHaveClass('overflow-y-auto')
+    expect(rightCol).toHaveClass('overflow-visible', 'lg:overflow-y-auto')
   })
 })

@@ -76,7 +76,7 @@ export function KocStudioPage({ user, onNavigate }: { user: AuthUser; onNavigate
   }
 
   return (
-    <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <main className="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <section className="relative overflow-hidden rounded-[32px] border border-black/[0.06] bg-[linear-gradient(135deg,#19231f_0%,#2f4937_58%,#876c3e_100%)] p-6 text-white shadow-[0_24px_70px_rgba(22,35,28,0.2)] sm:p-8">
         <div className="pointer-events-none absolute -right-24 -top-28 size-80 rounded-full bg-amber-300/15 blur-3xl" />
         <div className="relative flex flex-col gap-7 lg:flex-row lg:items-end lg:justify-between">
@@ -271,8 +271,8 @@ function DraftComposer({ open, onClose, onSave }: { open: boolean; onClose: () =
   }, [open])
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-[90] grid place-items-center overflow-y-auto bg-black/50 p-4 backdrop-blur-sm" onClick={onClose}>
-      <form onSubmit={event => { event.preventDefault(); onSave({ title: title.trim(), caption: caption.trim(), productUrl: productUrl.trim() }) }} className="w-full max-w-xl rounded-[30px] bg-panel p-5 shadow-2xl sm:p-6" onClick={event => event.stopPropagation()}>
+    <div className="fixed inset-0 z-[90] grid place-items-end overflow-y-auto bg-black/50 p-0 backdrop-blur-sm sm:place-items-center sm:p-4" onClick={onClose}>
+      <form onSubmit={event => { event.preventDefault(); onSave({ title: title.trim(), caption: caption.trim(), productUrl: productUrl.trim() }) }} className="max-h-[100dvh] w-full max-w-xl overflow-y-auto rounded-t-[30px] bg-panel p-5 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl sm:max-h-[92dvh] sm:rounded-[30px] sm:p-6" onClick={event => event.stopPropagation()}>
         <div className="flex items-start justify-between"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">Nội dung mới</p><h2 className="mt-1 font-display text-xl font-bold text-ink">Tạo bản nháp KOC</h2></div><button type="button" onClick={onClose} className="grid size-9 place-items-center rounded-full bg-black/[0.05] text-ink/50" aria-label="Đóng"><X size={17} /></button></div>
         <div className="mt-6 space-y-4">
           <label className="block text-xs font-bold text-ink/55">Tiêu đề<input autoFocus required maxLength={100} value={title} onChange={event => setTitle(event.target.value)} placeholder="Ví dụ: Outfit đi cà phê cuối tuần" className="mt-1.5 w-full rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-ink outline-none focus:ring-2 focus:ring-sage-400" /></label>

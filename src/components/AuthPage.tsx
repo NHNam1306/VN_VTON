@@ -161,11 +161,11 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         : 'Lưu mật khẩu mới'
 
   return (
-    <main className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas p-4 sm:p-6">
+    <main className="relative grid min-h-[100dvh] place-items-center overflow-x-hidden bg-canvas p-3 sm:p-6">
       <div className="pointer-events-none absolute -left-24 -top-24 size-96 rounded-full bg-sage-100/80 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-36 -right-20 size-[32rem] rounded-full bg-violet-100/65 blur-3xl" />
 
-      <section className="relative grid w-full max-w-5xl overflow-hidden rounded-[34px] border border-white/75 bg-panel shadow-[0_30px_90px_rgba(23,33,29,0.14)] lg:grid-cols-[1.05fr_0.95fr]">
+      <section className="relative grid w-full max-w-5xl overflow-hidden rounded-[26px] border border-white/75 bg-panel shadow-[0_30px_90px_rgba(23,33,29,0.14)] sm:rounded-[34px] lg:grid-cols-[1.05fr_0.95fr]">
         <div className="relative hidden min-h-[650px] overflow-hidden bg-ink p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(169,190,163,0.32),transparent_36%),radial-gradient(circle_at_85%_80%,rgba(139,92,246,0.2),transparent_40%)]" />
           <div className="relative">

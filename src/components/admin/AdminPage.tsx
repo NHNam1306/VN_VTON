@@ -46,7 +46,7 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
   if(!authorized)return <AccessDenied onBack={()=>onNavigate('feed')}/>
 
   return(
-    <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+    <main className="mx-auto w-full max-w-[1500px] px-3 py-4 sm:px-6 sm:py-6 lg:px-8 lg:py-8">
       <section className="overflow-hidden rounded-[30px] bg-[linear-gradient(135deg,#17211d,#2f4937)] p-6 text-white shadow-xl sm:p-8">
         <button onClick={()=>onNavigate('profile')} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-2 text-xs font-semibold text-white/75 hover:bg-white/15"><ArrowLeft size={14}/>Về tài khoản</button>
         <div className="mt-7 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
