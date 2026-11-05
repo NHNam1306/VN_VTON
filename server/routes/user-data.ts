@@ -75,6 +75,16 @@ export function createUserDataRouter(repository: UserDataRepository, images: Ima
     }
   })
 
+  router.delete('/person-image', async (request, response, next) => {
+    try {
+      const imageKey = await repository.deletePersonImage(request.authUser.id)
+      if (imageKey) await images.delete(imageKey)
+      response.json({ deleted: Boolean(imageKey) })
+    } catch (error) {
+      next(error)
+    }
+  })
+
   router.delete('/user-data', async (request, response, next) => {
     try {
       const deleted = await repository.clearAllUserData(request.authUser.id)

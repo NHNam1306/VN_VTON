@@ -32,6 +32,33 @@ describe('SqliteUserDataRepository', () => {
     repository.close()
   })
 
+  it('chỉ xoá ảnh người và giữ nguyên kết quả cùng outfit đã tạo', () => {
+    const repository = new SqliteUserDataRepository(':memory:')
+    repository.upsertPersonImage(userId, personImage)
+    repository.upsertTryOnResult(userId, {
+      angle: 'front',
+      imageUrl: '/uploads/result-front.webp',
+      imageKey: 'result-front.webp',
+      createdAt: '2026-01-02T00:00:00.000Z',
+    })
+    repository.saveOutfit(userId, {
+      id: 'outfit-kept',
+      frontImageUrl: '/uploads/outfit-front.webp',
+      frontImageKey: 'outfit-front.webp',
+      backImageUrl: null,
+      backImageKey: null,
+      garmentIds: ['shirt-1'],
+      createdAt: '2026-01-03T00:00:00.000Z',
+    })
+
+    expect(repository.deletePersonImage(userId)).toBe('person.jpg')
+    expect(repository.getPersonImage(userId)).toBeNull()
+    expect(repository.listTryOnResults(userId)).toHaveLength(1)
+    expect(repository.listSavedOutfits(userId)).toHaveLength(1)
+    expect(repository.deletePersonImage(userId)).toBeNull()
+    repository.close()
+  })
+
   it('lưu kết quả theo từng góc và xoá kết quả cũ khi đổi ảnh người', () => {
     const repository = new SqliteUserDataRepository(':memory:')
     repository.upsertPersonImage(userId, personImage)

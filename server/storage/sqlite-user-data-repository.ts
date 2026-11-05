@@ -177,6 +177,15 @@ export class SqliteUserDataRepository implements UserDataRepository {
     return previous?.imageKey ?? null
   }
 
+  deletePersonImage(userId: string): string | null {
+    const remove = this.database.transaction(() => {
+      const imageKey = this.getPersonImage(userId)?.imageKey ?? null
+      this.database.prepare('DELETE FROM person_image WHERE user_id = ?').run(userId)
+      return imageKey
+    })
+    return remove()
+  }
+
   listTryOnResults(userId: string): TryOnResultRecord[] {
     const rows = this.database.prepare(
       'SELECT angle, image_url, image_key, created_at FROM try_on_images WHERE user_id = ?',

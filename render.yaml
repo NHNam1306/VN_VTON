@@ -3,9 +3,19 @@ services:
     name: fitting-room
     runtime: node
     plan: free
-    buildCommand: npm ci --include=dev && npm run build
+    buildCommand: npm ci --include=dev && npm run build && npm prune --omit=dev
     startCommand: npm start
     healthCheckPath: /api/health
+    buildFilter:
+      ignoredPaths:
+        - .env.example
+        - .gitignore
+        - docs/**
+        - README.md
+        - vitest.config.ts
+        - src/test/**
+        - '**/*.test.ts'
+        - '**/*.test.tsx'
     envVars:
       - key: NODE_ENV
         value: production

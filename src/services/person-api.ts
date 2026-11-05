@@ -37,6 +37,11 @@ export const personApi = {
     return response.json() as Promise<PersonImage>
   },
 
+  async deletePersonImage(): Promise<void> {
+    const response = await apiFetch('/api/person-image', { method: 'DELETE' })
+    if (!response.ok) throw new Error(await parseError(response))
+  },
+
   async deleteAllUserData(): Promise<void> {
     const response = await apiFetch('/api/user-data', { method: 'DELETE' })
     if (!response.ok) throw new Error(await parseError(response))

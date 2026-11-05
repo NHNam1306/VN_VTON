@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import type { ImageStorage, StoredImage } from './image-storage.js'
+import { optimizeImageForStorage } from './optimize-image.js'
 
 const extensionByMimeType: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -33,15 +34,16 @@ export class R2ImageStorage implements ImageStorage {
   }
 
   async save(buffer: Buffer, mimeType: string): Promise<string> {
-    const extension = extensionByMimeType[mimeType]
+    const prepared = await optimizeImageForStorage(buffer, mimeType)
+    const extension = extensionByMimeType[prepared.mimeType]
     if (!extension) throw new Error('Định dạng ảnh không được hỗ trợ.')
     const key = `${this.prefix}_${randomUUID()}${extension}`
     await this.client.send(new PutObjectCommand({
       Bucket: this.options.bucket,
       Key: key,
-      Body: buffer,
-      ContentType: mimeType,
-      CacheControl: 'private, no-store',
+      Body: prepared.buffer,
+      ContentType: prepared.mimeType,
+      CacheControl: 'private, max-age=86400, immutable',
     }))
     return key
   }

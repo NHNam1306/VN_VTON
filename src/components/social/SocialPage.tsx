@@ -37,7 +37,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
   useEffect(() => {
     void refresh()
     void tryOnApi.listOutfits().then(items => setMine(items.map(o => ({ ...o, official: false })))).catch(e => setError(String(e)))
-    const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 8000)
+    const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 30_000)
     return () => window.clearInterval(timer)
   }, [refresh])
 
@@ -75,7 +75,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
     const timer = window.setInterval(() => {
       if (document.hidden) return
       void socialApi.profile(profile.person.id).then(value => { if (active) setProfile(value) }).catch(() => { if (active) { setProfile(null); setZoom(null) } })
-    }, 8000)
+    }, 30_000)
     return () => { active = false; window.clearInterval(timer) }
   }, [profile?.person.id])
 
@@ -214,7 +214,7 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                   {profile.outfits.map(o => (
                     <button key={o.id} onClick={() => setZoom(o.frontImageUrl)} className="group relative overflow-hidden rounded-2xl border border-black/[0.07] bg-sage-50 p-0 transition hover:shadow-md">
-                      <img src={o.frontImageUrl} alt="Outfit đã chia sẻ" className="h-44 w-full object-contain" />
+                      <img src={o.frontImageUrl} alt="Outfit đã chia sẻ" loading="lazy" decoding="async" className="h-44 w-full object-contain" />
                       {o.official && <span className="absolute bottom-2 left-2 rounded-full bg-amber-400/90 px-2 py-0.5 text-[9px] font-bold text-white">★ Chính thức</span>}
                     </button>
                   ))}

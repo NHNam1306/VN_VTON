@@ -16,7 +16,7 @@ export function Avatar({ name, src, className = '', imageClassName = '' }: Avata
   return (
     <span className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-gradient-to-br from-sage-100 to-sage-200 font-bold text-sage-900 ${className}`}>
       {isStoredAvatar(src)
-        ? <img src={src} alt={`Ảnh đại diện của ${name}`} className={`h-full w-full object-cover ${imageClassName}`} />
+        ? <img src={src} alt={`Ảnh đại diện của ${name}`} decoding="async" className={`h-full w-full object-cover ${imageClassName}`} />
         : <span aria-hidden="true">{initials(name)}</span>}
     </span>
   )

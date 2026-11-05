@@ -49,6 +49,8 @@ function WardrobeGarmentCard({ garment, isSelected, onSelect, onEdit, onDelete, 
               key={currentUrl}
               src={currentUrl}
               alt={`${garment.name} (${viewSide === 'front' ? 'mặt trước' : 'mặt sau'})`}
+              loading="lazy"
+              decoding="async"
               className="h-full w-full object-contain p-3 transition-transform duration-300 ease-out group-hover:scale-105"
             />
 

@@ -2,6 +2,7 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { ImageStorage } from './image-storage.js'
+import { optimizeImageForStorage } from './optimize-image.js'
 
 const extensionByMimeType: Record<string, string> = {
   'image/jpeg': '.jpg',
@@ -21,12 +22,13 @@ export class LocalImageStorage implements ImageStorage {
   }
 
   async save(buffer: Buffer, mimeType: string): Promise<string> {
-    const extension = extensionByMimeType[mimeType]
+    const prepared = await optimizeImageForStorage(buffer, mimeType)
+    const extension = extensionByMimeType[prepared.mimeType]
     if (!extension) {
       throw new Error('Định dạng ảnh không được hỗ trợ.')
     }
     const key = `${randomUUID()}${extension}`
-    await writeFile(path.join(this.uploadDirectory, key), buffer)
+    await writeFile(path.join(this.uploadDirectory, key), prepared.buffer)
     return key
   }
 

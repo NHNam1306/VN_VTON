@@ -57,4 +57,18 @@ describe('useTryOnGeneration', () => {
     await act(async () => result.current.regenerate('back'))
     expect(tryOnApi.generateAngle).toHaveBeenLastCalledWith('back', ['shirt-1'], true, true)
   })
+
+  it('chỉ tải lịch sử khi tab cần dữ liệu tạo ảnh được mở', async () => {
+    const { rerender } = renderHook(
+      ({ enabled }) => useTryOnGeneration(enabled),
+      { initialProps: { enabled: false } },
+    )
+
+    expect(tryOnApi.listResults).not.toHaveBeenCalled()
+    expect(tryOnApi.listOutfits).not.toHaveBeenCalled()
+
+    rerender({ enabled: true })
+    await waitFor(() => expect(tryOnApi.listOutfits).toHaveBeenCalledOnce())
+    expect(tryOnApi.listResults).toHaveBeenCalledOnce()
+  })
 })

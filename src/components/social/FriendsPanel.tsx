@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import QRCode from 'qrcode'
 import { Search, UserPlus, Users, Link2, QrCode, Loader2, Check, X } from 'lucide-react'
 import type { SocialSnapshot, SocialPerson } from '../../../server/social/types'
 import { socialApi } from '../../services/social-api'
@@ -42,7 +41,12 @@ export function FriendsPanel({ data, tab, act, onProfile }: { data: SocialSnapsh
   const link = location.origin + '/ban-be?invite=' + encodeURIComponent(data.me.inviteCode)
 
   useEffect(() => {
-    void QRCode.toDataURL(link, { width: 200, margin: 2 }).then(setQr).catch(() => setError('Không thể tạo QR.'))
+    let active = true
+    void import('qrcode')
+      .then(({ default: QRCode }) => QRCode.toDataURL(link, { width: 200, margin: 2 }))
+      .then((value) => { if (active) setQr(value) })
+      .catch(() => { if (active) setError('Không thể tạo QR.') })
+    return () => { active = false }
   }, [link])
 
   const runSearch = async (value: string, version: number) => {

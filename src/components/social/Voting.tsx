@@ -62,7 +62,7 @@ export function PollComposer({ data, outfits, act, onDone, onCreateOutfit }: { d
                   return (
                     <label key={o.id} className={`group relative cursor-pointer overflow-hidden rounded-2xl border-2 transition ${checked ? 'border-sage-600 bg-sage-50' : 'border-black/[0.07] bg-sage-50/40 hover:border-sage-300'}`}>
                       <input type="checkbox" aria-label={`Outfit ${i + 1}`} checked={checked} disabled={!checked && selected.length >= 3} className="sr-only" onChange={() => setSelected(checked ? selected.filter(id => id !== o.id) : [...selected, o.id])} />
-                      <img src={o.frontImageUrl} alt={`Outfit ${i + 1}`} className="h-40 w-full object-contain" />
+                      <img src={o.frontImageUrl} alt={`Outfit ${i + 1}`} loading="lazy" decoding="async" className="h-40 w-full object-contain" />
                       {checked && (
                         <span className="absolute right-2 top-2 grid size-5 place-items-center rounded-full bg-sage-600 text-white">
                           <Star size={10} fill="currentColor" />
@@ -183,11 +183,11 @@ export function PollCard({ poll, me, act, onZoom }: { poll: SocialPoll; me: stri
               {/* Images */}
               <div className="social-image-pair mb-3 rounded-xl overflow-hidden">
                 <button className="flex-1 border-0 bg-transparent p-0" onClick={() => onZoom(o.frontImageUrl)}>
-                  <img src={o.frontImageUrl} alt={`Outfit ${i + 1} mặt trước`} className="h-52 w-full object-contain bg-[#f1f0eb] rounded-xl hover:opacity-90 transition" />
+                  <img src={o.frontImageUrl} alt={`Outfit ${i + 1} mặt trước`} loading="lazy" decoding="async" className="h-52 w-full object-contain bg-[#f1f0eb] rounded-xl hover:opacity-90 transition" />
                 </button>
                 {o.backImageUrl && (
                   <button className="flex-1 border-0 bg-transparent p-0" onClick={() => onZoom(o.backImageUrl!)}>
-                    <img src={o.backImageUrl} alt={`Outfit ${i + 1} mặt sau`} className="h-52 w-full object-contain bg-[#f1f0eb] rounded-xl hover:opacity-90 transition" />
+                    <img src={o.backImageUrl} alt={`Outfit ${i + 1} mặt sau`} loading="lazy" decoding="async" className="h-52 w-full object-contain bg-[#f1f0eb] rounded-xl hover:opacity-90 transition" />
                   </button>
                 )}
               </div>

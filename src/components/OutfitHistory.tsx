@@ -214,6 +214,8 @@ export function OutfitHistory({
                             <img
                               src={frontImageUrl}
                               alt="Ảnh mặt trước"
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover/img:scale-105"
                             />
                             <span className="absolute left-2.5 top-2.5 rounded-full bg-ink/75 px-2.5 py-1 text-[9px] font-bold tracking-wider text-white backdrop-blur-md">
@@ -240,6 +242,8 @@ export function OutfitHistory({
                             <img
                               src={backImageUrl}
                               alt="Ảnh mặt sau"
+                              loading="lazy"
+                              decoding="async"
                               className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover/img:scale-105"
                             />
                             <span className="absolute left-2.5 top-2.5 rounded-full bg-ink/75 px-2.5 py-1 text-[9px] font-bold tracking-wider text-white backdrop-blur-md">
@@ -267,6 +271,8 @@ export function OutfitHistory({
                           <img
                             src={frontImageUrl}
                             alt="Ảnh mặt trước"
+                            loading="lazy"
+                            decoding="async"
                             className="h-full w-full object-contain transition-transform duration-300 ease-out group-hover/img:scale-105"
                           />
                           <span className="absolute left-2.5 top-2.5 rounded-full bg-ink/75 px-2.5 py-1 text-[9px] font-bold tracking-wider text-white backdrop-blur-md">

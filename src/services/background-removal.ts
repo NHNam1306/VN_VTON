@@ -47,12 +47,12 @@ export const findVisiblePixelBounds = (
   }
 }
 
-const canvasToPngBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
+const canvasToWebpBlob = (canvas: HTMLCanvasElement): Promise<Blob> =>
   new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) resolve(blob)
-      else reject(new Error('Không thể xuất ảnh PNG đã cắt.'))
-    }, 'image/png')
+      else reject(new Error('Không thể xuất ảnh WebP đã cắt.'))
+    }, 'image/webp', 0.92)
   })
 
 export const cropTransparentArea = async (blob: Blob): Promise<Blob> => {
@@ -95,7 +95,7 @@ export const cropTransparentArea = async (blob: Blob): Promise<Blob> => {
       cropWidth,
       cropHeight,
     )
-    return canvasToPngBlob(outputCanvas)
+    return canvasToWebpBlob(outputCanvas)
   } finally {
     bitmap.close()
   }
@@ -110,7 +110,7 @@ export async function removeImageBackground(
   onProgress(2)
   const result = await removeBackground(file, {
     model: 'isnet_fp16',
-    output: { format: 'image/png', quality: 1, type: 'foreground' },
+    output: { format: 'image/webp', quality: 0.92, type: 'foreground' },
     progress: (_key: string, current: number, total: number) => {
       if (total > 0) onProgress(Math.min(95, Math.round((current / total) * 90)))
     },

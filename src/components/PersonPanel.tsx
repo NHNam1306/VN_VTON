@@ -23,7 +23,6 @@ const categories = Object.keys(garmentCategoryLabels) as GarmentCategory[]
 type PersonPanelProps = {
   onGenerate: () => Promise<void>
   onClearResults: () => void
-  onClearAllResults: () => void
   isGenerating: boolean
 }
 
@@ -32,7 +31,7 @@ export type PersonPanelHandle = {
 }
 
 export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(function PersonPanel(
-  { onGenerate, onClearResults, onClearAllResults, isGenerating },
+  { onGenerate, onClearResults, isGenerating },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -96,14 +95,13 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
     }
   }
 
-  const deleteUserData = async () => {
+  const deletePersonImage = async () => {
     setIsDeleting(true)
     setError(null)
     try {
-      await personApi.deleteAllUserData()
+      await personApi.deletePersonImage()
       clearUserData()
-      onClearAllResults()
-      setNotice('Đã xoá ảnh và toàn bộ kết quả của bạn.')
+      setNotice('Đã gỡ ảnh toàn thân. Các outfit và kết quả đã tạo vẫn được giữ lại.')
     } catch (deleteError) {
       setError(deleteError instanceof Error ? deleteError.message : 'Không thể xoá dữ liệu.')
     } finally {
@@ -147,7 +145,7 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
                 <button type="button" onClick={() => inputRef.current?.click()} disabled={isProcessing || isDeleting} className="flex flex-1 items-center justify-center gap-1.5 rounded-full border border-black/[0.06] bg-white/95 px-3.5 py-2 text-xs font-bold text-ink shadow-xs backdrop-blur-md transition hover:bg-white hover:shadow-sm">
                   <Upload size={13} /> Đổi ảnh
                 </button>
-                <button type="button" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting} className="grid size-9 place-items-center rounded-full border border-black/[0.06] bg-white/95 text-red-600 shadow-xs backdrop-blur-md transition hover:bg-red-50" aria-label="Xoá ảnh và kết quả">
+                <button type="button" onClick={() => setIsDeleteConfirmOpen(true)} disabled={isDeleting} className="grid size-9 place-items-center rounded-full border border-black/[0.06] bg-white/95 text-red-600 shadow-xs backdrop-blur-md transition hover:bg-red-50" aria-label="Gỡ ảnh toàn thân">
                   {isDeleting ? <LoaderCircle size={14} className="animate-spin" /> : <Trash2 size={14} />}
                 </button>
               </div>
@@ -197,7 +195,7 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
                   if (!garment) return null
                   return (
                     <div key={garment.id} className="flex h-11 items-center gap-2.5 rounded-2xl border border-black/[0.04] bg-white/70 px-2.5 transition-all">
-                      <img src={garment.frontProcessedUrl} alt="" className="size-8 rounded-xl bg-[#f4f2ec] object-contain p-0.5" />
+                      <img src={garment.frontProcessedUrl} alt="" loading="lazy" decoding="async" className="size-8 rounded-xl bg-[#f4f2ec] object-contain p-0.5" />
                       <span className="min-w-0 flex-1 truncate text-xs font-bold text-ink">{garment.name}</span>
                       <span className="grid size-5 place-items-center rounded-full bg-emerald-100 text-emerald-700">
                         <Check size={11} strokeWidth={3} />
@@ -211,7 +209,7 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
                 <div key={category} className="flex h-11 items-center gap-2.5 rounded-2xl border border-black/[0.04] bg-white/70 px-2.5 transition-all">
                   {garment ? (
                     <>
-                      <img src={garment.frontProcessedUrl} alt="" className="size-8 rounded-xl bg-[#f4f2ec] object-contain p-0.5" />
+                      <img src={garment.frontProcessedUrl} alt="" loading="lazy" decoding="async" className="size-8 rounded-xl bg-[#f4f2ec] object-contain p-0.5" />
                       <span className="min-w-0 flex-1 truncate text-xs font-bold text-ink">{garment.name}</span>
                       <span className="grid size-5 place-items-center rounded-full bg-emerald-100 text-emerald-700">
                         <Check size={11} strokeWidth={3} />
@@ -310,13 +308,13 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
 
       <ConfirmDialog
         open={isDeleteConfirmOpen}
-        title="Xoá ảnh và kết quả?"
-        description="Ảnh của bạn và toàn bộ kết quả thử đồ sẽ bị xoá vĩnh viễn. Hành động này không thể hoàn tác."
-        confirmLabel="Xoá tất cả"
+        title="Gỡ ảnh toàn thân?"
+        description="Chỉ ảnh bạn đã tải lên bị gỡ. Các outfit và kết quả thử đồ đã tạo vẫn được giữ lại."
+        confirmLabel="Gỡ ảnh"
         cancelLabel="Giữ lại"
         isBusy={isDeleting}
         onCancel={() => setIsDeleteConfirmOpen(false)}
-        onConfirm={() => void deleteUserData()}
+        onConfirm={() => void deletePersonImage()}
       />
     </aside>
   )

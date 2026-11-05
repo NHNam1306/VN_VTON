@@ -11,6 +11,7 @@ export type DeletedUserData = {
 export interface UserDataRepository {
   getPersonImage(userId: string): MaybePromise<PersonImageRecord | null>
   upsertPersonImage(userId: string, record: PersonImageRecord): MaybePromise<string | null>
+  deletePersonImage(userId: string): MaybePromise<string | null>
   listTryOnResults(userId: string): MaybePromise<TryOnResultRecord[]>
   upsertTryOnResult(userId: string, record: TryOnResultRecord): MaybePromise<void>
   listSavedOutfits(userId: string): MaybePromise<SavedOutfitRecord[]>

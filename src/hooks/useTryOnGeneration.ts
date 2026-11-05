@@ -11,7 +11,7 @@ const createInitialState = (): Record<TryOnAngle, AngleGenerationState> => ({
   back: { status: 'idle', result: null, error: null },
 })
 
-export function useTryOnGeneration() {
+export function useTryOnGeneration(enabled = true) {
   const [states, setStates] = useState(createInitialState)
   const [history, setHistory] = useState<SavedOutfit[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
@@ -41,6 +41,7 @@ export function useTryOnGeneration() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return
     Promise.all([tryOnApi.listResults(), tryOnApi.listOutfits()])
       .then(([results, outfits]) => {
         setStates((current) => {
@@ -56,7 +57,7 @@ export function useTryOnGeneration() {
         setHistoryError(error instanceof Error ? error.message : 'Không thể tải dữ liệu kết quả.')
       })
       .finally(() => setIsHistoryLoading(false))
-  }, [])
+  }, [enabled])
 
   const runAngle = useCallback(async (angle: TryOnAngle, ids: string[]) => {
     setStates((current) => ({

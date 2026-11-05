@@ -1,16 +1,10 @@
 import {
-  AlertTriangle,
   Check,
-  CheckSquare,
   ImagePlus,
-  Layers,
   LoaderCircle,
-  Maximize2,
   Sparkles,
-  Square,
   Upload,
   X,
-  ZoomIn,
 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import { normalizeBlob, type Category } from '../garment_normalizer'
@@ -19,6 +13,10 @@ import { removeImageBackground, validateGarmentImage } from '../services/backgro
 import { garmentApi, type AiExtractedGarment } from '../services/garment-api'
 import type { Garment, GarmentCategory } from '../types/fitting-room'
 import { garmentCategoryLabels } from '../types/fitting-room'
+import { ExtractedGarmentGrid } from './upload-garment/ExtractedGarmentGrid'
+import { GarmentPreviewLightbox } from './upload-garment/GarmentPreviewLightbox'
+import { PreviewCard } from './upload-garment/PreviewCard'
+import type { ExtractedGarmentCard, GarmentZoomImage } from './upload-garment/types'
 
 type UploadGarmentModalProps = {
   open: boolean
@@ -28,16 +26,6 @@ type UploadGarmentModalProps = {
 }
 
 type Side = 'front' | 'back'
-
-type MultiExtractedCard = {
-  id: string
-  category: GarmentCategory
-  name: string
-  description: string
-  blob: Blob
-  previewUrl: string
-  selected: boolean
-}
 
 const normalizerCategoryMap: Record<GarmentCategory, Category> = {
   tops: 'top',
@@ -55,56 +43,6 @@ const categoryExamples: Record<GarmentCategory, string> = {
   accessories: 'Ví dụ: Túi da nâu',
 }
 
-function PreviewCard({
-  label,
-  url,
-  emptyText,
-  onZoom,
-}: {
-  label: string
-  url: string | null
-  emptyText: string
-  onZoom?: () => void
-}) {
-  return (
-    <div className="flex h-full min-h-[175px] min-w-0 flex-col">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-ink/40">{label}</p>
-      <div
-        className={
-          'group relative flex flex-1 items-center justify-center overflow-hidden rounded-2xl border border-black/[0.08] bg-[radial-gradient(circle_at_center,#ffffff_0%,#f1efe9_100%)] shadow-sm transition-all ' +
-          (url ? 'cursor-zoom-in hover:border-black/25 hover:shadow-md' : '')
-        }
-        onClick={() => {
-          if (url && onZoom) onZoom()
-        }}
-        title={url ? 'Xem ảnh phóng to' : undefined}
-      >
-        {url ? (
-          <>
-            <img
-              src={url}
-              alt={label}
-              className="h-full w-full object-contain p-3.5 transition-transform duration-300 ease-out group-hover:scale-105"
-            />
-            <span className="viewfinder-corner-tl opacity-40" />
-            <span className="viewfinder-corner-tr opacity-40" />
-            <span className="viewfinder-corner-bl opacity-40" />
-            <span className="viewfinder-corner-br opacity-40" />
-
-            {/* Subtle Zoom button on hover */}
-            <span className="pointer-events-none absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-[10px] font-semibold text-white opacity-0 shadow-sm backdrop-blur-md transition-opacity duration-200 group-hover:opacity-100">
-              <Maximize2 size={10} />
-              <span>Phóng to</span>
-            </span>
-          </>
-        ) : (
-          <span className="px-4 text-center text-xs leading-5 text-ink/35">{emptyText}</span>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: UploadGarmentModalProps) {
   const [name, setName] = useState('')
   const [frontFile, setFrontFile] = useState<File | null>(null)
@@ -116,9 +54,10 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
   const [progress, setProgress] = useState(0)
   const [stepMessage, setStepMessage] = useState<string>('')
   const [isFluxRegenerated, setIsFluxRegenerated] = useState(false)
-  const [extractedItems, setExtractedItems] = useState<MultiExtractedCard[]>([])
-  const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null)
+  const [extractedItems, setExtractedItems] = useState<ExtractedGarmentCard[]>([])
+  const [zoomImage, setZoomImage] = useState<GarmentZoomImage | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const extractedItemsRef = useRef<ExtractedGarmentCard[]>([])
   const frontInput = useRef<HTMLInputElement>(null)
   const backInput = useRef<HTMLInputElement>(null)
   const nameInput = useRef<HTMLInputElement>(null)
@@ -127,6 +66,16 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
   const backOriginalUrl = useObjectUrl(backFile)
   const frontProcessedUrl = useObjectUrl(frontProcessed)
   const backProcessedUrl = useObjectUrl(backProcessed)
+
+  const replaceExtractedItems = useCallback((nextItems: ExtractedGarmentCard[]) => {
+    setExtractedItems((currentItems) => {
+      const retainedUrls = new Set(nextItems.map((item) => item.previewUrl))
+      currentItems.forEach((item) => {
+        if (!retainedUrls.has(item.previewUrl)) URL.revokeObjectURL(item.previewUrl)
+      })
+      return nextItems
+    })
+  }, [])
 
   const reset = useCallback(() => {
     setName('')
@@ -137,16 +86,24 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
     setProgress(0)
     setStepMessage('')
     setIsFluxRegenerated(false)
-    setExtractedItems([])
+    replaceExtractedItems([])
     setZoomImage(null)
     setError(null)
-  }, [])
+  }, [replaceExtractedItems])
 
   const close = useCallback(() => {
     if (isRemoving || isSaving) return
     reset()
     onClose()
   }, [isRemoving, isSaving, onClose, reset])
+
+  useEffect(() => {
+    extractedItemsRef.current = extractedItems
+  }, [extractedItems])
+
+  useEffect(() => () => {
+    extractedItemsRef.current.forEach((item) => URL.revokeObjectURL(item.previewUrl))
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -183,7 +140,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
       setFrontFile(file)
       setFrontProcessed(null)
       setIsFluxRegenerated(false)
-      setExtractedItems([])
+      replaceExtractedItems([])
     } else {
       setBackFile(file)
       setBackProcessed(null)
@@ -228,7 +185,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
 
       if (aiItems.length > 1) {
         // Có NHIỀU đồ trong 1 ảnh (ví dụ: áo, quần, trang sức...)
-        const multiCards: MultiExtractedCard[] = []
+        const multiCards: ExtractedGarmentCard[] = []
         for (const item of aiItems) {
           try {
             const resp = await fetch(item.studioImageUrl)
@@ -257,7 +214,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         }
 
         if (multiCards.length > 0) {
-          setExtractedItems(multiCards)
+          replaceExtractedItems(multiCards)
           const matched = multiCards.find((c) => c.category === defaultCategory) ?? multiCards[0]
           setFrontProcessed(matched.blob)
           if (!name.trim()) setName(matched.name)
@@ -265,7 +222,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         }
       } else if (aiItems.length === 1) {
         // Chỉ có 1 món đồ: chỉ hiện đồ chính ở trên, xóa danh sách bên dưới
-        setExtractedItems([])
+        replaceExtractedItems([])
         const single = aiItems[0]
         try {
           const resp = await fetch(single.studioImageUrl)
@@ -423,7 +380,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
     )
   }
 
-  const applyCardToForm = (item: MultiExtractedCard) => {
+  const applyCardToForm = (item: ExtractedGarmentCard) => {
     setName(item.name)
     setFrontProcessed(item.blob)
   }
@@ -626,170 +583,18 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
                 />
               </div>
 
-              {/* Multi-Garment Detected List (If photo contains multiple items like shirt, pants, shoes) */}
-              {extractedItems.length > 1 && (
-                <div className="rounded-3xl border border-violet-200/80 bg-gradient-to-br from-violet-50/70 via-white to-indigo-50/50 p-4 sm:p-5 shadow-sm">
-                  <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-violet-100 pb-3.5">
-                    <div className="flex items-center gap-3">
-                      <span className="grid size-9 place-items-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-sm">
-                        <Layers size={18} />
-                      </span>
-                      <div>
-                        <h4 className="text-sm font-bold text-ink">
-                          Phát hiện {extractedItems.length} món đồ trong ảnh
-                        </h4>
-                        <p className="text-[11px] text-ink/55">
-                          Mỗi món đã được tạo ảnh studio riêng biệt. Bạn có thể kiểm tra ảnh, sửa tên và lưu vào tủ đồ:
-                        </p>
-                      </div>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={() => void saveAllExtracted()}
-                      disabled={isSaving || extractedItems.filter((i) => i.selected).length === 0}
-                      className="flex items-center gap-2 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 px-4 py-2.5 text-xs font-bold text-white shadow-md transition hover:opacity-95 hover:shadow-lg disabled:opacity-40"
-                    >
-                      {isSaving ? <LoaderCircle size={14} className="animate-spin" /> : <Check size={14} strokeWidth={2.5} />}
-                      <span>
-                        Lưu tất cả ({extractedItems.filter((i) => i.selected).length}) món vào tủ đồ
-                      </span>
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                    {extractedItems.map((item, idx) => {
-                      const isCurrentPrimary =
-                        frontProcessed === item.blob || (!frontProcessed && (item.category === defaultCategory || idx === 0))
-                      return (
-                        <div
-                          key={item.id}
-                          className={
-                            'group relative flex flex-col justify-between overflow-hidden rounded-3xl border transition-all duration-200 ' +
-                            (item.selected
-                              ? 'border-violet-300 bg-white shadow-sm ring-1 ring-violet-200/50 hover:shadow-md'
-                              : 'border-black/[0.08] bg-white/70 opacity-60 hover:opacity-90')
-                          }
-                        >
-                          {/* Top Hero Image Showcase (Rõ nét, rộng rãi, chuẩn studio) */}
-                          <div className="relative flex aspect-square w-full items-center justify-center overflow-hidden border-b border-black/[0.06] bg-[radial-gradient(circle_at_center,#ffffff_0%,#f5f4ef_100%)] p-3">
-                            <img
-                              src={item.previewUrl}
-                              alt={item.name}
-                              className="size-full object-contain drop-shadow-sm transition-transform duration-300 ease-out group-hover:scale-105 cursor-zoom-in"
-                              onClick={() => setZoomImage({ url: item.previewUrl, title: item.name })}
-                              title="Nhấn để xem ảnh phóng to"
-                            />
-
-                            {/* Viewfinder corner accents */}
-                            <span className="viewfinder-corner-tl opacity-30" />
-                            <span className="viewfinder-corner-tr opacity-30" />
-                            <span className="viewfinder-corner-bl opacity-30" />
-                            <span className="viewfinder-corner-br opacity-30" />
-
-                            {/* Selection Checkbox (Góc trên trái) */}
-                            <button
-                              type="button"
-                              onClick={() => toggleSelectCard(item.id)}
-                              className="absolute left-2.5 top-2.5 z-10 grid size-7 place-items-center rounded-xl bg-white/90 shadow-sm backdrop-blur-md transition hover:scale-105"
-                              aria-label="Chọn món đồ"
-                              title={item.selected ? 'Bỏ chọn món này' : 'Chọn món này để lưu'}
-                            >
-                              {item.selected ? (
-                                <span className="grid size-5 place-items-center rounded-lg bg-violet-600 text-white shadow-xs">
-                                  <Check size={13} strokeWidth={3} />
-                                </span>
-                              ) : (
-                                <span className="size-5 rounded-lg border-2 border-black/20 bg-white" />
-                              )}
-                            </button>
-
-                            {/* Nút phóng to ảnh (Góc trên phải, hover hiện lên) */}
-                            <button
-                              type="button"
-                              onClick={() => setZoomImage({ url: item.previewUrl, title: item.name })}
-                              className="absolute right-2.5 top-2.5 z-10 grid size-7 place-items-center rounded-xl bg-black/60 text-white opacity-0 shadow-sm backdrop-blur-md transition-all duration-200 group-hover:opacity-100 hover:bg-black/80"
-                              title="Phóng to ảnh"
-                              aria-label="Phóng to ảnh"
-                            >
-                              <Maximize2 size={13} />
-                            </button>
-
-                            {/* Status badge (Góc dưới trái) */}
-                            <div className="absolute bottom-2.5 left-2.5 z-10 flex items-center gap-1.5">
-                              {isCurrentPrimary ? (
-                                <span className="flex items-center gap-1 rounded-full bg-violet-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-sm backdrop-blur-md">
-                                  <Sparkles size={11} />
-                                  <span>Đồ chính ở trên</span>
-                                </span>
-                              ) : (
-                                <span className="flex items-center gap-1 rounded-full bg-black/70 px-2.5 py-1 text-[10px] font-semibold text-white/90 shadow-sm backdrop-blur-md">
-                                  <span>{garmentCategoryLabels[item.category]}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Thông tin & Tên món đồ (Hiển thị đầy đủ chữ, không bị cắt cụt) */}
-                          <div className="flex flex-1 flex-col justify-between p-3.5 space-y-3">
-                            <div className="space-y-2.5">
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-ink/45">
-                                  Tên món đồ
-                                </label>
-                                <input
-                                  type="text"
-                                  value={item.name}
-                                  onChange={(e) => updateCardName(item.id, e.target.value)}
-                                  placeholder="Tên món đồ..."
-                                  className="w-full rounded-xl border border-black/10 bg-black/[0.02] px-3 py-1.5 text-xs font-bold text-ink outline-none transition placeholder:text-ink/25 focus:border-violet-500 focus:bg-white focus:ring-2 focus:ring-violet-100"
-                                  title={item.name}
-                                />
-                              </div>
-
-                              <div>
-                                <label className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-ink/45">
-                                  Phân loại tủ đồ
-                                </label>
-                                <select
-                                  value={item.category}
-                                  onChange={(e) => updateCardCategory(item.id, e.target.value as GarmentCategory)}
-                                  className="w-full rounded-xl border border-black/10 bg-white px-3 py-1.5 text-xs font-semibold text-ink/80 outline-none transition focus:border-violet-500 focus:ring-2 focus:ring-violet-100"
-                                >
-                                  {Object.entries(garmentCategoryLabels).map(([catKey, label]) => (
-                                    <option key={catKey} value={catKey}>
-                                      {label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            </div>
-
-                            {/* Nút hành động chính */}
-                            <div className="pt-1">
-                              {isCurrentPrimary ? (
-                                <div className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-violet-200 bg-violet-50/80 py-2 text-[11px] font-bold text-violet-700">
-                                  <Check size={13} strokeWidth={2.5} />
-                                  <span>Đang chọn hiển thị ở trên</span>
-                                </div>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => applyCardToForm(item)}
-                                  className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-black/10 bg-white py-2 text-[11px] font-bold text-ink/75 shadow-xs transition hover:border-violet-400 hover:bg-violet-600 hover:text-white"
-                                >
-                                  <Sparkles size={12} />
-                                  <span>Chọn làm ảnh chính</span>
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
+              <ExtractedGarmentGrid
+                items={extractedItems}
+                primaryBlob={frontProcessed}
+                defaultCategory={defaultCategory}
+                isSaving={isSaving}
+                onSaveAll={() => void saveAllExtracted()}
+                onToggle={toggleSelectCard}
+                onNameChange={updateCardName}
+                onCategoryChange={updateCardCategory}
+                onMakePrimary={applyCardToForm}
+                onZoom={setZoomImage}
+              />
 
               {error && (
                 <div
@@ -828,62 +633,13 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         </form>
       </section>
 
-      {/* Lightbox Modal: Phóng to ảnh khi nhấn vào bất kỳ ảnh nào */}
       {zoomImage && (
-        <div
-          className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 p-3 sm:p-8 backdrop-blur-md animate-in fade-in duration-200"
-          role="dialog"
-          aria-modal="true"
-          aria-label={`Phóng to ${zoomImage.title}`}
-          onClick={() => setZoomImage(null)}
-        >
-          <div
-            className="relative flex max-h-[calc(100dvh-1.5rem)] w-full max-w-4xl flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/10 bg-[#161616]/95 p-4 shadow-2xl backdrop-blur-2xl sm:max-h-[92dvh] sm:p-6"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <header className="mb-3 flex w-full items-center justify-between gap-3 border-b border-white/10 pb-3 text-white">
-              <div className="flex items-center gap-2.5">
-                <span className="grid size-8 place-items-center rounded-xl bg-white/10 text-white shadow-inner">
-                  <ZoomIn size={16} />
-                </span>
-                <div className="min-w-0">
-                  <p className="text-sm font-bold text-white tracking-wide truncate">{zoomImage.title}</p>
-                  <p className="text-[11px] text-white/50 truncate">
-                    {name.trim() || categoryLabel} · Kích thước xem đầy đủ
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setZoomImage(null)}
-                className="grid size-9 shrink-0 place-items-center rounded-full border border-white/10 bg-white/10 text-white/80 transition hover:bg-white/20 hover:text-white"
-                aria-label="Đóng phóng to"
-              >
-                <X size={18} />
-              </button>
-            </header>
-
-            {/* Image Preview Container */}
-            <div className="relative flex max-h-[72dvh] w-full items-center justify-center overflow-hidden rounded-2xl bg-[radial-gradient(circle_at_center,#262626_0%,#0f0f0f_100%)] p-3 shadow-inner sm:p-4">
-              <img
-                src={zoomImage.url}
-                alt={zoomImage.title}
-                className="max-h-[68dvh] w-auto max-w-full object-contain drop-shadow-[0_20px_40px_rgba(0,0,0,0.6)] select-none"
-              />
-            </div>
-
-            <div className="mt-3 flex w-full items-center justify-between text-[11px] text-white/40">
-              <span>Nhấn ESC hoặc bấm ra ngoài để đóng</span>
-              <button
-                type="button"
-                onClick={() => setZoomImage(null)}
-                className="rounded-xl border border-white/10 bg-white/10 px-4 py-1.5 font-bold text-white/90 transition hover:bg-white/20"
-              >
-                Đóng
-              </button>
-            </div>
-          </div>
-        </div>
+        <GarmentPreviewLightbox
+          image={zoomImage}
+          garmentName={name}
+          categoryLabel={categoryLabel}
+          onClose={() => setZoomImage(null)}
+        />
       )}
     </div>
   )

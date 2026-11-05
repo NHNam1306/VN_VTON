@@ -44,7 +44,7 @@ export function NotificationBell() {
     let active = true
     const refresh = async () => {
       try {
-        const data = await socialApi.snapshot()
+        const data = await socialApi.snapshot({ force: true })
         if (active) {
           setNotifications(data.notifications)
           setError('')
@@ -58,7 +58,7 @@ export function NotificationBell() {
     void refresh()
     const timer = window.setInterval(() => {
       if (!document.hidden) void refresh()
-    }, 15_000)
+    }, 60_000)
     return () => {
       active = false
       window.clearInterval(timer)

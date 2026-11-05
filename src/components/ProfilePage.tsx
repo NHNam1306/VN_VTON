@@ -24,8 +24,6 @@ import { Avatar } from './social/Avatar'
 
 type ProfilePageProps = {
   user: AuthUser
-  garmentCount: number
-  outfitCount: number
   avatarUrl: string | null
   onAvatarChange: (avatarUrl: string | null) => void
   onNavigate: (view: AppView) => void
@@ -54,8 +52,6 @@ const formatOutfitDate = (value: string) =>
 
 export function ProfilePage({
   user,
-  garmentCount,
-  outfitCount,
   avatarUrl,
   onAvatarChange,
   onNavigate,
@@ -234,7 +230,7 @@ export function ProfilePage({
                     className="group text-left transition hover:opacity-80"
                   >
                     <strong className="block font-display text-lg font-extrabold tracking-tight text-ink">
-                      {outfitCount}
+                      {savedOutfits.length}
                     </strong>
                     <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">outfit</span>
                   </button>
@@ -245,7 +241,7 @@ export function ProfilePage({
                     className="group text-left transition hover:opacity-80"
                   >
                     <strong className="block font-display text-lg font-extrabold tracking-tight text-ink">
-                      {garmentCount}
+                      {garments.length}
                     </strong>
                     <span className="text-[11px] font-medium text-ink/45 group-hover:text-ink">món đồ</span>
                   </button>
@@ -365,6 +361,8 @@ export function ProfilePage({
                   <img
                     src={outfit.frontImageUrl}
                     alt={`Bộ ảnh lookbook ${index + 1}`}
+                    loading="lazy"
+                    decoding="async"
                     className="h-full w-full object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
                   />
 
@@ -478,6 +476,8 @@ export function ProfilePage({
                     <img
                       src={garment.frontProcessedUrl || garment.frontOriginalUrl}
                       alt={garment.name}
+                      loading="lazy"
+                      decoding="async"
                       className="h-full w-full object-contain p-3 transition-transform duration-300 group-hover:scale-105"
                     />
                     <span className="absolute left-2.5 top-2.5 rounded-full border border-black/[0.08] bg-white/90 px-2 py-0.5 text-[9px] font-bold text-ink/75 backdrop-blur-md">

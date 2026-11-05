@@ -39,6 +39,7 @@ export function createApp(
   rateLimitStore?: RateLimitStore,
 ) {
   const app = express()
+  const ownImageKeyRequests = new Map<string, Promise<Set<string>>>()
   const sharedRateLimits = rateLimitStore ?? new MemoryRateLimitStore()
   app.disable('x-powered-by')
   if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
@@ -66,6 +67,33 @@ export function createApp(
   const decorateUser = admin ? (user: Parameters<AdminService['resolveAuthenticatedUser']>[0]) => admin.resolveAuthenticatedUser(user) : undefined
   app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits))
   const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser)
+
+  const getOwnImageKeys = (userId: string) => {
+    const pending = ownImageKeyRequests.get(userId)
+    if (pending) return pending
+    const request = Promise.all([
+      repository.list(userId),
+      userDataRepository.getPersonImage(userId),
+      userDataRepository.listTryOnResults(userId),
+      userDataRepository.listSavedOutfits(userId),
+    ]).then(([garments, person, results, outfits]) => new Set([
+      ...garments.flatMap((item) => [
+        item.frontOriginalKey, item.frontProcessedKey, item.backOriginalKey, item.backProcessedKey,
+      ]),
+      person?.imageKey,
+      ...results.map((item) => item.imageKey),
+      ...outfits.flatMap((item) => [item.frontImageKey, item.backImageKey]),
+    ].filter((value): value is string => Boolean(value))))
+    ownImageKeyRequests.set(userId, request)
+    const scheduleCleanup = () => {
+      setTimeout(() => {
+        if (ownImageKeyRequests.get(userId) === request) ownImageKeyRequests.delete(userId)
+      }, 500)
+    }
+    void request.then(scheduleCleanup, scheduleCleanup)
+    return request
+  }
+
   app.get('/uploads/:key', requireAuth, async (request, response, next) => {
     try {
       const rawKey = request.params.key
@@ -74,25 +102,16 @@ export function createApp(
         return
       }
       const key = decodeURIComponent(rawKey)
-      response.setHeader('Cache-Control', 'private, no-store')
-      const [garments, person, results, outfits] = await Promise.all([
-        repository.list(request.authUser.id),
-        userDataRepository.getPersonImage(request.authUser.id),
-        userDataRepository.listTryOnResults(request.authUser.id),
-        userDataRepository.listSavedOutfits(request.authUser.id),
-      ])
-      const isOwnImage = garments.some((item) => [
-        item.frontOriginalKey, item.frontProcessedKey, item.backOriginalKey, item.backProcessedKey,
-      ].includes(key))
-        || person?.imageKey === key
-        || results.some((item) => item.imageKey === key)
-        || outfits.some((item) => item.frontImageKey === key || item.backImageKey === key)
-      const canReadSharedImage = social ? await social.canReadImage(request.authUser.id, key) : false
+      const isOwnImage = (await getOwnImageKeys(request.authUser.id)).has(key)
+      const canReadSharedImage = !isOwnImage && social
+        ? await social.canReadImage(request.authUser.id, key)
+        : false
       if (!isOwnImage && !canReadSharedImage) {
         response.status(404).end()
         return
       }
       const image = await images.read(key)
+      response.setHeader('Cache-Control', 'private, max-age=86400, immutable')
       response.type(image.mimeType).send(image.buffer)
     } catch (error) {
       next(error)

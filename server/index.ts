@@ -140,12 +140,22 @@ if (isDevelopment) {
   app.use(vite.middlewares)
 } else {
   const frontendDirectory = path.resolve('dist')
-  app.use(express.static(frontendDirectory))
+  app.use(express.static(frontendDirectory, {
+    index: false,
+    setHeaders: (response, filePath) => {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        response.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      } else {
+        response.setHeader('Cache-Control', 'no-cache')
+      }
+    },
+  }))
   app.use((request, response, next) => {
     if (request.method !== 'GET' || request.path.startsWith('/api/') || request.path.startsWith('/uploads/')) {
       next()
       return
     }
+    response.setHeader('Cache-Control', 'no-cache')
     response.sendFile(path.join(frontendDirectory, 'index.html'))
   })
 }

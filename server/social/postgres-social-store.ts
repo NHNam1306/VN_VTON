@@ -25,8 +25,12 @@ const imageKeyFromUrl = (value: string): string | null => {
 }
 
 export class PostgresSocialStore implements SocialService {
+  private readCache: { expiresAt: number; request: Promise<{ state: State; context: Context }> } | null = null
+
   constructor(private readonly pool: PostgresPool) {}
   async close(): Promise<void> {}
+
+  private invalidateReadCache() { this.readCache = null }
 
   private async context(client: PostgresPool | PoolClient): Promise<Context> {
     const [usersResult, outfitsResult, keysResult] = await Promise.all([
@@ -64,16 +68,26 @@ export class PostgresSocialStore implements SocialService {
   }
 
   private async read<T>(fn: (state: State, context: Context) => T): Promise<T> {
-    const [stateResult, context] = await Promise.all([
-      this.pool.query<{ data: State }>('SELECT data FROM social_state WHERE id = 1'),
-      this.context(this.pool),
-    ])
-    const state = stateResult.rows[0]?.data
-    if (!state) throw new Error('Migration social_state chưa được chạy.')
+    if (!this.readCache || this.readCache.expiresAt <= Date.now()) {
+      const request = Promise.all([
+        this.pool.query<{ data: State }>('SELECT data FROM social_state WHERE id = 1'),
+        this.context(this.pool),
+      ]).then(([stateResult, context]) => {
+        const state = stateResult.rows[0]?.data
+        if (!state) throw new Error('Migration social_state chưa được chạy.')
+        return { state, context }
+      }).catch((error) => {
+        this.invalidateReadCache()
+        throw error
+      })
+      this.readCache = { expiresAt: Date.now() + 3_000, request }
+    }
+    const { state, context } = await this.readCache.request
     return fn(state, context)
   }
 
   private async change<T>(fn: (state: State, context: Context) => T): Promise<T> {
+    this.invalidateReadCache()
     const client = await this.pool.connect()
     try {
       await client.query('BEGIN')
@@ -90,6 +104,7 @@ export class PostgresSocialStore implements SocialService {
       throw error
     } finally {
       client.release()
+      this.invalidateReadCache()
     }
   }
 

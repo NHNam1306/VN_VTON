@@ -1,28 +1,31 @@
 import { LoaderCircle, Shirt, Sparkles } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { AuthPage } from './components/AuthPage'
-import { AdminPage } from './components/admin/AdminPage'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Header } from './components/Header'
-import { KocStudioPage } from './components/KocStudioPage'
 import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
-import { OnboardingFlow } from './components/OnboardingFlow'
-import { OutfitHistory } from './components/OutfitHistory'
-import { PersonPanel, type PersonPanelHandle } from './components/PersonPanel'
-import { ProfilePage } from './components/ProfilePage'
-import { SettingsPage } from './components/SettingsPage'
-import { SocialPage } from './components/social/SocialPage'
-import { ResultStage } from './components/ResultStage'
-import { UploadGarmentModal } from './components/UploadGarmentModal'
-import { WardrobePanel } from './components/WardrobePanel'
+import type { PersonPanelHandle } from './components/PersonPanel'
 import { useTryOnGeneration } from './hooks/useTryOnGeneration'
 import { appViewPaths, resolveAppView, type AppView } from './navigation'
 import { authApi } from './services/auth-api'
 import { garmentApi } from './services/garment-api'
 import { personApi } from './services/person-api'
 import { socialApi } from './services/social-api'
+import { tryOnApi } from './services/try-on-api'
 import { useFittingRoomStore } from './store/useFittingRoomStore'
 import type { AuthUser } from './types/auth'
 import { MAX_SELECTED_GARMENTS, MAX_WARDROBE_GARMENTS } from './types/fitting-room'
+
+const AuthPage = lazy(() => import('./components/AuthPage').then((module) => ({ default: module.AuthPage })))
+const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
+const KocStudioPage = lazy(() => import('./components/KocStudioPage').then((module) => ({ default: module.KocStudioPage })))
+const OnboardingFlow = lazy(() => import('./components/OnboardingFlow').then((module) => ({ default: module.OnboardingFlow })))
+const OutfitHistory = lazy(() => import('./components/OutfitHistory').then((module) => ({ default: module.OutfitHistory })))
+const PersonPanel = lazy(() => import('./components/PersonPanel').then((module) => ({ default: module.PersonPanel })))
+const ProfilePage = lazy(() => import('./components/ProfilePage').then((module) => ({ default: module.ProfilePage })))
+const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const SocialPage = lazy(() => import('./components/social/SocialPage').then((module) => ({ default: module.SocialPage })))
+const ResultStage = lazy(() => import('./components/ResultStage').then((module) => ({ default: module.ResultStage })))
+const UploadGarmentModal = lazy(() => import('./components/UploadGarmentModal').then((module) => ({ default: module.UploadGarmentModal })))
+const WardrobePanel = lazy(() => import('./components/WardrobePanel').then((module) => ({ default: module.WardrobePanel })))
 
 type FittingRoomAppProps = {
   user: AuthUser
@@ -32,6 +35,17 @@ type FittingRoomAppProps = {
 
 const runViewTransition = (update: () => void) => {
   update()
+}
+
+function PageFallback() {
+  return (
+    <div className="grid min-h-[45dvh] place-items-center" role="status" aria-live="polite">
+      <div className="text-center text-ink/45">
+        <LoaderCircle size={22} className="mx-auto animate-spin" />
+        <p className="mt-3 text-xs font-semibold">Đang tải…</p>
+      </div>
+    </div>
+  )
 }
 
 function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps) {
@@ -44,6 +58,8 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const [activeView, setActiveView] = useState<AppView>(() => resolveAppView(window.location.pathname) ?? 'feed')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
+  const workspaceLoadedRef = useRef(false)
+  const mountedRef = useRef(true)
   const activeCategory = useFittingRoomStore((state) => state.activeCategory)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
@@ -55,7 +71,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const setError = useFittingRoomStore((state) => state.setWardrobeError)
   const setPersonImage = useFittingRoomStore((state) => state.setPersonImage)
   const resetWorkspace = useFittingRoomStore((state) => state.resetWorkspace)
-  const generation = useTryOnGeneration()
+  const generation = useTryOnGeneration(activeView === 'fitting' || activeView === 'outfits')
   const selectedCount = [
     outfit.tops,
     outfit.outerwear,
@@ -68,6 +84,11 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
     document.documentElement.classList.toggle('dark', darkMode)
     window.localStorage.setItem('tryoh:theme', darkMode ? 'dark' : 'light')
   }, [darkMode])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   useEffect(() => {
     let current = true
@@ -115,6 +136,9 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
     setIsLoggingOut(true)
     try {
       await authApi.logout()
+      garmentApi.clearCache()
+      socialApi.clearCache()
+      tryOnApi.clearCache()
       resetWorkspace()
       onLoggedOut()
     } catch (error) {
@@ -130,6 +154,9 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   }
 
   useEffect(() => {
+    const shouldLoadWorkspace = showOnboarding || activeView === 'wardrobe' || activeView === 'fitting'
+    if (!shouldLoadWorkspace || workspaceLoadedRef.current) return
+    workspaceLoadedRef.current = true
     const loadWardrobe = async () => {
       setLoading(true)
       setError(null)
@@ -138,16 +165,19 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
           garmentApi.list(),
           personApi.get(),
         ])
-        setGarments(savedGarments)
-        setPersonImage(personImage)
+        if (mountedRef.current) {
+          setGarments(savedGarments)
+          setPersonImage(personImage)
+        }
       } catch (error) {
-        setError(error instanceof Error ? error.message : 'Không thể tải tủ đồ.')
+        workspaceLoadedRef.current = false
+        if (mountedRef.current) setError(error instanceof Error ? error.message : 'Không thể tải tủ đồ.')
       } finally {
-        setLoading(false)
+        if (mountedRef.current) setLoading(false)
       }
     }
     void loadWardrobe()
-  }, [setError, setGarments, setLoading, setPersonImage])
+  }, [activeView, setError, setGarments, setLoading, setPersonImage, showOnboarding])
 
   return (
     <div className="min-h-[100dvh] bg-canvas pb-[calc(6.5rem+env(safe-area-inset-bottom))] text-ink bg-[radial-gradient(ellipse_80%_60%_at_50%_-10%,rgba(215,223,212,0.32),transparent_70%),radial-gradient(circle_at_bottom_right,rgba(235,230,220,0.35),transparent_50%)] lg:pb-0">
@@ -162,6 +192,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         avatarUrl={avatarUrl}
       />
 
+      <Suspense fallback={<PageFallback />}>
       <div key={activeView} className="app-page-transition">
         {(activeView === 'feed' || activeView === 'friends') && <SocialPage mode={activeView} composeSignal={composeSignal} onCreateOutfit={() => navigate('fitting')} />}
         {activeView === 'wardrobe' && (
@@ -249,7 +280,6 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
                   ref={personPanelRef}
                   onGenerate={generation.generateAll}
                   onClearResults={generation.clearResults}
-                  onClearAllResults={generation.clearAllResults}
                   isGenerating={generation.isGenerating}
                 />
               </div>
@@ -278,8 +308,6 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         {activeView === 'profile' && (
           <ProfilePage
             user={user}
-            garmentCount={garments.length}
-            outfitCount={generation.history.length}
             onNavigate={navigate}
             avatarUrl={avatarUrl}
             onAvatarChange={setAvatarUrl}
@@ -298,13 +326,18 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
           />
         )}
       </div>
+      </Suspense>
 
-      <UploadGarmentModal
-        open={isUploadOpen}
-        defaultCategory={activeCategory}
-        onClose={() => setIsUploadOpen(false)}
-        onSaved={addGarment}
-      />
+      {isUploadOpen && (
+        <Suspense fallback={null}>
+          <UploadGarmentModal
+            open
+            defaultCategory={activeCategory}
+            onClose={() => setIsUploadOpen(false)}
+            onSaved={addGarment}
+          />
+        </Suspense>
+      )}
       <MobileNavigation activeView={activeView} onNavigate={navigate} onQuickAction={() => setIsQuickActionOpen(true)} />
       <QuickActionSheet
         open={isQuickActionOpen}
@@ -315,15 +348,17 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         onKoc={() => navigate('koc')}
       />
       {showOnboarding && (
-        <OnboardingFlow
-          user={user}
-          hasGarments={garments.length > 0}
-          onComplete={(destination) => {
-            setShowOnboarding(false)
-            if (destination === 'upload') openGarmentUpload()
-            else navigate('fitting')
-          }}
-        />
+        <Suspense fallback={null}>
+          <OnboardingFlow
+            user={user}
+            hasGarments={garments.length > 0}
+            onComplete={(destination) => {
+              setShowOnboarding(false)
+              if (destination === 'upload') openGarmentUpload()
+              else navigate('fitting')
+            }}
+          />
+        </Suspense>
       )}
     </div>
   )
@@ -347,7 +382,7 @@ function App() {
   }
 
   if (!user) {
-    return <><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} />{startupError && <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[120] rounded-xl bg-red-600 px-4 py-2 text-center text-xs text-white shadow-lg sm:left-1/2 sm:right-auto sm:-translate-x-1/2">{startupError}</div>}</>
+    return <><Suspense fallback={<PageFallback />}><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} /></Suspense>{startupError && <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[120] rounded-xl bg-red-600 px-4 py-2 text-center text-xs text-white shadow-lg sm:left-1/2 sm:right-auto sm:-translate-x-1/2">{startupError}</div>}</>
   }
 
   return <FittingRoomApp user={user} onLoggedOut={() => setUser(null)} onUserUpdate={(updated) => setUser(updated)} />

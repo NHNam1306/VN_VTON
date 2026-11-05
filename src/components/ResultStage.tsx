@@ -204,7 +204,7 @@ export function ResultStage({ states, onRegenerate, onSelectImage }: ResultStage
                 className="flex shrink-0 items-center gap-2.5 rounded-2xl border border-black/[0.06] bg-white/85 p-1.5 pr-3 text-xs font-bold text-ink shadow-2xs backdrop-blur-sm transition-transform hover:-translate-y-0.5"
               >
                 <div className="relative size-9 overflow-hidden rounded-xl bg-[#f4f2ec] p-0.5">
-                  <img src={garment.frontProcessedUrl} alt="" className="size-full object-contain" />
+                  <img src={garment.frontProcessedUrl} alt="" loading="lazy" decoding="async" className="size-full object-contain" />
                   <span className="absolute bottom-0 right-0 rounded-tl-md bg-black/60 px-1 font-mono text-[7.5px] font-bold text-white">
                     {idx + 1}
                   </span>
