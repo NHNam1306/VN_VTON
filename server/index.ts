@@ -32,6 +32,19 @@ import {
   PostgresRateLimitStore,
   type RateLimitStore,
 } from './http/rate-limit.js'
+import { CreditService } from './credits/credit-service.js'
+import { PostgresCreditRepository } from './credits/postgres-credit-repository.js'
+import { SqliteCreditRepository } from './credits/sqlite-credit-repository.js'
+import { PlanService } from './plans/plan-service.js'
+import { PostgresPlanRepository } from './plans/postgres-plan-repository.js'
+import { SqlitePlanRepository } from './plans/sqlite-plan-repository.js'
+import { BillingService } from './billing/billing-service.js'
+import { PostgresBillingRepository } from './billing/postgres-billing-repository.js'
+import { SqliteBillingRepository } from './billing/sqlite-billing-repository.js'
+import { PayosGateway } from './billing/payos-gateway.js'
+import { MomoGateway } from './billing/momo-gateway.js'
+import type { PaymentGateway } from './billing/types.js'
+import { ExcelPaymentLedger } from './billing/excel-payment-ledger.js'
 
 const port = Number(process.env.PORT ?? 8787)
 const isDevelopment = process.argv.includes('--dev')
@@ -111,6 +124,51 @@ const admin=new AdminService(adminRepository,runtimeConfig.adminEmails)
 const rateLimitStore: RateLimitStore = persistenceBackend === 'postgres'
   ? new PostgresRateLimitStore(postgresPool!)
   : new MemoryRateLimitStore()
+const planService = new PlanService(
+  persistenceBackend === 'postgres'
+    ? new PostgresPlanRepository(postgresPool!)
+    : new SqlitePlanRepository(sqliteDatabasePath!),
+)
+const creditService = new CreditService(
+  persistenceBackend === 'postgres'
+    ? new PostgresCreditRepository(postgresPool!)
+    : new SqliteCreditRepository(sqliteDatabasePath!),
+  planService,
+)
+const paymentGateways: PaymentGateway[] = []
+if (process.env.PAYOS_CLIENT_ID && process.env.PAYOS_API_KEY && process.env.PAYOS_CHECKSUM_KEY) {
+  paymentGateways.push(new PayosGateway({
+    clientId: process.env.PAYOS_CLIENT_ID,
+    apiKey: process.env.PAYOS_API_KEY,
+    checksumKey: process.env.PAYOS_CHECKSUM_KEY,
+  }))
+}
+if (process.env.MOMO_PARTNER_CODE && process.env.MOMO_ACCESS_KEY && process.env.MOMO_SECRET_KEY) {
+  const momoEndpoint = process.env.MOMO_ENDPOINT
+    ?? (process.env.MOMO_ENVIRONMENT === 'production'
+      ? 'https://payment.momo.vn/v2/gateway/api/create'
+      : 'https://test-payment.momo.vn/v2/gateway/api/create')
+  paymentGateways.push(new MomoGateway({
+    partnerCode: process.env.MOMO_PARTNER_CODE,
+    accessKey: process.env.MOMO_ACCESS_KEY,
+    secretKey: process.env.MOMO_SECRET_KEY,
+    endpoint: momoEndpoint,
+    requestType: process.env.MOMO_REQUEST_TYPE ?? 'captureWallet',
+  }))
+}
+const billingRepository = persistenceBackend === 'postgres'
+    ? new PostgresBillingRepository(postgresPool!)
+    : new SqliteBillingRepository(sqliteDatabasePath!)
+const paymentLedger = new ExcelPaymentLedger(
+  billingRepository,
+  path.join(dataDirectory, 'reports', 'payment-transactions.xlsx'),
+)
+const billingService = new BillingService(
+  billingRepository,
+  paymentGateways,
+  appBaseUrl,
+  paymentLedger,
+)
 const app = createApp(
   repository,
   userDataRepository,
@@ -123,6 +181,9 @@ const app = createApp(
   social,
   admin,
   rateLimitStore,
+  creditService,
+  planService,
+  billingService,
 )
 const server = createHttpServer(app)
 let closeVite: (() => Promise<void>) | undefined
@@ -177,6 +238,9 @@ const shutdown = async () => {
     void social.close()
     void admin.close()
     void rateLimitStore.close?.()
+    void creditService.close()
+    void planService.close()
+    void billingService.close()
     void postgresPool?.end()
     process.exit(0)
   })

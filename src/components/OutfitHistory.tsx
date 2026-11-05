@@ -17,6 +17,7 @@ type OutfitHistoryProps = {
   onBack: () => void
   onUpdateOutfit?: (id: string, updates: Partial<SavedOutfit>) => void
   onEditInFitting?: (outfit: SavedOutfit) => void
+  maxSavedOutfits?: number
 }
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('vi-VN', {
@@ -32,6 +33,7 @@ export function OutfitHistory({
   onBack,
   onUpdateOutfit,
   onEditInFitting,
+  maxSavedOutfits = MAX_SAVED_OUTFITS,
 }: OutfitHistoryProps) {
   const [social, setSocial] = useState<SocialSnapshot | null>(null)
   useEffect(() => {
@@ -121,7 +123,7 @@ export function OutfitHistory({
           </div>
           <div className="flex items-center gap-3 self-start sm:self-auto">
             <span className="rounded-full border border-black/[0.07] bg-black/[0.035] px-3 py-2 text-xs font-bold text-ink/65">
-              {outfits.length}/{MAX_SAVED_OUTFITS} bộ
+              {outfits.length}/{maxSavedOutfits} bộ
             </span>
             <button
               type="button"

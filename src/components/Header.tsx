@@ -1,4 +1,4 @@
-import { BadgeDollarSign, Home, Images, LogOut, Settings, ShieldCheck, Shirt, UserRound, Users, WandSparkles } from 'lucide-react'
+import { BadgeDollarSign, Crown, Home, Images, LogOut, Settings, ShieldCheck, Shirt, UserRound, Users, WandSparkles } from 'lucide-react'
 import { startTransition, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { appViewPaths, type AppView } from '../navigation'
 import type { AuthUser } from '../types/auth'
@@ -41,7 +41,7 @@ export function Header({
   onLogout,
   avatarUrl,
 }: HeaderProps) {
-  const navigationView = activeView === 'settings' ? 'profile' : activeView
+  const navigationView = activeView === 'settings' || activeView === 'plans' ? 'profile' : activeView
   const targetIndex = Math.max(0, navigationItems.findIndex((item) => item.view === navigationView))
 
   const [slider, setSlider] = useState<{
@@ -207,6 +207,7 @@ export function Header({
               <p className="max-w-28 truncate text-[11px] font-bold text-ink leading-tight">{user.displayName}</p>
               <p className="max-w-28 truncate text-[8.5px] font-medium text-ink/40">{user.email}</p>
             </div>
+            <button type="button" onClick={() => onViewChange('plans')} className={`grid size-9 shrink-0 place-items-center rounded-full transition sm:size-7 ${activeView === 'plans' ? 'bg-amber-100 text-amber-800' : 'text-ink/35 hover:bg-amber-50 hover:text-amber-700'}`} aria-label="Xem gói đăng ký" title="Gói đăng ký"><Crown size={13} /></button>
             <button type="button" onClick={() => onViewChange('settings')} className={`grid size-9 shrink-0 place-items-center rounded-full transition sm:size-7 ${activeView === 'settings' ? 'bg-sage-100 text-sage-800' : 'text-ink/35 hover:bg-sage-50 hover:text-ink/70'}`} aria-label="Mở cài đặt" title="Cài đặt"><Settings size={13} /></button>
             <button type="button" onClick={onLogout} disabled={isLoggingOut} className="grid size-9 shrink-0 place-items-center rounded-full text-ink/35 transition hover:bg-red-50 hover:text-red-600 disabled:opacity-40 sm:size-7" aria-label="Đăng xuất" title="Đăng xuất"><LogOut size={13} /></button>
           </div>

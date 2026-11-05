@@ -1,5 +1,6 @@
 import {
   Check,
+  Coins,
   ImagePlus,
   LoaderCircle,
   Maximize2,
@@ -15,6 +16,7 @@ import { personApi } from '../services/person-api'
 import { processPersonImage, validatePersonImage } from '../services/person-image-processing'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
 import { garmentCategoryLabels, MAX_SELECTED_GARMENTS, type GarmentCategory } from '../types/fitting-room'
+import type { CreditStatus } from '../types/fitting-room'
 import { ConfirmDialog } from './ConfirmDialog'
 import { ImageLightbox } from './ImageLightbox'
 
@@ -24,6 +26,8 @@ type PersonPanelProps = {
   onGenerate: () => Promise<void>
   onClearResults: () => void
   isGenerating: boolean
+  creditStatus: CreditStatus | null
+  onOpenPlans: () => void
 }
 
 export type PersonPanelHandle = {
@@ -31,7 +35,7 @@ export type PersonPanelHandle = {
 }
 
 export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(function PersonPanel(
-  { onGenerate, onClearResults, isGenerating },
+  { onGenerate, onClearResults, isGenerating, creditStatus, onOpenPlans },
   ref,
 ) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -60,7 +64,8 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
     outfit.shoes,
     ...outfit.accessories,
   ].filter(Boolean).length
-  const canGenerate = Boolean(personImage && privacyConsent && selectedCount > 0)
+  const hasCredits = creditStatus === null || creditStatus.unlimited || (creditStatus.remaining ?? 0) > 0
+  const canGenerate = Boolean(personImage && privacyConsent && selectedCount > 0 && hasCredits)
 
   useImperativeHandle(ref, () => ({
     chooseImage: () => inputRef.current?.click(),
@@ -269,6 +274,12 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
       </div>
 
       <div id="generate-try-on" className="scroll-mt-28 border-t border-black/[0.05] bg-white/50 p-5 backdrop-blur-sm">
+        {creditStatus && !creditStatus.unlimited && creditStatus.remaining === 0 && (
+          <div className="mb-3 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-amber-900">
+            <div className="flex items-start gap-2.5"><Coins size={16} className="mt-0.5 shrink-0"/><div><p className="text-xs font-bold">Bạn đã dùng hết lượt tạo ảnh</p><p className="mt-1 text-[10px] leading-4 text-amber-800/75">Đăng ký thêm để tiếp tục tạo ảnh và mở rộng kho lưu trữ.</p></div></div>
+            <button type="button" onClick={onOpenPlans} className="mt-3 w-full rounded-xl bg-amber-900 px-3 py-2 text-xs font-bold text-white transition hover:bg-black">Xem các gói đăng ký</button>
+          </div>
+        )}
         <button
           type="button"
           disabled={!canGenerate || isGenerating}
@@ -293,7 +304,7 @@ export const PersonPanel = forwardRef<PersonPanelHandle, PersonPanelProps>(funct
           </span>
         </button>
         <p className="mt-2 text-center text-[10px] leading-4 text-ink/40 font-medium">
-          {!personImage ? 'Cần tải ảnh toàn thân trước.' : !privacyConsent ? 'Cần tích chọn xác nhận quyền riêng tư.' : selectedCount === 0 ? 'Cần chọn ít nhất 1 món đồ trong tủ đồ.' : 'Mỗi lượt tạo 1 ảnh độc lập.'}
+          {!hasCredits ? 'Cần đăng ký thêm để tiếp tục tạo ảnh.' : !personImage ? 'Cần tải ảnh toàn thân trước.' : !privacyConsent ? 'Cần tích chọn xác nhận quyền riêng tư.' : selectedCount === 0 ? 'Cần chọn ít nhất 1 món đồ trong tủ đồ.' : ''}
         </p>
       </div>
 

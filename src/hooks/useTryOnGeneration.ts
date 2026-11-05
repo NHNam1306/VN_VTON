@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { applyOutfitCustomizations, removeOutfitCustomization } from '../services/outfit-customizations'
 import { tryOnApi } from '../services/try-on-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
-import { MAX_SAVED_OUTFITS, type AngleGenerationState, type SavedOutfit, type TryOnAngle, type TryOnResult } from '../types/fitting-room'
+import { MAX_SAVED_OUTFITS, type AngleGenerationState, type CreditStatus, type SavedOutfit, type TryOnAngle, type TryOnResult } from '../types/fitting-room'
 
 const angles: TryOnAngle[] = ['front', 'back']
 
@@ -11,11 +11,12 @@ const createInitialState = (): Record<TryOnAngle, AngleGenerationState> => ({
   back: { status: 'idle', result: null, error: null },
 })
 
-export function useTryOnGeneration(enabled = true) {
+export function useTryOnGeneration(enabled = true, maxSavedOutfits = MAX_SAVED_OUTFITS) {
   const [states, setStates] = useState(createInitialState)
   const [history, setHistory] = useState<SavedOutfit[]>([])
   const [isHistoryLoading, setIsHistoryLoading] = useState(true)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [creditStatus, setCreditStatus] = useState<CreditStatus | null>(null)
   const outfit = useFittingRoomStore((state) => state.outfit)
   const preservePoseFront = useFittingRoomStore((state) => state.preservePoseFront)
   const preservePoseBack = useFittingRoomStore((state) => state.preservePoseBack)
@@ -42,8 +43,8 @@ export function useTryOnGeneration(enabled = true) {
 
   useEffect(() => {
     if (!enabled) return
-    Promise.all([tryOnApi.listResults(), tryOnApi.listOutfits()])
-      .then(([results, outfits]) => {
+    Promise.all([tryOnApi.listResults(), tryOnApi.listOutfits(), tryOnApi.getCredits()])
+      .then(([results, outfits, credits]) => {
         setStates((current) => {
           const next = { ...current }
           results.forEach((result) => {
@@ -52,6 +53,7 @@ export function useTryOnGeneration(enabled = true) {
           return next
         })
         setHistory(applyOutfitCustomizations(outfits))
+        setCreditStatus(credits)
       })
       .catch((error: unknown) => {
         setHistoryError(error instanceof Error ? error.message : 'Không thể tải dữ liệu kết quả.')
@@ -66,7 +68,13 @@ export function useTryOnGeneration(enabled = true) {
     }))
     try {
       const preservePose = angle === 'front' ? preservePoseFront : preservePoseBack
-      const result = await tryOnApi.generateAngle(angle, ids, preservePose, privacyConsent)
+      const generated = await tryOnApi.generateAngle(angle, ids, preservePose, privacyConsent)
+      const result: TryOnResult = {
+        angle: generated.angle,
+        imageUrl: generated.imageUrl,
+        createdAt: generated.createdAt,
+      }
+      setCreditStatus(generated.credits)
       setStates((current) => ({
         ...current,
         [angle]: { status: 'success', result, error: null },
@@ -84,13 +92,13 @@ export function useTryOnGeneration(enabled = true) {
 
   const generateAll = useCallback(async () => {
     if (!garmentIds.length) return
-    if (history.length >= MAX_SAVED_OUTFITS) {
+    if (history.length >= maxSavedOutfits) {
       setStates((current) => ({
         ...current,
         front: {
           ...current.front,
           status: 'error',
-          error: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS} bộ. Hãy xoá bớt một bộ trước.`,
+          error: `Gói hiện tại lưu tối đa ${maxSavedOutfits} outfit.`,
         },
       }))
       return
@@ -115,13 +123,13 @@ export function useTryOnGeneration(enabled = true) {
 
   const regenerate = useCallback(async (angle: TryOnAngle) => {
     if (!garmentIds.length) return
-    if (angle === 'front' && history.length >= MAX_SAVED_OUTFITS) {
+    if (angle === 'front' && history.length >= maxSavedOutfits) {
       setStates((current) => ({
         ...current,
         front: {
           ...current.front,
           status: 'error',
-          error: `Kho Bộ đồ của tôi chỉ lưu tối đa ${MAX_SAVED_OUTFITS} bộ. Hãy xoá bớt một bộ trước.`,
+          error: `Gói hiện tại lưu tối đa ${maxSavedOutfits} outfit.`,
         },
       }))
       return
@@ -159,6 +167,7 @@ export function useTryOnGeneration(enabled = true) {
     history,
     isHistoryLoading,
     historyError,
+    creditStatus,
     deleteOutfit,
     updateOutfit,
     clearResults: () => setStates(createInitialState()),

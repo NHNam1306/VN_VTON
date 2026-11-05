@@ -5,8 +5,8 @@ import { AdminPage } from './AdminPage'
 
 vi.mock('../../services/admin-api',()=>({adminApi:{summary:vi.fn(),users:vi.fn(),audit:vi.fn(),updateUser:vi.fn()}}))
 
-const admin={id:'admin',email:'owner@example.com',displayName:'Owner',createdAt:'2026-01-01T00:00:00.000Z',role:'admin' as const,status:'active' as const}
-const member={id:'member',email:'member@example.com',displayName:'Member',createdAt:'2026-01-02T00:00:00.000Z',lastSeenAt:null,role:'user' as const,status:'active' as const}
+const admin={id:'admin',email:'owner@example.com',displayName:'Owner',createdAt:'2026-01-01T00:00:00.000Z',role:'admin' as const,status:'active' as const,creditBalance:10,subscriptionPlan:'free' as const}
+const member={id:'member',email:'member@example.com',displayName:'Member',createdAt:'2026-01-02T00:00:00.000Z',lastSeenAt:null,role:'user' as const,status:'active' as const,creditBalance:10,subscriptionPlan:'free' as const}
 
 describe('AdminPage',()=>{
   beforeEach(()=>{
@@ -31,5 +31,14 @@ describe('AdminPage',()=>{
     expect(screen.getByText('Không có quyền truy cập')).toBeInTheDocument()
     await new Promise(resolve=>setTimeout(resolve,0))
     expect(adminApi.summary).not.toHaveBeenCalled()
+  })
+
+  it('lets an admin set the remaining credits of a user',async()=>{
+    render(<AdminPage user={admin} onNavigate={vi.fn()}/>)
+    fireEvent.click(await screen.findByRole('button',{name:'Người dùng'}))
+    const input=await screen.findByRole('spinbutton',{name:'Credit của member@example.com'})
+    fireEvent.change(input,{target:{value:'4'}})
+    fireEvent.click(screen.getByRole('button',{name:'Lưu credit của member@example.com'}))
+    await waitFor(()=>expect(adminApi.updateUser).toHaveBeenCalledWith('member',{creditBalance:4}))
   })
 })

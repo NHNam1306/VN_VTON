@@ -1,4 +1,4 @@
-export type AppView = 'wardrobe' | 'fitting' | 'outfits' | 'profile' | 'settings' | 'feed' | 'friends' | 'koc' | 'admin'
+export type AppView = 'wardrobe' | 'fitting' | 'outfits' | 'profile' | 'settings' | 'plans' | 'feed' | 'friends' | 'koc' | 'admin'
 
 export const appViewPaths: Record<AppView, string> = {
   wardrobe: '/tu-do',
@@ -6,6 +6,7 @@ export const appViewPaths: Record<AppView, string> = {
   outfits: '/bo-do-cua-toi',
   profile: '/tai-khoan',
   settings: '/cai-dat',
+  plans: '/goi-dang-ky',
   feed: '/bang-tin',
   friends: '/ban-be',
   koc: '/koc',

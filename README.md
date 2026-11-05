@@ -81,7 +81,7 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 
 ## Deploy production: Render + Supabase + Cloudflare R2
 
-1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql) và [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql). Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
+1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql), [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql), [`004_image_credits.sql`](supabase/migrations/004_image_credits.sql), [`005_subscription_plans.sql`](supabase/migrations/005_subscription_plans.sql) và [`006_billing.sql`](supabase/migrations/006_billing.sql). Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
 2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode. Trong **Database Settings → SSL Configuration**, tải certificate, chuyển file sang Base64 và đặt vào `DATABASE_CA_CERT_BASE64` để Render xác minh TLS đầy đủ.
 3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
 4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:

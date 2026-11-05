@@ -5,6 +5,7 @@ import { BrandMark } from './components/brand/BrandMark'
 import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
 import type { PersonPanelHandle } from './components/PersonPanel'
 import { useTryOnGeneration } from './hooks/useTryOnGeneration'
+import { usePlanStatus } from './hooks/usePlanStatus'
 import { appViewPaths, resolveAppView, type AppView } from './navigation'
 import { authApi } from './services/auth-api'
 import { garmentApi } from './services/garment-api'
@@ -13,7 +14,8 @@ import { socialApi } from './services/social-api'
 import { tryOnApi } from './services/try-on-api'
 import { useFittingRoomStore } from './store/useFittingRoomStore'
 import type { AuthUser } from './types/auth'
-import { MAX_SELECTED_GARMENTS, MAX_WARDROBE_GARMENTS } from './types/fitting-room'
+import { MAX_SELECTED_GARMENTS } from './types/fitting-room'
+import { FREE_ENTITLEMENTS } from './types/plans'
 
 const AuthPage = lazy(() => import('./components/AuthPage').then((module) => ({ default: module.AuthPage })))
 const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
@@ -22,6 +24,7 @@ const OnboardingFlow = lazy(() => import('./components/OnboardingFlow').then((mo
 const OutfitHistory = lazy(() => import('./components/OutfitHistory').then((module) => ({ default: module.OutfitHistory })))
 const PersonPanel = lazy(() => import('./components/PersonPanel').then((module) => ({ default: module.PersonPanel })))
 const ProfilePage = lazy(() => import('./components/ProfilePage').then((module) => ({ default: module.ProfilePage })))
+const PlansPage = lazy(() => import('./components/PlansPage').then((module) => ({ default: module.PlansPage })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 const SocialPage = lazy(() => import('./components/social/SocialPage').then((module) => ({ default: module.SocialPage })))
 const ResultStage = lazy(() => import('./components/ResultStage').then((module) => ({ default: module.ResultStage })))
@@ -72,7 +75,9 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const setError = useFittingRoomStore((state) => state.setWardrobeError)
   const setPersonImage = useFittingRoomStore((state) => state.setPersonImage)
   const resetWorkspace = useFittingRoomStore((state) => state.resetWorkspace)
-  const generation = useTryOnGeneration(activeView === 'fitting' || activeView === 'outfits')
+  const plan = usePlanStatus()
+  const entitlements = plan.snapshot?.current.entitlements ?? FREE_ENTITLEMENTS
+  const generation = useTryOnGeneration(activeView === 'fitting' || activeView === 'outfits', entitlements.savedOutfits)
   const selectedCount = [
     outfit.tops,
     outfit.outerwear,
@@ -111,8 +116,8 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   }, [])
 
   const openGarmentUpload = () => {
-    if (garments.length >= MAX_WARDROBE_GARMENTS) {
-      setError(`Tủ đồ chỉ lưu tối đa ${MAX_WARDROBE_GARMENTS} món. Hãy xoá bớt một món trước.`)
+    if (garments.length >= entitlements.wardrobeItems) {
+      setError(`Gói hiện tại lưu tối đa ${entitlements.wardrobeItems} món trong tủ đồ.`)
       navigate('wardrobe')
       return
     }
@@ -202,6 +207,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
               mode="page"
               onAddGarment={openGarmentUpload}
               onGoToFitting={() => navigate('fitting')}
+              maxGarments={entitlements.wardrobeItems}
             />
           </main>
         )}
@@ -282,6 +288,8 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
                   onGenerate={generation.generateAll}
                   onClearResults={generation.clearResults}
                   isGenerating={generation.isGenerating}
+                  creditStatus={generation.creditStatus}
+                  onOpenPlans={() => navigate('plans')}
                 />
               </div>
             </div>
@@ -300,11 +308,13 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
               useFittingRoomStore.getState().loadOutfitGarments(outfit.garmentIds)
               navigate('fitting')
             }}
+            maxSavedOutfits={entitlements.savedOutfits}
           />
         )}
 
         {activeView === 'koc' && <KocStudioPage user={user} onNavigate={navigate} />}
         {activeView === 'admin' && <AdminPage user={user} onNavigate={navigate} />}
+        {activeView === 'plans' && <PlansPage snapshot={plan.snapshot} loading={plan.loading} error={plan.error} onReload={() => void plan.reload()} onNavigate={navigate} />}
 
         {activeView === 'profile' && (
           <ProfilePage

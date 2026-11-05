@@ -47,4 +47,16 @@ describe('AdminService authorization',()=>{
     await service.updateUser(admin,member.id,{status:'suspended'})
     await expect(service.resolveAuthenticatedUser(member)).rejects.toMatchObject({statusCode:403})
   })
+
+  it('lets an admin set user credits and records the change',async()=>{
+    await expect(service.updateUser(admin,member.id,{creditBalance:4})).resolves.toMatchObject({creditBalance:4})
+    const audit=await service.audit(admin)
+    expect(audit[0]).toMatchObject({action:'user.credits_changed',targetId:'member',details:{from:'10',to:'4'}})
+  })
+
+  it('lets an admin assign a plan, grants its credits and records the change',async()=>{
+    await expect(service.updateUser(admin,member.id,{subscriptionPlan:'plus'})).resolves.toMatchObject({subscriptionPlan:'plus',creditBalance:60})
+    const audit=await service.audit(admin)
+    expect(audit[0]).toMatchObject({action:'user.plan_changed',targetId:'member',details:{from:'free',to:'plus'}})
+  })
 })

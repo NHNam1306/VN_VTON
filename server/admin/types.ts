@@ -1,5 +1,6 @@
 export type UserRole = 'user' | 'koc' | 'moderator' | 'admin'
 export type UserStatus = 'active' | 'suspended'
+export type SubscriptionPlanId = 'free' | 'plus' | 'pro' | 'max'
 
 export type AdminUser = {
   id: string
@@ -7,6 +8,8 @@ export type AdminUser = {
   displayName: string
   role: UserRole
   status: UserStatus
+  creditBalance: number
+  subscriptionPlan: SubscriptionPlanId
   createdAt: string
   lastSeenAt: string | null
 }
@@ -15,7 +18,7 @@ export type AdminAuditEntry = {
   id: string
   actorId: string
   actorEmail: string
-  action: 'user.role_changed' | 'user.status_changed'
+  action: 'user.role_changed' | 'user.status_changed' | 'user.credits_changed' | 'user.plan_changed'
   targetId: string
   details: Record<string, string>
   createdAt: string

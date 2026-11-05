@@ -1,5 +1,5 @@
 import { applyOutfitCustomizations, removeOutfitCustomization } from './outfit-customizations'
-import type { SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
+import type { CreditStatus, GeneratedTryOnResult, SavedOutfit, TryOnAngle, TryOnResult } from '../types/fitting-room'
 import { apiFetch } from './api-client'
 
 const OUTFIT_CACHE_TTL_MS = 10_000
@@ -35,7 +35,13 @@ export const tryOnApi = {
     return ((await response.json()) as { items: TryOnResult[] }).items
   },
 
-  async generateAngle(angle: TryOnAngle, garmentIds: string[], preservePose = true, privacyConfirmed = false): Promise<TryOnResult> {
+  async getCredits(): Promise<CreditStatus> {
+    const response = await apiFetch('/api/generations/credits', { cache: 'no-store' })
+    if (!response.ok) throw new Error(await parseError(response))
+    return response.json() as Promise<CreditStatus>
+  },
+
+  async generateAngle(angle: TryOnAngle, garmentIds: string[], preservePose = true, privacyConfirmed = false): Promise<GeneratedTryOnResult> {
     const epoch = outfitsEpoch
     const response = await apiFetch(`/api/generations/angles/${angle}`, {
       method: 'POST',
@@ -48,7 +54,7 @@ export const tryOnApi = {
     })
     if (!response.ok) throw new Error(await parseError(response))
     if (epoch === outfitsEpoch) invalidateOutfits()
-    return response.json() as Promise<TryOnResult>
+    return response.json() as Promise<GeneratedTryOnResult>
   },
 
   async listOutfits(options?: { force?: boolean }): Promise<SavedOutfit[]> {

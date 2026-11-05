@@ -1,4 +1,4 @@
-import type { AdminAuditEntry, AdminSummary, AdminUser, UserRole, UserStatus } from '../../server/admin/types'
+import type { AdminAuditEntry, AdminSummary, AdminUser, SubscriptionPlanId, UserRole, UserStatus } from '../../server/admin/types'
 import { apiFetch } from './api-client'
 
 const request=async<T>(path:string,init:RequestInit={}):Promise<T>=>{
@@ -17,6 +17,6 @@ export const adminApi={
     if(filters.status)params.set('status',filters.status)
     return request<AdminUser[]>('/users?'+params.toString(),{cache:'no-store'})
   },
-  updateUser:(id:string,changes:{role?:UserRole;status?:UserStatus})=>request<AdminUser>('/users/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(changes)}),
+  updateUser:(id:string,changes:{role?:UserRole;status?:UserStatus;creditBalance?:number;subscriptionPlan?:SubscriptionPlanId})=>request<AdminUser>('/users/'+encodeURIComponent(id),{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(changes)}),
   audit:()=>request<AdminAuditEntry[]>('/audit',{cache:'no-store'}),
 }

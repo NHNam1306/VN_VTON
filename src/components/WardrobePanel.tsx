@@ -185,9 +185,10 @@ type WardrobePanelProps = {
   onAddGarment: () => void
   onGoToFitting?: () => void
   mode?: 'compact' | 'page'
+  maxGarments?: number
 }
 
-export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact' }: WardrobePanelProps) {
+export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', maxGarments = MAX_WARDROBE_GARMENTS }: WardrobePanelProps) {
   const [query, setQuery] = useState('')
   const [editingGarment, setEditingGarment] = useState<Garment | null>(null)
   const [pendingDelete, setPendingDelete] = useState<{ id: string; name: string } | null>(null)
@@ -211,7 +212,7 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact' }:
     garment.category === activeCategory &&
     (!normalizedQuery || garment.name.toLocaleLowerCase('vi').includes(normalizedQuery))
   ))
-  const isWardrobeFull = garments.length >= MAX_WARDROBE_GARMENTS
+  const isWardrobeFull = garments.length >= maxGarments
   const selectedCount = [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes]
     .filter(Boolean).length + outfit.accessories.length
   const isGarmentSelected = (garment: Garment) =>

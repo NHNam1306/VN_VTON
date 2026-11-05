@@ -24,6 +24,13 @@ import {
   MemoryRateLimitStore,
   type RateLimitStore,
 } from './http/rate-limit.js'
+import { CreditService } from './credits/credit-service.js'
+import { MemoryCreditRepository } from './credits/memory-credit-repository.js'
+import { PlanService } from './plans/plan-service.js'
+import { MemoryPlanRepository } from './plans/memory-plan-repository.js'
+import { createPlanRouter } from './plans/router.js'
+import type { BillingService } from './billing/billing-service.js'
+import { createBillingRouter, createBillingWebhookRouter } from './billing/router.js'
 
 export function createApp(
   repository: GarmentRepository,
@@ -37,10 +44,15 @@ export function createApp(
   social?: SocialService,
   admin?: AdminService,
   rateLimitStore?: RateLimitStore,
+  creditService?: CreditService,
+  planService?: PlanService,
+  billingService?: BillingService,
 ) {
   const app = express()
   const ownImageKeyRequests = new Map<string, Promise<Set<string>>>()
   const sharedRateLimits = rateLimitStore ?? new MemoryRateLimitStore()
+  const plans = planService ?? new PlanService(new MemoryPlanRepository())
+  const credits = creditService ?? new CreditService(new MemoryCreditRepository(), plans)
   app.disable('x-powered-by')
   if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
   app.use(setSecurityHeaders)
@@ -50,6 +62,7 @@ export function createApp(
     skip: (request) => request.path === '/health',
   }))
   app.use(express.json({ limit: '32kb' }))
+  if (billingService) app.use('/api/billing/webhooks', createBillingWebhookRouter(billingService))
   app.use('/api', requireMutationHeader)
 
   const extractor =
@@ -119,9 +132,11 @@ export function createApp(
   })
   if (social) app.use('/api/social', requireAuth, createSocialRouter(social, images))
   if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin))
-  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social))
+  if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService))
+  app.use('/api/plans', requireAuth, createPlanRouter(plans))
+  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans))
   app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
-  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, sharedRateLimits))
+  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, credits, sharedRateLimits, plans))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())
 
   app.use('/api', (_request, response) => {

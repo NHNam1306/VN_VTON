@@ -40,6 +40,16 @@ export type TryOnResult = {
   createdAt: string
 }
 
+export type CreditStatus = {
+  remaining: number | null
+  limit: number
+  unlimited: boolean
+}
+
+export type GeneratedTryOnResult = TryOnResult & {
+  credits: CreditStatus
+}
+
 export type SavedOutfit = {
   id: string
   frontImageUrl: string

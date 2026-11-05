@@ -8,6 +8,7 @@ import type { SocialService } from '../social/social-service.js'
 import { runtimeConfig } from '../config/runtime-config.js'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 import { createFixedWindowRateLimit } from '../http/rate-limit.js'
+import type { PlanService } from '../plans/plan-service.js'
 
 const upload = createImageUpload(4)
 export const MAX_GARMENTS_PER_USER = 20
@@ -37,6 +38,7 @@ export function createGarmentRouter(
   images: ImageStorage,
   extractor?: GarmentExtractorService,
   social?: SocialService,
+  plans?: PlanService,
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
@@ -45,6 +47,8 @@ export function createGarmentRouter(
     windowMs: runtimeConfig.aiRequestWindowMs,
     key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
   })
+  const wardrobeLimit = async (user: Express.Request['authUser']) =>
+    plans ? (await plans.status(user)).entitlements.wardrobeItems : MAX_GARMENTS_PER_USER
 
   router.get('/', async (request, response, next) => {
     try {
@@ -57,8 +61,9 @@ export function createGarmentRouter(
 
   router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
     try {
-      if ((await repository.list(request.authUser.id)).length >= MAX_GARMENTS_PER_USER) {
-        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+      const maxItems = await wardrobeLimit(request.authUser)
+      if ((await repository.list(request.authUser.id)).length >= maxItems) {
+        response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
       const file = request.file
@@ -112,8 +117,9 @@ export function createGarmentRouter(
   router.post('/', uploadFields, async (request, response, next) => {
     const savedKeys: string[] = []
     try {
-      if ((await repository.list(request.authUser.id)).length >= MAX_GARMENTS_PER_USER) {
-        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+      const maxItems = await wardrobeLimit(request.authUser)
+      if ((await repository.list(request.authUser.id)).length >= maxItems) {
+        response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
       const name = typeof request.body.name === 'string' ? request.body.name.trim() : ''
@@ -165,11 +171,11 @@ export function createGarmentRouter(
         createdAt: new Date().toISOString(),
       }
 
-      const created = await repository.createIfBelowLimit(record, MAX_GARMENTS_PER_USER)
+      const created = await repository.createIfBelowLimit(record, maxItems)
       if (!created) {
         await Promise.all(savedKeys.map((key) => images.delete(key)))
         savedKeys.length = 0
-        response.status(409).json({ message: `Tủ đồ chỉ lưu tối đa ${MAX_GARMENTS_PER_USER} món. Hãy xoá bớt một món trước.` })
+        response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
       response.status(201).json(toResponse(record, images))
