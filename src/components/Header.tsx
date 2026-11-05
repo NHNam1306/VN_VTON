@@ -1,7 +1,8 @@
-import { BadgeDollarSign, Home, Images, LogOut, Settings, ShieldCheck, Shirt, Sparkles, UserRound, Users, WandSparkles } from 'lucide-react'
+import { BadgeDollarSign, Home, Images, LogOut, Settings, ShieldCheck, Shirt, UserRound, Users, WandSparkles } from 'lucide-react'
 import { startTransition, useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react'
 import { appViewPaths, type AppView } from '../navigation'
 import type { AuthUser } from '../types/auth'
+import { BrandLogo } from './brand/BrandMark'
 import { NotificationBell } from './social/NotificationBell'
 import { Avatar } from './social/Avatar'
 
@@ -109,10 +110,10 @@ export function Header({
       <div className="mx-auto flex max-w-[1680px] items-center justify-between gap-3 lg:grid lg:grid-cols-[1fr_auto_1fr]">
         <div className="flex items-center justify-start">
           <a href={appViewPaths.feed} onClick={(event) => openView(event, 'feed', 0)} className="group flex items-center gap-3 rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sage-500">
-            <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#16171b] to-[#2c2f38] text-white shadow-[0_8px_20px_rgba(22,23,27,0.22)] transition-transform duration-300 group-hover:scale-105 sm:size-10 sm:rounded-2xl">
-              <Sparkles size={18} strokeWidth={2} className="text-amber-300" aria-hidden="true" />
-            </span>
-            <span className="font-display text-lg font-extrabold tracking-tight text-ink sm:text-xl">Tryoh</span>
+            <BrandLogo
+              markClassName="size-9 transition-transform duration-300 group-hover:scale-105 sm:size-10"
+              wordmarkClassName="text-lg sm:text-xl"
+            />
           </a>
         </div>
 

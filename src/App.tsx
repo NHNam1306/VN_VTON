@@ -1,6 +1,7 @@
-import { LoaderCircle, Shirt, Sparkles } from 'lucide-react'
+import { LoaderCircle, Shirt } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Header } from './components/Header'
+import { BrandMark } from './components/brand/BrandMark'
 import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
 import type { PersonPanelHandle } from './components/PersonPanel'
 import { useTryOnGeneration } from './hooks/useTryOnGeneration'
@@ -378,7 +379,7 @@ function App() {
   }, [])
 
   if (user === undefined) {
-    return <div className="grid min-h-[100dvh] place-items-center bg-canvas"><div className="text-center text-ink/40"><span className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-ink text-white"><Sparkles size={20} /></span><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
+    return <div className="grid min-h-[100dvh] place-items-center bg-canvas"><div className="text-center text-ink/40"><BrandMark className="mx-auto mb-3 size-12" label="Tryoh" /><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
   }
 
   if (!user) {

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Clock, ChevronRight, Star, Trophy, Users, Send, X, Plus } from 'lucide-react'
+import { Check, Clock, ChevronRight, Trophy, Users, Send, X, Plus } from 'lucide-react'
 import type { SharedOutfit, SocialPoll, SocialSnapshot } from '../../../server/social/types'
 import { Avatar } from './Avatar'
 import type { Act } from './SocialPage'
@@ -59,16 +59,36 @@ export function PollComposer({ data, outfits, act, onDone, onCreateOutfit }: { d
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 {outfits.map((o, i) => {
                   const checked = selected.includes(o.id)
+                  const disabled = !checked && selected.length >= 3
                   return (
-                    <label key={o.id} className={`group relative cursor-pointer overflow-hidden rounded-2xl border-2 transition ${checked ? 'border-sage-600 bg-sage-50' : 'border-black/[0.07] bg-sage-50/40 hover:border-sage-300'}`}>
-                      <input type="checkbox" aria-label={`Outfit ${i + 1}`} checked={checked} disabled={!checked && selected.length >= 3} className="sr-only" onChange={() => setSelected(checked ? selected.filter(id => id !== o.id) : [...selected, o.id])} />
-                      <img src={o.frontImageUrl} alt={`Outfit ${i + 1}`} loading="lazy" decoding="async" className="h-40 w-full object-contain" />
+                    <label
+                      key={o.id}
+                      aria-disabled={disabled || undefined}
+                      className={`group relative overflow-hidden rounded-2xl border-2 transition-all duration-200 ${
+                        checked
+                          ? 'cursor-pointer border-sage-700 bg-sage-50 shadow-[0_10px_24px_rgba(55,88,65,0.16)] ring-4 ring-sage-200/80'
+                          : disabled
+                            ? 'cursor-not-allowed border-black/[0.05] bg-black/[0.025] opacity-45'
+                            : 'cursor-pointer border-black/[0.08] bg-sage-50/40 hover:-translate-y-0.5 hover:border-sage-400 hover:shadow-md'
+                      }`}
+                    >
+                      <input type="checkbox" aria-label={`Outfit ${i + 1}`} checked={checked} disabled={disabled} className="sr-only" onChange={() => setSelected(checked ? selected.filter(id => id !== o.id) : [...selected, o.id])} />
+                      <img
+                        src={o.frontImageUrl}
+                        alt={`Outfit ${i + 1}`}
+                        loading="lazy"
+                        decoding="async"
+                        className={`h-40 w-full object-contain transition-transform duration-200 ${checked ? 'scale-[0.97]' : 'group-hover:scale-[1.02]'}`}
+                      />
                       {checked && (
-                        <span className="absolute right-2 top-2 grid size-5 place-items-center rounded-full bg-sage-600 text-white">
-                          <Star size={10} fill="currentColor" />
+                        <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-sage-800 px-2.5 py-1 text-[10px] font-bold text-white shadow-lg ring-2 ring-white/90">
+                          <Check size={12} strokeWidth={3} />
+                          Đã chọn
                         </span>
                       )}
-                      <p className="py-1.5 text-center text-[10px] font-semibold text-ink/50">Outfit {i + 1}</p>
+                      <p className={`border-t py-2 text-center text-[11px] font-bold transition-colors ${checked ? 'border-sage-700 bg-sage-800 text-white' : 'border-black/[0.05] text-ink/50'}`}>
+                        Outfit {i + 1}{checked ? ' · Đang chọn' : ''}
+                      </p>
                     </label>
                   )
                 })}

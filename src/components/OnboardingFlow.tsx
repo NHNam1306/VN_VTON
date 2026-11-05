@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import type { SocialSnapshot } from '../../server/social/types'
 import { socialApi } from '../services/social-api'
 import type { AuthUser } from '../types/auth'
+import { BrandMark } from './brand/BrandMark'
 
 type OnboardingFlowProps = {
   user: AuthUser
@@ -94,7 +95,7 @@ export function OnboardingFlow({ user, hasGarments, onComplete }: OnboardingFlow
 
             {step === 0 && (
               <div className="py-6 text-center">
-                <span className="mx-auto grid size-16 place-items-center rounded-[24px] bg-ink text-amber-300 shadow-lg"><Sparkles size={28} /></span>
+                <BrandMark className="mx-auto size-16" label="Tryoh" />
                 <h1 className="mt-6 font-display text-3xl font-bold text-ink sm:text-4xl">Tủ đồ của bạn, theo cách riêng.</h1>
                 <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-ink/55">Lưu trang phục, thử phối đồ và chỉ chia sẻ với những người bạn chọn. Không có lượt thích hay bảng xếp hạng.</p>
               </div>

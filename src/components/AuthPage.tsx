@@ -6,12 +6,12 @@ import {
   LockKeyhole,
   Mail,
   ShieldCheck,
-  Sparkles,
   UserRound,
 } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import { authApi } from '../services/auth-api'
 import type { AuthUser } from '../types/auth'
+import { BrandLogo } from './brand/BrandMark'
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset'
 
@@ -169,7 +169,7 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
         <div className="relative hidden min-h-[650px] overflow-hidden bg-ink p-10 text-white lg:flex lg:flex-col lg:justify-between">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_15%,rgba(169,190,163,0.32),transparent_36%),radial-gradient(circle_at_85%_80%,rgba(139,92,246,0.2),transparent_40%)]" />
           <div className="relative">
-            <span className="grid size-12 place-items-center rounded-2xl bg-white/10 ring-1 ring-white/15"><Sparkles size={22} /></span>
+            <BrandLogo inverse markClassName="size-12" wordmarkClassName="text-2xl" />
             <p className="mt-7 text-[11px] font-bold uppercase tracking-[0.22em] text-sage-300">Fitting Room</p>
             <h1 className="mt-3 max-w-md font-display text-4xl font-bold leading-[1.15]">Thử phong cách mới trên chính ảnh của bạn</h1>
           </div>
@@ -181,8 +181,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
 
         <div className="p-5 sm:p-9 lg:p-10">
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="grid size-11 place-items-center rounded-2xl bg-ink text-white"><Sparkles size={20} /></span>
-            <div><p className="font-display text-lg font-bold text-ink">Fitting Room</p><p className="text-xs text-ink/40">Không gian thử đồ của bạn</p></div>
+            <BrandLogo markClassName="size-11" wordmarkClassName="text-lg" />
+            <p className="sr-only">Không gian thử đồ của bạn</p>
           </div>
 
           {(mode === 'login' || mode === 'register') ? (

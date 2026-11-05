@@ -13,6 +13,7 @@ describe('Voting UI',()=>{
   render(<PollComposer data={data} outfits={outfits} act={act} onDone={done} onCreateOutfit={()=>{}}/>)
   expect(screen.getByRole('button',{name:'Xem lại người nhận'})).toBeDisabled()
   fireEvent.click(screen.getByRole('checkbox',{name:'Outfit 1'}))
+  expect(screen.getByText('Đã chọn')).toBeInTheDocument()
   fireEvent.click(screen.getByRole('button',{name:'Tất cả bạn bè'}))
   fireEvent.click(screen.getByRole('button',{name:'Xem lại người nhận'}))
   expect(act).not.toHaveBeenCalled()
