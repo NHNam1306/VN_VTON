@@ -26,6 +26,15 @@ const readCookie = (request: Request, cookieName: string): string | null => {
   return null
 }
 
+const readAccessToken = (request: Request): string | null => {
+  const authorization = request.get('authorization')
+  if (authorization?.startsWith('Bearer ')) {
+    const token = authorization.slice('Bearer '.length).trim()
+    if (token) return token
+  }
+  return readCookie(request, SESSION_COOKIE)
+}
+
 const LOGIN_WINDOW_MS = 15 * 60 * 1000
 const PASSWORD_RESET_WINDOW_MS = 15 * 60 * 1000
 const CONFIRMATION_RESEND_WINDOW_MS = 60 * 1000
@@ -50,7 +59,7 @@ const setSessionCookies = (response: Response, result: AuthResult, options: Cook
 type UserDecorator = (user: PublicUser) => MaybePromise<PublicUser>
 
 const resolveUser = async (auth: AuthBackend, request: Request, response: Response, options: CookieOptions, decorate?: UserDecorator) => {
-  const token = readCookie(request, SESSION_COOKIE)
+  const token = readAccessToken(request)
   const user = await auth.authenticate(token)
   if (user) return decorate ? await decorate(user) : user
   const refreshed = await auth.refresh?.(readCookie(request, REFRESH_COOKIE))
@@ -218,7 +227,7 @@ export function createAuthRouter(
         throw new AuthError(501, 'Chức năng cập nhật hồ sơ chưa được hỗ trợ.')
       }
       const displayName = typeof request.body.displayName === 'string' ? request.body.displayName : ''
-      const token = readCookie(request, SESSION_COOKIE)
+      const token = readAccessToken(request)
       const updated = await auth.updateProfile(user.id, { displayName }, token)
       response.json({ user: decorate ? await decorate(updated) : updated })
     } catch (error) {
@@ -238,7 +247,7 @@ export function createAuthRouter(
       }
       const currentPassword = typeof request.body.currentPassword === 'string' ? request.body.currentPassword : ''
       const newPassword = typeof request.body.newPassword === 'string' ? request.body.newPassword : ''
-      const token = readCookie(request, SESSION_COOKIE)
+      const token = readAccessToken(request)
       await auth.changePassword(user.id, { currentPassword, newPassword }, token)
       response.json({ message: 'Đổi mật khẩu thành công.' })
     } catch (error) {
@@ -258,7 +267,7 @@ export function createAuthRouter(
       }
       const newEmail = typeof request.body.newEmail === 'string' ? request.body.newEmail : ''
       const password = typeof request.body.password === 'string' ? request.body.password : ''
-      const token = readCookie(request, SESSION_COOKIE)
+      const token = readAccessToken(request)
       const updated = await auth.changeEmail(user.id, { newEmail, password }, token)
       response.json({ user: decorate ? await decorate(updated) : updated, message: 'Đổi email thành công.' })
     } catch (error) {
@@ -268,7 +277,7 @@ export function createAuthRouter(
 
   router.post('/logout', async (request, response, next) => {
     try {
-      await auth.logout(readCookie(request, SESSION_COOKIE))
+      await auth.logout(readAccessToken(request))
     } catch (error) {
       next(error)
       return
