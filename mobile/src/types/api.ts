@@ -22,6 +22,13 @@ export type PersonImage = {
 
 export type TryOnResult = { angle: 'front' | 'back'; imageUrl: string; createdAt: string };
 export type CreditStatus = { remaining: number | null; limit: number; unlimited: boolean };
+export type SavedOutfit = {
+  id: string;
+  frontImageUrl: string;
+  backImageUrl: string | null;
+  garmentIds: string[];
+  createdAt: string;
+};
 
 export type SocialPerson = { id: string; username: string; name: string; avatar: string };
 export type SocialSnapshot = {

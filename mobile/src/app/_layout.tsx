@@ -1,11 +1,13 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
+import { DefaultTheme, ThemeProvider } from 'expo-router';
 import { Stack } from 'expo-router/stack';
 import * as SplashScreen from 'expo-splash-screen';
+import * as SystemUI from 'expo-system-ui';
+import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { useColorScheme } from 'react-native';
 
 import { AuthProvider, useAuth } from '@/providers/auth-provider';
+import { colors } from '@/theme';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -15,16 +17,32 @@ const queryClient = new QueryClient({
 
 function RootNavigator() {
   const { ready } = useAuth();
-  const scheme = useColorScheme();
   useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(colors.background);
     if (ready) void SplashScreen.hideAsync();
   }, [ready]);
   if (!ready) return null;
+  const theme = {
+    ...DefaultTheme,
+    colors: {
+      ...DefaultTheme.colors,
+      primary: colors.label,
+      background: colors.background,
+      card: colors.surface,
+      text: colors.label,
+      border: colors.separator,
+      notification: colors.destructive,
+    },
+  };
   return (
-    <ThemeProvider value={scheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={theme}>
+      <StatusBar style="dark" />
       <Stack screenOptions={{ headerShadowVisible: false }}>
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="auth" options={{ headerShown: false }} />
+        <Stack.Screen name="auth-callback" options={{ headerShown: false }} />
+        <Stack.Screen name="reset-password" options={{ headerShown: false }} />
+        <Stack.Screen name="plans" options={{ title: 'Gói đăng ký', headerBackTitle: 'Hồ sơ' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>
