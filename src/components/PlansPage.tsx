@@ -1,4 +1,4 @@
-import { ArrowLeft, Check, Crown, LoaderCircle, QrCode, ShieldCheck, Sparkles, WalletCards } from 'lucide-react'
+import { ArrowLeft, Check, Crown, LoaderCircle, QrCode, WalletCards } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import type { AppView } from '../navigation'
 import type { PlanSnapshot, SubscriptionPlan } from '../types/plans'
@@ -95,11 +95,6 @@ export function PlansPage({ snapshot, loading, error, onNavigate, onReload }: Pl
           <section className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4" aria-label="Các gói đăng ký">
             {snapshot.plans.map((plan) => <PlanCard key={plan.id} plan={plan} current={snapshot.current.planId === plan.id && !snapshot.current.unlimited} checkoutKey={checkoutKey} onCheckout={checkout}/>) }
           </section>
-          <section className="mt-6 grid gap-4 rounded-[28px] border border-black/[0.06] bg-panel p-5 shadow-sm sm:grid-cols-3 sm:p-7">
-            <Trust icon={QrCode} title="VietQR qua payOS" text="Quét mã bằng ứng dụng ngân hàng; gói được mở sau khi webhook xác nhận giao dịch."/>
-            <Trust icon={ShieldCheck} title="Quyền lợi do server kiểm soát" text="Giới hạn được kiểm tra ở backend, không chỉ ẩn hiện trên giao diện."/>
-            <Trust icon={Sparkles} title="Admin không giới hạn" text="Tài khoản quản trị tiếp tục được miễn credit và hạn mức lưu trữ ứng dụng."/>
-          </section>
         </>
       )}
     </main>
@@ -131,8 +126,4 @@ function PlanCard({ plan, current, checkoutKey, onCheckout }: { plan: Subscripti
       </div>
     )}
   </article>
-}
-
-function Trust({ icon: Icon, title, text }: { icon: typeof ShieldCheck; title: string; text: string }) {
-  return <div className="flex gap-3"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sage-100 text-sage-700"><Icon size={17}/></span><div><h2 className="text-sm font-bold text-ink">{title}</h2><p className="mt-1 text-xs leading-5 text-ink/45">{text}</p></div></div>
 }
