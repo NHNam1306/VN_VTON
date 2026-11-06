@@ -25,6 +25,7 @@ export function TryOnScreen() {
   const results = useQuery({ queryKey: ['try-on-results'], queryFn: () => apiRequest<{ items: TryOnResult[] }>('/api/generations/results') });
   const outfits = useQuery({ queryKey: ['saved-outfits'], queryFn: () => apiRequest<{ items: SavedOutfit[] }>('/api/generations/outfits') });
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
+  const selectedGarmentIds = selected.filter((id) => garments.data?.items.some((item) => item.id === id));
   const upload = useMutation({
     mutationFn: async () => {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -39,6 +40,7 @@ export function TryOnScreen() {
     onSuccess: (item) => {
       if (!item) return;
       queryClient.setQueryData(['person-image'], { item });
+      queryClient.setQueryData(['try-on-results'], { items: [] });
       void queryClient.invalidateQueries({ queryKey: ['try-on-results'] });
       setNotice('Ảnh toàn thân đã sẵn sàng.');
     },
@@ -53,10 +55,14 @@ export function TryOnScreen() {
   const generate = useMutation({
     mutationFn: (angle: 'front' | 'back') => apiRequest<GenerationResponse>('/api/generations/angles/' + angle, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ garmentIds: selected, privacyConfirmed: true, preservePose: true }),
+      body: JSON.stringify({ garmentIds: selectedGarmentIds, privacyConfirmed: true, preservePose: true }),
     }),
     onSuccess: (item) => {
-      queryClient.setQueryData<{ items: TryOnResult[] }>(['try-on-results'], (current) => ({ items: [item, ...(current?.items ?? []).filter((result) => result.angle !== item.angle)] }));
+      queryClient.setQueryData<{ items: TryOnResult[] }>(['try-on-results'], (current) => ({
+        items: item.angle === 'front'
+          ? [item]
+          : [item, ...(current?.items ?? []).filter((result) => result.angle === 'front')],
+      }));
       void queryClient.invalidateQueries({ queryKey: ['saved-outfits'] });
       setNotice(item.angle === 'front' ? 'Đã tạo góc trước và lưu thành outfit.' : 'Đã bổ sung góc sau cho outfit.');
     },
@@ -83,7 +89,12 @@ export function TryOnScreen() {
   const exhausted = mutationError instanceof ApiError && mutationError.status === 402;
   const toggle = (id: string) => {
     setNotice(null);
-    setSelected((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < maxSelected ? [...current, id] : current);
+    setSelected((current) => {
+      const available = current.filter((itemId) => garments.data!.items.some((item) => item.id === itemId));
+      return available.includes(id)
+        ? available.filter((item) => item !== id)
+        : available.length < maxSelected ? [...available, id] : available;
+    });
   };
 
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.lg }}>
@@ -102,13 +113,13 @@ export function TryOnScreen() {
       </View>
     </View>
 
-    <View style={{ gap: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}><AppText variant="headline">Chọn món đồ</AppText><AppText variant="caption">{selected.length}/{maxSelected}</AppText></View>
-      {garments.data!.items.length === 0 ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead">Hãy thêm đồ trên web trước khi tạo ảnh.</AppText></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{garments.data!.items.map((item) => { const active = selected.includes(item.id); return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 132, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderWidth: active ? 3 : 1, borderColor: active ? brand.primary : colors.separator, backgroundColor: active ? brand.secondary : colors.surface, opacity: pressed ? 0.72 : 1 })}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 150, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="contain"/><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="caption" numberOfLines={1} style={{ flex: 1, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>{active && <AppText variant="headline" style={{ color: brand.primary }}>✓</AppText>}</View></Pressable>; })}</ScrollView>}
+    <View style={{ gap: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}><AppText variant="headline">Chọn món đồ</AppText><AppText variant="caption">{selectedGarmentIds.length}/{maxSelected}</AppText></View>
+      {garments.data!.items.length === 0 ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead">Mở tab Tủ đồ để thêm món trước khi tạo ảnh.</AppText></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{garments.data!.items.map((item) => { const active = selected.includes(item.id); return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 132, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderWidth: active ? 3 : 1, borderColor: active ? brand.primary : colors.separator, backgroundColor: active ? brand.secondary : colors.surface, opacity: pressed ? 0.72 : 1 })}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 150, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="contain"/><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="caption" numberOfLines={1} style={{ flex: 1, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>{active && <AppText variant="headline" style={{ color: brand.primary }}>✓</AppText>}</View></Pressable>; })}</ScrollView>}
     </View>
 
     <View style={{ gap: spacing.sm }}>
-      <AppButton title="Tạo góc trước" loading={generate.isPending && generate.variables === 'front'} disabled={generate.isPending || !person.data!.item || selected.length === 0} onPress={() => generate.mutate('front')}/>
-      <AppButton title="Tạo góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || !latestFront || selected.length === 0} onPress={() => generate.mutate('back')}/>
+      <AppButton title="Tạo góc trước" loading={generate.isPending && generate.variables === 'front'} disabled={generate.isPending || !person.data!.item || selectedGarmentIds.length === 0} onPress={() => generate.mutate('front')}/>
+      <AppButton title="Tạo góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || !latestFront || selectedGarmentIds.length === 0} onPress={() => generate.mutate('back')}/>
       <AppText variant="caption" style={{ textAlign: 'center' }}>Góc sau dùng kết quả góc trước làm tham chiếu để giữ trang phục nhất quán.</AppText>
     </View>
     {mutationError && <View style={{ gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface }}><AppText variant="headline" style={{ color: colors.destructive }}>{exhausted ? 'Bạn đã dùng hết lượt tạo ảnh.' : 'Chưa thể tạo ảnh'}</AppText><AppText variant="subhead">{exhausted ? 'Hãy đăng ký thêm để tiếp tục tạo ảnh.' : mutationError instanceof Error ? mutationError.message : 'Dịch vụ chưa được hỗ trợ, vui lòng thử ảnh khác.'}</AppText></View>}
@@ -124,7 +135,7 @@ export function TryOnScreen() {
     <View style={{ gap: spacing.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
         <AppText variant="headline">Kho outfit</AppText>
-        <AppText variant="caption">{outfits.data!.items.length}/{plans.data!.current.entitlements.savedOutfits}</AppText>
+        <AppText variant="caption">{outfits.data!.items.length}/{plans.data!.current.unlimited ? '∞' : plans.data!.current.entitlements.savedOutfits}</AppText>
       </View>
       {outfits.data!.items.length === 0
         ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center' }}><AppText variant="subhead">Chưa có outfit nào được lưu.</AppText></View>

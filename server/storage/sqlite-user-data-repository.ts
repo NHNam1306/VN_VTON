@@ -209,6 +209,14 @@ export class SqliteUserDataRepository implements UserDataRepository {
     `).run({ userId, ...record })
   }
 
+  deleteTryOnResult(userId: string, angle: TryOnResultRecord['angle']): string | null {
+    const row = this.database.prepare(
+      'SELECT image_key FROM try_on_images WHERE user_id = ? AND angle = ?',
+    ).get(userId, angle) as { image_key: string | null } | undefined
+    this.database.prepare('DELETE FROM try_on_images WHERE user_id = ? AND angle = ?').run(userId, angle)
+    return row?.image_key ?? null
+  }
+
   listSavedOutfits(userId: string): SavedOutfitRecord[] {
     const rows = this.database.prepare(`
       SELECT id, front_image_url, front_image_key, back_image_url, back_image_key,

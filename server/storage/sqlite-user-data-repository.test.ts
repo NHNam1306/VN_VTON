@@ -75,6 +75,27 @@ describe('SqliteUserDataRepository', () => {
     repository.close()
   })
 
+  it('xoá riêng kết quả một góc và trả key ảnh để dọn storage', () => {
+    const repository = new SqliteUserDataRepository(':memory:')
+    repository.upsertTryOnResult(userId, {
+      angle: 'front',
+      imageUrl: '/uploads/front.webp',
+      imageKey: 'front.webp',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    })
+    repository.upsertTryOnResult(userId, {
+      angle: 'back',
+      imageUrl: '/uploads/back.webp',
+      imageKey: 'back.webp',
+      createdAt: '2026-01-01T00:00:01.000Z',
+    })
+
+    expect(repository.deleteTryOnResult(userId, 'back')).toBe('back.webp')
+    expect(repository.listTryOnResults(userId).map((item) => item.angle)).toEqual(['front'])
+    expect(repository.deleteTryOnResult(userId, 'back')).toBeNull()
+    repository.close()
+  })
+
   it('lưu nhiều bộ ảnh hoàn chỉnh và bảo toàn key ảnh trong lịch sử', () => {
     const repository = new SqliteUserDataRepository(':memory:')
     repository.saveOutfit(userId, {

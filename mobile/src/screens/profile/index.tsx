@@ -54,12 +54,15 @@ export function ProfileScreen() {
       <AppText variant="subhead">@{social.data.me.username}</AppText>
       <AppText variant="caption">{auth.user?.email}</AppText>
       <AppButton title="Đổi ảnh đại diện" variant="secondary" loading={uploadAvatar.isPending} onPress={() => uploadAvatar.mutate()} style={{ alignSelf: 'stretch' }}/>
+      <AppButton title="Cài đặt tài khoản" variant="secondary" onPress={() => router.push('/settings')} style={{ alignSelf: 'stretch' }}/>
       {uploadAvatar.error && <AppText variant="subhead" style={{ color: colors.destructive }}>{uploadAvatar.error instanceof Error ? uploadAvatar.error.message : 'Không thể đổi ảnh đại diện.'}</AppText>}
     </View>
     <View style={{ gap: spacing.sm, padding: spacing.lg, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: brand.secondary }}>
       <AppText variant="caption">GÓI HIỆN TẠI</AppText>
       <AppText variant="title">{plans.data.current.planName}</AppText>
-      <AppText variant="subhead">Tủ đồ {plans.data.current.entitlements.wardrobeItems} món · {plans.data.current.entitlements.savedOutfits} outfit</AppText>
+      <AppText variant="subhead">{plans.data.current.unlimited
+        ? 'Tủ đồ và outfit không giới hạn'
+        : 'Tủ đồ ' + plans.data.current.entitlements.wardrobeItems + ' món · ' + plans.data.current.entitlements.savedOutfits + ' outfit'}</AppText>
       <AppButton title="Xem các gói đăng ký" variant="secondary" onPress={() => router.push('/plans')}/>
     </View>
     <AppButton title="Đăng xuất" variant="destructive" onPress={() => void auth.signOut()}/>

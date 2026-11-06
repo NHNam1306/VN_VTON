@@ -104,7 +104,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     configurationError: authConfigurationError,
     signIn: async (email, password) => {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
-      if (error) throw new Error(error.message === 'Email not confirmed' ? 'Email chưa được xác minh.' : 'Email hoặc mật khẩu không đúng.');
+      if (error) {
+        const unconfirmed = error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message);
+        throw new Error(unconfirmed ? 'Email chưa được xác minh. Hãy kiểm tra hộp thư hoặc gửi lại email xác minh.' : 'Email hoặc mật khẩu không đúng.');
+      }
     },
     signUp: async (name, email, password) => {
       const { data, error } = await supabase.auth.signUp({
@@ -127,7 +130,12 @@ export function AuthProvider({ children }: PropsWithChildren) {
         email: email.trim().toLowerCase(),
         options: { emailRedirectTo: Linking.createURL('auth-callback') },
       });
-      if (error) throw new Error('Chưa thể gửi lại email xác minh. Vui lòng thử lại sau.');
+      if (error) {
+        const rateLimited = error.status === 429 || /rate limit|too many/i.test(error.message);
+        throw new Error(rateLimited
+          ? 'Bạn vừa yêu cầu gửi email. Vui lòng đợi khoảng một phút rồi thử lại.'
+          : 'Chưa thể gửi lại email xác minh. Vui lòng thử lại sau.');
+      }
     },
     requestPasswordReset: async (email) => {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {

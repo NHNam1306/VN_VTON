@@ -11,7 +11,7 @@ import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { useAuth } from '@/providers/auth-provider';
 import { apiBaseUrl, apiRequest, protectedImageSource } from '@/services/api-client';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
-import type { Garment } from '@/types/api';
+import type { Garment, PlanSnapshot } from '@/types/api';
 
 type AiExtractedGarment = {
   id: string;
@@ -32,8 +32,13 @@ export function WardrobeScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const columns = width >= 700 ? 3 : 2;
   const query = useQuery({ queryKey: ['garments'], queryFn: () => apiRequest<{ items: Garment[] }>('/api/garments') });
+  const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
+  const maxItems = plans.data?.current.entitlements.wardrobeItems ?? 0;
+  const unlimited = plans.data?.current.unlimited ?? false;
+  const remainingSlots = unlimited ? Number.MAX_SAFE_INTEGER : Math.max(0, maxItems - (query.data?.items.length ?? 0));
   const addGarment = useMutation({
     mutationFn: async () => {
+      if (remainingSlots === 0) throw new Error('Tủ đồ đã đạt giới hạn của gói hiện tại.');
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) throw new Error('Cần quyền truy cập thư viện ảnh để thêm món đồ.');
       const picked = await ImagePicker.launchImageLibraryAsync({
@@ -56,30 +61,41 @@ export function WardrobeScreen() {
         method: 'POST',
         body: extractForm,
       });
-      const item = extracted.items[0];
-      if (!item) throw new Error('Không nhận diện được món đồ trong ảnh. Hãy thử ảnh rõ hơn.');
+      if (extracted.items.length === 0) {
+        throw new Error('Không nhận diện được món đồ trong ảnh. Hãy thử ảnh rõ hơn.');
+      }
+      if (extracted.items.length > remainingSlots) {
+        throw new Error('Ảnh có ' + extracted.items.length + ' món nhưng tủ chỉ còn ' + remainingSlots + ' chỗ trống.');
+      }
 
-      const studioUrl = item.studioImageUrl.startsWith('http') ? item.studioImageUrl : apiBaseUrl + item.studioImageUrl;
-      const processedResponse = await fetch(studioUrl, {
-        headers: session?.access_token ? { Authorization: 'Bearer ' + session.access_token } : undefined,
-      });
-      if (!processedResponse.ok) throw new Error('Không thể tải ảnh món đồ đã xử lý.');
-      const processedBlob = await processedResponse.blob();
+      const created: Garment[] = [];
+      for (const [index, item] of extracted.items.entries()) {
+        const studioUrl = item.studioImageUrl.startsWith('http')
+          ? item.studioImageUrl
+          : apiBaseUrl + item.studioImageUrl;
+        const processedResponse = await fetch(studioUrl, {
+          headers: session?.access_token ? { Authorization: 'Bearer ' + session.access_token } : undefined,
+        });
+        if (!processedResponse.ok) throw new Error('Không thể tải ảnh món đồ đã xử lý.');
+        const processedBlob = await processedResponse.blob();
 
-      const createForm = new FormData();
-      createForm.append('name', item.name || 'Món đồ mới');
-      createForm.append('category', item.category);
-      createForm.append('frontOriginal', originalFile);
-      createForm.append('frontProcessed', processedBlob, 'front-processed.webp');
-      return apiRequest<Garment>('/api/garments', { method: 'POST', body: createForm });
+        const createForm = new FormData();
+        createForm.append('name', item.name || 'Món đồ mới');
+        createForm.append('category', item.category);
+        createForm.append('frontOriginal', originalFile);
+        createForm.append('frontProcessed', processedBlob, 'front-processed-' + index + '.webp');
+        created.push(await apiRequest<Garment>('/api/garments', { method: 'POST', body: createForm }));
+      }
+      return created;
     },
-    onSuccess: (item) => {
-      if (!item) return;
+    onSuccess: (items) => {
+      if (!items) return;
       queryClient.setQueryData<{ items: Garment[] }>(['garments'], (current) => ({
-        items: [item, ...(current?.items ?? [])],
+        items: [...items, ...(current?.items ?? [])],
       }));
-      setMessage('Đã thêm món đồ vào tủ.');
+      setMessage(items.length === 1 ? 'Đã thêm món đồ vào tủ.' : 'Đã thêm ' + items.length + ' món đồ vào tủ.');
     },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: ['garments'] }),
   });
   const deleteGarment = useMutation({
     mutationFn: (id: string) => apiRequest<void>('/api/garments/' + encodeURIComponent(id), { method: 'DELETE' }),
@@ -91,8 +107,9 @@ export function WardrobeScreen() {
     },
   });
 
-  if (query.data === undefined) return <ScreenLoading label="Đang mở tủ đồ…"/>;
-  if (query.error) return <ScreenError message={query.error instanceof Error ? query.error.message : 'Không thể tải tủ đồ.'} onRetry={() => void query.refetch()}/>;
+  if (query.data === undefined || plans.data === undefined) return <ScreenLoading label="Đang mở tủ đồ…"/>;
+  const loadError = query.error ?? plans.error;
+  if (loadError) return <ScreenError message={loadError instanceof Error ? loadError.message : 'Không thể tải tủ đồ.'} onRetry={() => { void query.refetch(); void plans.refetch(); }}/>;
 
   return (
     <FlatList
@@ -107,9 +124,9 @@ export function WardrobeScreen() {
       ListHeaderComponent={<View style={{ gap: spacing.sm, marginBottom: spacing.md }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <AppText variant="title">Tủ đồ</AppText>
-          <AppText variant="caption">{query.data.items.length} món</AppText>
+          <AppText variant="caption">{query.data.items.length}/{unlimited ? '∞' : maxItems} món</AppText>
         </View>
-        <AppButton title="Thêm món đồ từ ảnh" loading={addGarment.isPending} onPress={() => { setMessage(null); addGarment.mutate(); }}/>
+        <AppButton title="Thêm món đồ từ ảnh" loading={addGarment.isPending} disabled={remainingSlots === 0} onPress={() => { setMessage(null); addGarment.mutate(); }}/>
         {addGarment.error && <View accessibilityRole="alert" style={{ padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.destructiveBackground }}><AppText variant="subhead" style={{ color: colors.destructive }}>{addGarment.error instanceof Error ? addGarment.error.message : 'Không thể thêm món đồ.'}</AppText></View>}
         {deleteGarment.error && <View accessibilityRole="alert" style={{ padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.destructiveBackground }}><AppText variant="subhead" style={{ color: colors.destructive }}>{deleteGarment.error instanceof Error ? deleteGarment.error.message : 'Không thể xoá món đồ.'}</AppText></View>}
         {message && <View style={{ padding: spacing.md, borderRadius: radius.md, backgroundColor: colors.successBackground }}><AppText variant="subhead" style={{ color: colors.success }}>{message}</AppText></View>}

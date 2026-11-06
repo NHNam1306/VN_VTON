@@ -15,6 +15,7 @@ import { useAuth } from '@/providers/auth-provider';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const contentByMode: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
   login: {
@@ -83,17 +84,21 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
   };
 
   const validate = () => {
-    if (!email.trim() && mode !== 'reset') return 'Vui lòng nhập email.';
+    const normalizedEmail = email.trim();
+    if (!normalizedEmail && mode !== 'reset') return 'Vui lòng nhập email.';
+    if (mode !== 'reset' && (!emailPattern.test(normalizedEmail) || normalizedEmail.length > 254)) {
+      return 'Email không hợp lệ.';
+    }
     if (mode === 'forgot') return null;
     if (!password) return 'Vui lòng nhập mật khẩu.';
-    if ((mode === 'register' || mode === 'reset') && password.length < 8) {
-      return 'Mật khẩu cần ít nhất 8 ký tự.';
+    if ((mode === 'register' || mode === 'reset') && (password.length < 8 || password.length > 128)) {
+      return 'Mật khẩu phải từ 8 đến 128 ký tự.';
     }
     if ((mode === 'register' || mode === 'reset') && password !== confirmPassword) {
       return 'Mật khẩu nhập lại chưa khớp.';
     }
-    if (mode === 'register' && name.trim().length < 2) {
-      return 'Tên hiển thị cần ít nhất 2 ký tự.';
+    if (mode === 'register' && (name.trim().length < 2 || name.trim().length > 50)) {
+      return 'Tên hiển thị phải từ 2 đến 50 ký tự.';
     }
     if (mode === 'reset' && (!auth.session || auth.linkError)) {
       return 'Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.';
@@ -123,7 +128,7 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
         }
       } else if (mode === 'forgot') {
         await auth.requestPasswordReset(email);
-        setNotice('Đã gửi liên kết đặt lại mật khẩu. Hãy kiểm tra hộp thư và thư rác.');
+        setNotice('Nếu email tồn tại, bạn sẽ nhận được liên kết đặt lại mật khẩu trong ít phút.');
       } else {
         await auth.resetPassword(password);
         auth.finishRecovery();
@@ -262,6 +267,7 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
                 autoCapitalize="words"
                 autoComplete="name"
                 placeholder="Tên của bạn"
+                maxLength={50}
               />
             )}
 
@@ -275,6 +281,7 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
                 autoCorrect={false}
                 autoComplete="email"
                 placeholder="email@example.com"
+                maxLength={254}
               />
             )}
 
@@ -395,6 +402,7 @@ function PasswordField({
       }}>
         <TextInput
           {...props}
+          maxLength={128}
           secureTextEntry={!visible}
           autoCapitalize="none"
           autoCorrect={false}

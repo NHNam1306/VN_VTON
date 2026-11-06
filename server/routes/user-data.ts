@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import sharp from 'sharp'
 import type { PersonImageRecord, PersonImageResponse } from '../domain/person-image.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { UserDataRepository } from '../storage/user-data-repository.js'
@@ -49,14 +50,19 @@ export function createUserDataRouter(repository: UserDataRepository, images: Ima
         response.status(400).json({ message: 'Vui lòng chọn ảnh toàn thân.' })
         return
       }
-      const { width, height } = await validateImageContent(request.file, { maxDimension: 1024 })
+      await validateImageContent(request.file)
+      const normalized = await sharp(request.file.buffer, { limitInputPixels: 24_000_000 })
+        .rotate()
+        .resize({ width: 1024, height: 1024, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 90, effort: 4 })
+        .toBuffer({ resolveWithObject: true })
 
-      newImageKey = await images.save(request.file.buffer, request.file.mimetype)
+      newImageKey = await images.save(normalized.data, 'image/webp')
       const record: PersonImageRecord = {
         id: 'current',
         imageKey: newImageKey,
-        width,
-        height,
+        width: normalized.info.width,
+        height: normalized.info.height,
         warnings: parseWarnings(request.body.warnings),
         createdAt: new Date().toISOString(),
       }

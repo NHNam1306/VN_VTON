@@ -72,6 +72,14 @@ export class PostgresUserDataRepository implements UserDataRepository {
     `, [userId, record.angle, record.imageUrl, record.imageKey, record.createdAt])
   }
 
+  async deleteTryOnResult(userId: string, angle: TryOnResultRecord['angle']): Promise<string | null> {
+    const result = await this.pool.query<{ image_key: string | null }>(
+      'DELETE FROM try_on_images WHERE user_id = $1 AND angle = $2 RETURNING image_key',
+      [userId, angle],
+    )
+    return result.rows[0]?.image_key ?? null
+  }
+
   async listSavedOutfits(userId: string): Promise<SavedOutfitRecord[]> {
     const result = await this.pool.query<{
       id: string; front_image_url: string; front_image_key: string | null;

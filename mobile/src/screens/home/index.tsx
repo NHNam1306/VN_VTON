@@ -39,8 +39,8 @@ export function HomeScreen() {
         <AppText variant="headline">Không gian của bạn</AppText>
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Metric label="Gói hiện tại" value={current.planName}/>
-          <Metric label="Tủ đồ" value={garments.data!.items.length + '/' + current.entitlements.wardrobeItems}/>
-          <Metric label="Outfit" value={outfits.data!.items.length + '/' + current.entitlements.savedOutfits}/>
+          <Metric label="Tủ đồ" value={garments.data!.items.length + '/' + (current.unlimited ? '∞' : current.entitlements.wardrobeItems)}/>
+          <Metric label="Outfit" value={outfits.data!.items.length + '/' + (current.unlimited ? '∞' : current.entitlements.savedOutfits)}/>
         </View>
       </View>
 

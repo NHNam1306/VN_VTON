@@ -14,6 +14,7 @@ export interface UserDataRepository {
   deletePersonImage(userId: string): MaybePromise<string | null>
   listTryOnResults(userId: string): MaybePromise<TryOnResultRecord[]>
   upsertTryOnResult(userId: string, record: TryOnResultRecord): MaybePromise<void>
+  deleteTryOnResult(userId: string, angle: TryOnResultRecord['angle']): MaybePromise<string | null>
   listSavedOutfits(userId: string): MaybePromise<SavedOutfitRecord[]>
   findPendingOutfit(userId: string, frontImageUrl: string): MaybePromise<SavedOutfitRecord | null>
   saveOutfit(userId: string, record: SavedOutfitRecord): MaybePromise<void>

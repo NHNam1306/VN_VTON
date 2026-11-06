@@ -145,9 +145,10 @@ export function createGenerationRouter(
           : garment!.frontProcessedKey
         return images.publicUrl(key)
       })
+      const previousResults = await userData.listTryOnResults(userId)
       const frontReference = angle === 'front'
         ? undefined
-        : (await userData.listTryOnResults(userId)).find((item) => item.angle === 'front')?.imageUrl
+        : previousResults.find((item) => item.angle === 'front')?.imageUrl
       if (angle !== 'front' && !frontReference) {
         response.status(409).json({ message: 'Cần tạo ảnh TRƯỚC thành công trước.' })
         return
@@ -195,14 +196,17 @@ export function createGenerationRouter(
         imageKey: generated.storageKey ?? null,
         createdAt: new Date().toISOString(),
       }
-      const previousImageKey = (await userData.listTryOnResults(userId))
-        .find((item) => item.angle === angle)?.imageKey
+      const previousImageKey = previousResults.find((item) => item.angle === angle)?.imageKey
       await userData.upsertTryOnResult(userId, result)
       if (previousImageKey && previousImageKey !== result.imageKey && !(await userData.isImageKeySaved(userId, previousImageKey))) {
         await images.delete(previousImageKey)
       }
 
       if (angle === 'front') {
+        const staleBackImageKey = await userData.deleteTryOnResult(userId, 'back')
+        if (staleBackImageKey && !(await userData.isImageKeySaved(userId, staleBackImageKey))) {
+          await images.delete(staleBackImageKey)
+        }
         const saved = await userData.saveOutfitIfBelowLimit(userId, {
           id: randomUUID(),
           frontImageUrl: result.imageUrl,

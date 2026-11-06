@@ -32,11 +32,17 @@ export type SavedOutfit = {
 
 export type SocialPerson = { id: string; username: string; name: string; avatar: string };
 export type SocialSnapshot = {
-  me: SocialPerson & { inviteCode: string; birthDate: string | null };
+  me: SocialPerson & {
+    inviteCode: string;
+    birthDate: string | null;
+    invitePolicy: 'everyone' | 'known' | 'code';
+    defaultVisibility: 'private' | 'friends';
+  };
   friends: SocialPerson[];
   incoming: { id: string; from: SocialPerson; createdAt: number }[];
   outgoing: { id: string; to: SocialPerson; createdAt: number }[];
   polls: unknown[];
+  blocked: SocialPerson[];
   notifications: { id: string; text: string; read: boolean; createdAt: number }[];
 };
 

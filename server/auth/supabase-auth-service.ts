@@ -205,7 +205,7 @@ export class SupabaseAuthService implements AuthBackend {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) || newEmail.length > 254) {
       throw new AuthError(400, 'Email không hợp lệ.')
     }
-    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    await this.verifyCurrentPassword(userId, input.password, token, 'Mật khẩu xác nhận không đúng.')
     const authedClient = createClient(this.url, this.publishableKey, {
       auth: { autoRefreshToken: false, persistSession: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -222,7 +222,7 @@ export class SupabaseAuthService implements AuthBackend {
     if (input.newPassword.length < 8 || input.newPassword.length > 128) {
       throw new AuthError(400, 'Mật khẩu mới phải từ 8 đến 128 ký tự.')
     }
-    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    await this.verifyCurrentPassword(userId, input.currentPassword, token, 'Mật khẩu hiện tại không đúng.')
     const authedClient = createClient(this.url, this.publishableKey, {
       auth: { autoRefreshToken: false, persistSession: false },
       global: { headers: { Authorization: `Bearer ${token}` } },
@@ -244,6 +244,25 @@ export class SupabaseAuthService implements AuthBackend {
       token: accessToken,
       refreshToken,
       expiresAt: new Date((expiresAt ?? Math.floor(Date.now() / 1000) + 3600) * 1000),
+    }
+  }
+
+  private async verifyCurrentPassword(
+    userId: string,
+    password: string,
+    token: string | null | undefined,
+    errorMessage: string,
+  ): Promise<void> {
+    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    const { data, error } = await this.client.auth.getUser(token)
+    const email = data.user?.email
+    if (error || !email || data.user?.id !== userId) {
+      throw new AuthError(401, 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.')
+    }
+    const verificationClient = this.createAuthClient()
+    const verified = await verificationClient.auth.signInWithPassword({ email, password })
+    if (verified.error || !verified.data.user || verified.data.user.id !== userId) {
+      throw new AuthError(400, errorMessage)
     }
   }
 }
