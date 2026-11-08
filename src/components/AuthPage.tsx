@@ -27,7 +27,7 @@ type RecoveryState = {
 }
 
 type AuthPageProps = {
-  onAuthenticated: (user: AuthUser) => void
+  onAuthenticated: (user: AuthUser, portal?: 'user' | 'creator') => void
 }
 
 const readRecoveryState = (): RecoveryState => {
@@ -75,6 +75,7 @@ const contentByMode: Record<AuthMode, { eyebrow: string; title: string; descript
 export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [recovery] = useState(readRecoveryState)
   const [mode, setMode] = useState<AuthMode>(recovery.requested ? 'reset' : 'login')
+  const [portal, setPortal] = useState<'user'|'creator'>('user')
   const [displayName, setDisplayName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -116,13 +117,17 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
       }
       if (mode === 'reset' && recovery.credentials) {
         const user = await authApi.resetPassword({ ...recovery.credentials, password })
-        onAuthenticated(user)
+        onAuthenticated(user, 'user')
         return
       }
       const user = mode === 'login'
         ? await authApi.login({ email, password })
         : await authApi.register({ displayName, email, password })
-      onAuthenticated(user)
+      if (mode === 'login' && portal === 'creator' && user.role !== 'koc' && user.role !== 'admin') {
+        await authApi.logout()
+        throw new Error('Tài khoản này chưa được cấp quyền KOL/KOC. Bạn có thể đăng nhập ở chế độ Người dùng.')
+      }
+      onAuthenticated(user, mode === 'login' ? portal : 'user')
     } catch (submitError) {
       const message = submitError instanceof Error ? submitError.message : 'Không thể xác thực tài khoản.'
       const needsConfirmation = /xác minh email|email chưa được xác minh/i.test(message)
@@ -184,6 +189,11 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
             <BrandLogo markClassName="size-11" wordmarkClassName="text-lg" />
             <p className="sr-only">Không gian thử đồ của bạn</p>
           </div>
+
+          {mode === 'login' && <div className="mb-3 grid grid-cols-2 rounded-2xl border border-black/[0.07] bg-white p-1" aria-label="Loại tài khoản">
+            <button type="button" onClick={()=>setPortal('user')} className={`rounded-xl px-3 py-2.5 text-xs font-bold ${portal==='user'?'bg-ink text-white shadow-sm':'text-ink/45'}`}>Người dùng</button>
+            <button type="button" onClick={()=>setPortal('creator')} className={`rounded-xl px-3 py-2.5 text-xs font-bold ${portal==='creator'?'bg-ink text-white shadow-sm':'text-ink/45'}`}>KOL/KOC</button>
+          </div>}
 
           {(mode === 'login' || mode === 'register') ? (
             <div className="rounded-2xl bg-black/[0.04] p-1" role="tablist" aria-label="Đăng nhập hoặc đăng ký">

@@ -2,6 +2,7 @@ import type { PersonImageRecord } from '../domain/person-image.js'
 import type { SavedOutfitRecord } from '../domain/saved-outfit.js'
 import type { TryOnResultRecord } from '../domain/try-on-result.js'
 import type { MaybePromise } from './maybe-promise.js'
+import type { ListOptions } from '../http/pagination.js'
 
 export type DeletedUserData = {
   personImageKey: string | null
@@ -15,7 +16,8 @@ export interface UserDataRepository {
   listTryOnResults(userId: string): MaybePromise<TryOnResultRecord[]>
   upsertTryOnResult(userId: string, record: TryOnResultRecord): MaybePromise<void>
   deleteTryOnResult(userId: string, angle: TryOnResultRecord['angle']): MaybePromise<string | null>
-  listSavedOutfits(userId: string): MaybePromise<SavedOutfitRecord[]>
+  listSavedOutfits(userId: string, options?: ListOptions): MaybePromise<SavedOutfitRecord[]>
+  countSavedOutfits(userId: string): MaybePromise<number>
   findPendingOutfit(userId: string, frontImageUrl: string): MaybePromise<SavedOutfitRecord | null>
   saveOutfit(userId: string, record: SavedOutfitRecord): MaybePromise<void>
   saveOutfitIfBelowLimit(userId: string, record: SavedOutfitRecord, maxItems: number): MaybePromise<boolean>

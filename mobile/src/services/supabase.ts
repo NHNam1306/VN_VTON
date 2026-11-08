@@ -33,3 +33,24 @@ export const supabase = createClient(supabaseUrl, supabaseKey, {
     flowType: 'pkce',
   },
 });
+
+export class AuthSessionTimeoutError extends Error {
+  constructor() {
+    super('Khôi phục phiên đăng nhập quá thời gian.');
+    this.name = 'AuthSessionTimeoutError';
+  }
+}
+
+export async function getSessionWithTimeout(timeoutMs = 10_000) {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      supabase.auth.getSession(),
+      new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new AuthSessionTimeoutError()), timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}

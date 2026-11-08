@@ -3,7 +3,7 @@ import * as Linking from 'expo-linking';
 import { createContext, type PropsWithChildren, use, useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
-import { authConfigurationError, supabase } from '@/services/supabase';
+import { authConfigurationError, getSessionWithTimeout, supabase } from '@/services/supabase';
 
 type AuthContextValue = {
   ready: boolean;
@@ -34,7 +34,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
     let active = true;
-    void supabase.auth.getSession()
+    void getSessionWithTimeout()
       .then(({ data, error }) => {
         if (!active || error) return;
         setSession(data.session);

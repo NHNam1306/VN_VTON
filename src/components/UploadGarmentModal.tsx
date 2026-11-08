@@ -188,7 +188,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         const multiCards: ExtractedGarmentCard[] = []
         for (const item of aiItems) {
           try {
-            const resp = await fetch(item.studioImageUrl)
+            const resp = await fetch(item.studioImageUrl + (item.studioImageUrl.includes('?') ? '&proxy=1' : '?proxy=1'))
             const rawBlob = await resp.blob()
             let cleanedBlob = rawBlob
             try {
@@ -225,7 +225,7 @@ export function UploadGarmentModal({ open, defaultCategory, onClose, onSaved }: 
         replaceExtractedItems([])
         const single = aiItems[0]
         try {
-          const resp = await fetch(single.studioImageUrl)
+          const resp = await fetch(single.studioImageUrl + (single.studioImageUrl.includes('?') ? '&proxy=1' : '?proxy=1'))
           const rawBlob = await resp.blob()
           try {
             const norm = await normalizeBlob(rawBlob, {

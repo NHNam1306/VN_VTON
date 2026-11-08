@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
+import sharp from 'sharp'
 import type { ImageStorage } from '../storage/image-storage.js'
 import { OpenRouterImageProvider } from './openrouter-image-provider.js'
 
-const pngBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+const pngBytes = await sharp({
+  create: { width: 32, height: 32, channels: 4, background: { r: 10, g: 20, b: 30, alpha: 1 } },
+}).png().toBuffer()
 
 const createStorage = () => ({
   save: vi.fn(async () => 'generated.png'),
@@ -34,7 +37,7 @@ describe('OpenRouterImageProvider', () => {
       expect(body.resolution).toBe('768')
       expect(body.aspect_ratio).toBe('4:5')
       expect(body.input_references).toHaveLength(4)
-      expect(body.input_references.every((item) => item.image_url.url.startsWith('data:image/png;base64,'))).toBe(true)
+      expect(body.input_references.every((item) => item.image_url.url.startsWith('data:image/webp;base64,'))).toBe(true)
       expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer test-key')
       return new Response(JSON.stringify({
         data: [{

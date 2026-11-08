@@ -57,6 +57,14 @@ export const socialApi = {
     snapshotRequest = null
     return rememberSnapshot(data as SocialSnapshot)
   },
+  publish: async (form: FormData) => {
+    const epoch = ++snapshotEpoch
+    snapshotRequest = null
+    const response = await apiFetch('/api/social/publish', { method:'POST', body:form })
+    const data = await response.json() as SocialSnapshot | { message?: string }
+    if (!response.ok) throw new Error('message' in data && data.message ? data.message : 'Không thể đăng outfit.')
+    return epoch === snapshotEpoch ? rememberSnapshot(data as SocialSnapshot) : data as SocialSnapshot
+  },
   search: (q: string) => request<SocialPerson[]>('/search?q='+encodeURIComponent(q)),
   invite: (code: string) => request<SocialPerson>('/invite?code='+encodeURIComponent(code)),
   profile: (id: string) => request<{person:SocialPerson;outfits:SharedOutfit[]}>('/profile/'+encodeURIComponent(id)),

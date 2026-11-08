@@ -51,6 +51,8 @@ export function OutfitHistory({
   const [pendingDelete, setPendingDelete] = useState<SavedOutfit | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [visibleLimit, setVisibleLimit] = useState(30)
+  const renderedOutfits = outfits.slice(0, visibleLimit)
 
   const remove = async (outfit: SavedOutfit) => {
     setDeletingId(outfit.id)
@@ -118,7 +120,7 @@ export function OutfitHistory({
           <div>
             <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Bộ đồ của tôi</h2>
             <div className="mt-3 flex flex-wrap gap-3 text-xs font-semibold text-sage-800">
-              <a href="/bang-tin?compose=1" className="underline">Xin ý kiến bạn bè →</a>
+              <a href="/bang-tin?compose=1" className="underline">Tải outfit →</a>
             </div>
           </div>
           <div className="flex items-center gap-3 self-start sm:self-auto">
@@ -178,7 +180,7 @@ export function OutfitHistory({
             </div>
           ) : (
             <div className="grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
-              {outfits.map((outfit, index) => {
+              {renderedOutfits.map((outfit, index) => {
                 const defaultTitle = `Bộ thử ${outfits.length - index}`
                 const custom = customizations[outfit.id]
                 const displayTitle = custom?.title || defaultTitle
@@ -339,6 +341,15 @@ export function OutfitHistory({
                   </article>
                 )
               })}
+              {renderedOutfits.length < outfits.length && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleLimit((current) => current + 30)}
+                  className="col-span-full mx-auto rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm transition hover:border-black/20 hover:bg-black/[0.03]"
+                >
+                  Hiện thêm {Math.min(30, outfits.length - renderedOutfits.length)} bộ
+                </button>
+              )}
             </div>
           )}
         </div>

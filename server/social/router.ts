@@ -5,6 +5,7 @@ import type { ImageStorage } from '../storage/image-storage.js'
 import type { SocialService } from './social-service.js'
 
 const avatarUpload = createImageUpload(1).single('avatar')
+const postUpload = createImageUpload(3).array('images', 3)
 const imageKeyFromUrl = (value: string) => {
   if (!value.startsWith('/uploads/')) return null
   try { return decodeURIComponent(value.slice('/uploads/'.length)) } catch { return null }
@@ -46,6 +47,62 @@ export function createSocialRouter(store: SocialService, images: ImageStorage) {
       next(error)
     }
   })
-  router.post('/:action', async (req,res,next) => { try { res.json(await store.act(req.authUser.id, String(req.params.action), req.body ?? {})) } catch (error) { next(error) } })
+  router.post('/publish', postUpload, async (req,res,next) => {
+    const savedKeys: string[] = []
+    try {
+      const files = Array.isArray(req.files) ? req.files : []
+      const kind = req.body?.kind === 'poll' ? 'poll' : 'post'
+      if (!files.length || files.length > 3 || (kind === 'poll' && files.length < 2)) {
+        res.status(400).json({ message: kind === 'poll' ? 'Chọn 2–3 ảnh để tạo bình chọn.' : 'Chọn 1–3 ảnh để đăng.' })
+        return
+      }
+      const imageUrls: string[] = []
+      for (const file of files) {
+        await validateImageContent(file)
+        const optimized = await sharp(file.buffer).rotate().resize(1600, 1600, { fit:'inside', withoutEnlargement:true }).webp({ quality:86 }).toBuffer()
+        const key = await images.save(optimized, 'image/webp')
+        savedKeys.push(key)
+        imageUrls.push(images.publicUrl(key))
+      }
+      const parseIds = (value: unknown) => {
+        if (Array.isArray(value)) return value
+        if (typeof value !== 'string' || !value) return []
+        try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed : [] } catch { return [] }
+      }
+      const updated = await store.act(req.authUser.id, kind === 'poll' ? 'image-poll-create' : 'post-create', {
+        imageUrls,
+        caption:req.body?.caption ?? '',
+        title:req.body?.title ?? '',
+        hours:Number(req.body?.hours ?? 24),
+        visibility:req.body?.visibility ?? 'friends',
+        groupIds:parseIds(req.body?.groupIds),
+        recipientIds:parseIds(req.body?.recipientIds),
+      })
+      res.json(updated)
+    } catch (error) {
+      await Promise.all(savedKeys.map(key => images.delete(key).catch(() => undefined)))
+      next(error)
+    }
+  })
+  router.post('/post-delete', async (req,res,next) => {
+    try {
+      const before = await store.snapshot(req.authUser.id)
+      const post = before.posts.find(item => item.id === req.body?.id && item.owner.id === req.authUser.id)
+        ?? before.creatorFeed.find(item => item.id === req.body?.id && item.owner.id === req.authUser.id)
+      const updated = await store.act(req.authUser.id, 'post-delete', req.body ?? {})
+      await Promise.all((post?.imageUrls ?? []).map(imageKeyFromUrl).filter((key): key is string => Boolean(key)).map(key => images.delete(key).catch(() => undefined)))
+      res.json(updated)
+    } catch (error) { next(error) }
+  })
+  router.post('/:action', async (req,res,next) => {
+    try {
+      const action = String(req.params.action)
+      if (action === 'post-create' || action === 'image-poll-create') {
+        res.status(404).json({ message:'Thao tác không khả dụng.' })
+        return
+      }
+      res.json(await store.act(req.authUser.id, action, req.body ?? {}))
+    } catch (error) { next(error) }
+  })
   return router
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { Router } from 'express'
+import sharp from 'sharp'
 import { GARMENT_CATEGORIES, type GarmentCategory, type GarmentRecord, type GarmentResponse } from '../domain/garment.js'
 import type { GarmentRepository } from '../storage/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
@@ -7,8 +8,9 @@ import { GarmentExtractorService } from '../services/garment-extractor.js'
 import type { SocialService } from '../social/social-service.js'
 import { runtimeConfig } from '../config/runtime-config.js'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
-import { createFixedWindowRateLimit } from '../http/rate-limit.js'
+import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../http/rate-limit.js'
 import type { PlanService } from '../plans/plan-service.js'
+import { pageMetadata, parsePagination } from '../http/pagination.js'
 
 const upload = createImageUpload(4)
 export const MAX_GARMENTS_PER_USER = 20
@@ -39,12 +41,15 @@ export function createGarmentRouter(
   extractor?: GarmentExtractorService,
   social?: SocialService,
   plans?: PlanService,
+  rateLimits: RateLimitStore = new MemoryRateLimitStore(),
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
   const aiRateLimit = createFixedWindowRateLimit({
     max: runtimeConfig.aiRequestsPerWindow,
     windowMs: runtimeConfig.aiRequestWindowMs,
+    namespace: 'ai.extract.user',
+    store: rateLimits,
     key: (request) => `${request.authUser.id}:${request.ip ?? 'unknown'}`,
   })
   const wardrobeLimit = async (user: Express.Request['authUser']) =>
@@ -52,8 +57,10 @@ export function createGarmentRouter(
 
   router.get('/', async (request, response, next) => {
     try {
-      const items = await repository.list(request.authUser.id)
-      response.json({ items: items.map((item) => toResponse(item, images)) })
+      const page = parsePagination(request.query)
+      const items = await repository.list(request.authUser.id, page)
+      const total = page ? await repository.count(request.authUser.id) : items.length
+      response.json({ items: items.map((item) => toResponse(item, images)), ...pageMetadata(page?.offset ?? 0, items.length, total) })
     } catch (error) {
       next(error)
     }
@@ -62,7 +69,9 @@ export function createGarmentRouter(
   router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
     try {
       const maxItems = await wardrobeLimit(request.authUser)
-      if ((await repository.list(request.authUser.id)).length >= maxItems) {
+      const existingCount = await repository.count(request.authUser.id)
+      const remainingSlots = Math.max(0, maxItems - existingCount)
+      if (remainingSlots === 0) {
         response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
@@ -72,6 +81,11 @@ export function createGarmentRouter(
         return
       }
       await validateImageContent(file)
+      const optimizedInput = await sharp(file.buffer, { limitInputPixels: 24_000_000 })
+        .rotate()
+        .resize({ width: 1_536, height: 1_536, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 88, effort: 3 })
+        .toBuffer()
 
       const defaultCategory = (GARMENT_CATEGORIES.includes(request.body.category)
         ? request.body.category
@@ -96,13 +110,40 @@ export function createGarmentRouter(
       })
 
       const items = await activeExtractor.extractAndGenerate(
-        file.buffer,
-        file.mimetype,
+        optimizedInput,
+        'image/webp',
         defaultCategory,
-        extractOptions,
+        { ...extractOptions, maxItems: remainingSlots },
       )
 
       console.info(`[AI Extract] Completed items=${items.length}`)
+      const persist = request.body.persist === 'true' || request.body.persist === true
+      if (persist) {
+        const garments: GarmentResponse[] = []
+        for (const item of items) {
+          if (!item.studioImageUrl.startsWith('/uploads/')) continue
+          const key = decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length))
+          const record: GarmentRecord = {
+            id: randomUUID(),
+            userId: request.authUser.id,
+            name: item.name.slice(0, 80) || 'Món đồ mới',
+            category: item.category,
+            frontOriginalKey: key,
+            frontProcessedKey: key,
+            backOriginalKey: null,
+            backProcessedKey: null,
+            createdAt: new Date().toISOString(),
+          }
+          const created = await repository.createIfBelowLimit(record, maxItems)
+          if (!created) {
+            await images.delete(key)
+            continue
+          }
+          garments.push(toResponse(created, images))
+        }
+        response.json({ items, garments })
+        return
+      }
       for (const item of items) if (item.studioImageUrl.startsWith('/uploads/')) {
         await social?.trackTemporaryImage(request.authUser.id, decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length)))
       }
@@ -118,7 +159,7 @@ export function createGarmentRouter(
     const savedKeys: string[] = []
     try {
       const maxItems = await wardrobeLimit(request.authUser)
-      if ((await repository.list(request.authUser.id)).length >= maxItems) {
+      if (await repository.count(request.authUser.id) >= maxItems) {
         response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
@@ -223,12 +264,12 @@ export function createGarmentRouter(
       }
 
       await repository.delete(request.authUser.id, garment.id)
-      const keys = [
+      const keys = [...new Set([
         garment.frontOriginalKey,
         garment.frontProcessedKey,
         garment.backOriginalKey,
         garment.backProcessedKey,
-      ].filter((key): key is string => Boolean(key))
+      ].filter((key): key is string => Boolean(key)))]
       await Promise.all(keys.map((key) => images.delete(key)))
       response.status(204).end()
     } catch (error) {

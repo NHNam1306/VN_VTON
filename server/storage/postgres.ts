@@ -28,10 +28,14 @@ export const createPostgresPool = (connectionString: string): PostgresPool => {
   } else if (!url.searchParams.has('sslmode')) {
     url.searchParams.set('sslmode', 'verify-full')
   }
+  const configuredPoolMax = Number(process.env.DATABASE_POOL_MAX ?? 5)
+  const poolMax = Number.isInteger(configuredPoolMax) && configuredPoolMax > 0 && configuredPoolMax <= 20
+    ? configuredPoolMax
+    : 5
   return new Pool({
     connectionString: url.toString(),
     ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
-    max: Number(process.env.DATABASE_POOL_MAX ?? 10),
+    max: poolMax,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
   })

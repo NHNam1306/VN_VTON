@@ -1,5 +1,5 @@
 import { ArrowRight, Check, ImagePlus, LoaderCircle, Maximize2, Pencil, Plus, Search, Shirt, Trash2 } from 'lucide-react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { garmentApi } from '../services/garment-api'
 import { useFittingRoomStore } from '../store/useFittingRoomStore'
 import { garmentCategoryLabels, MAX_SELECTED_GARMENTS, MAX_WARDROBE_GARMENTS, type Garment, type GarmentCategory } from '../types/fitting-room'
@@ -195,6 +195,7 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', m
   const [isDeleting, setIsDeleting] = useState(false)
   const [zoomImage, setZoomImage] = useState<{ url: string; title: string } | null>(null)
   const [selectionNotice, setSelectionNotice] = useState<string | null>(null)
+  const [visibleLimit, setVisibleLimit] = useState(mode === 'page' ? 40 : 20)
   const activeCategory = useFittingRoomStore((state) => state.activeCategory)
   const garments = useFittingRoomStore((state) => state.garments)
   const outfit = useFittingRoomStore((state) => state.outfit)
@@ -212,6 +213,7 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', m
     garment.category === activeCategory &&
     (!normalizedQuery || garment.name.toLocaleLowerCase('vi').includes(normalizedQuery))
   ))
+  const renderedGarments = visibleGarments.slice(0, visibleLimit)
   const isWardrobeFull = garments.length >= maxGarments
   const selectedCount = [outfit.tops, outfit.outerwear, outfit.bottoms, outfit.shoes]
     .filter(Boolean).length + outfit.accessories.length
@@ -230,6 +232,10 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', m
     setSelectionNotice(null)
     selectGarment(garment.category, garment.id)
   }
+
+  useEffect(() => {
+    setVisibleLimit(mode === 'page' ? 40 : 20)
+  }, [activeCategory, mode, normalizedQuery])
 
   useLayoutEffect(() => {
     const tabList = tabListRef.current
@@ -396,7 +402,7 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', m
             </div>
           ) : (
             <div className={'grid grid-cols-2 gap-3 sm:grid-cols-3 ' + (mode === 'page' ? 'lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6' : 'lg:grid-cols-2')}>
-              {visibleGarments.map((garment) => (
+              {renderedGarments.map((garment) => (
                 <WardrobeGarmentCard
                   key={garment.id}
                   garment={garment}
@@ -407,6 +413,15 @@ export function WardrobePanel({ onAddGarment, onGoToFitting, mode = 'compact', m
                   onZoom={(url, title) => setZoomImage({ url, title })}
                 />
               ))}
+              {renderedGarments.length < visibleGarments.length && (
+                <button
+                  type="button"
+                  onClick={() => setVisibleLimit((current) => current + (mode === 'page' ? 40 : 20))}
+                  className="col-span-full mx-auto mt-2 rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm transition hover:border-black/20 hover:bg-black/[0.03]"
+                >
+                  Hiện thêm {Math.min(mode === 'page' ? 40 : 20, visibleGarments.length - renderedGarments.length)} món
+                </button>
+              )}
             </div>
           )}
         </div>

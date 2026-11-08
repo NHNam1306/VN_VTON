@@ -27,7 +27,7 @@ const navigationItems: Array<{
     { view: 'fitting', label: 'Phòng thử', icon: WandSparkles },
     { view: 'outfits', label: 'Bộ sưu tập', icon: Images },
     { view: 'friends', label: 'Bạn bè', icon: Users },
-    { view: 'koc', label: 'KOC Studio', icon: BadgeDollarSign },
+    { view: 'koc', label: 'KOL/KOC', icon: BadgeDollarSign },
     { view: 'profile', label: 'Hồ sơ', icon: UserRound },
   ]
 

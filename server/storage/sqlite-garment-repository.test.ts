@@ -56,6 +56,16 @@ describe('SqliteGarmentRepository', () => {
     repository.close()
   })
 
+  it('đếm và phân trang tủ đồ theo thứ tự mới nhất', () => {
+    const repository = new SqliteGarmentRepository(':memory:')
+    repository.create({ ...garment, id: 'old', createdAt: '2026-01-01T00:00:00.000Z' })
+    repository.create({ ...garment, id: 'new', createdAt: '2026-01-02T00:00:00.000Z' })
+    expect(repository.count(garment.userId)).toBe(2)
+    expect(repository.list(garment.userId, { limit: 1, offset: 0 }).map(item => item.id)).toEqual(['new'])
+    expect(repository.list(garment.userId, { limit: 1, offset: 1 }).map(item => item.id)).toEqual(['old'])
+    repository.close()
+  })
+
   it('lưu được áo khoác như một nhóm riêng', () => {
     const repository = new SqliteGarmentRepository(':memory:')
     const outerwear = { ...garment, id: 'jacket-1', name: 'Áo khoác denim', category: 'outerwear' as const }

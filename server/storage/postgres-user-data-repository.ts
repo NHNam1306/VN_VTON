@@ -3,6 +3,7 @@ import type { SavedOutfitRecord } from '../domain/saved-outfit.js'
 import type { TryOnResultRecord } from '../domain/try-on-result.js'
 import type { TryOnAngle } from '../providers/image-provider.js'
 import type { PostgresPool } from './postgres.js'
+import type { ListOptions } from '../http/pagination.js'
 import type { DeletedUserData, UserDataRepository } from './user-data-repository.js'
 
 const iso = (value: Date | string): string => new Date(value).toISOString()
@@ -80,13 +81,17 @@ export class PostgresUserDataRepository implements UserDataRepository {
     return result.rows[0]?.image_key ?? null
   }
 
-  async listSavedOutfits(userId: string): Promise<SavedOutfitRecord[]> {
+  async listSavedOutfits(userId: string, options?: ListOptions): Promise<SavedOutfitRecord[]> {
+    const values: Array<string | number> = [userId]
+    const pagination = options?.limit !== undefined
+      ? ` LIMIT $${values.push(options.limit)} OFFSET $${values.push(options.offset ?? 0)}`
+      : ''
     const result = await this.pool.query<{
       id: string; front_image_url: string; front_image_key: string | null;
       back_image_url: string | null; back_image_key: string | null;
       garment_ids: string[]; created_at: Date | string
     }>(`SELECT id, front_image_url, front_image_key, back_image_url, back_image_key,
-        garment_ids, created_at FROM saved_outfits WHERE user_id = $1 ORDER BY created_at DESC`, [userId])
+        garment_ids, created_at FROM saved_outfits WHERE user_id = $1 ORDER BY created_at DESC${pagination}`, values)
     return result.rows.map((row) => ({
       id: row.id, frontImageUrl: row.front_image_url, frontImageKey: row.front_image_key,
       backImageUrl: row.back_image_url, backImageKey: row.back_image_key,
@@ -94,10 +99,20 @@ export class PostgresUserDataRepository implements UserDataRepository {
     }))
   }
 
+  async countSavedOutfits(userId: string): Promise<number> {
+    const result = await this.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM saved_outfits WHERE user_id=$1', [userId])
+    return Number(result.rows[0]?.count ?? 0)
+  }
+
   async findPendingOutfit(userId: string, frontImageUrl: string): Promise<SavedOutfitRecord | null> {
-    return (await this.listSavedOutfits(userId)).find(
-      (outfit) => outfit.frontImageUrl === frontImageUrl && outfit.backImageUrl === null,
-    ) ?? null
+    const result = await this.pool.query<{
+      id: string; front_image_url: string; front_image_key: string | null; back_image_url: string | null;
+      back_image_key: string | null; garment_ids: string[]; created_at: Date | string
+    }>(`SELECT id,front_image_url,front_image_key,back_image_url,back_image_key,garment_ids,created_at
+        FROM saved_outfits WHERE user_id=$1 AND front_image_url=$2 AND back_image_url IS NULL LIMIT 1`, [userId, frontImageUrl])
+    const row = result.rows[0]
+    return row ? { id: row.id, frontImageUrl: row.front_image_url, frontImageKey: row.front_image_key,
+      backImageUrl: row.back_image_url, backImageKey: row.back_image_key, garmentIds: row.garment_ids ?? [], createdAt: iso(row.created_at) } : null
   }
 
   async saveOutfit(userId: string, record: SavedOutfitRecord): Promise<void> {
@@ -145,9 +160,14 @@ export class PostgresUserDataRepository implements UserDataRepository {
   }
 
   async deleteSavedOutfit(userId: string, id: string): Promise<SavedOutfitRecord | null> {
-    const existing = (await this.listSavedOutfits(userId)).find((item) => item.id === id) ?? null
-    if (existing) await this.pool.query('DELETE FROM saved_outfits WHERE user_id = $1 AND id = $2', [userId, id])
-    return existing
+    const result = await this.pool.query<{
+      id: string; front_image_url: string; front_image_key: string | null; back_image_url: string | null;
+      back_image_key: string | null; garment_ids: string[]; created_at: Date | string
+    }>(`DELETE FROM saved_outfits WHERE user_id=$1 AND id=$2 RETURNING
+        id,front_image_url,front_image_key,back_image_url,back_image_key,garment_ids,created_at`, [userId, id])
+    const row = result.rows[0]
+    return row ? { id: row.id, frontImageUrl: row.front_image_url, frontImageKey: row.front_image_key,
+      backImageUrl: row.back_image_url, backImageKey: row.back_image_key, garmentIds: row.garment_ids ?? [], createdAt: iso(row.created_at) } : null
   }
 
   async isImageKeySaved(userId: string, key: string): Promise<boolean> {

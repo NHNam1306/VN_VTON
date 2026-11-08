@@ -393,7 +393,7 @@ function App() {
   }
 
   if (!user) {
-    return <><Suspense fallback={<PageFallback />}><AuthPage onAuthenticated={(authenticatedUser) => { setStartupError(null); setUser(authenticatedUser) }} /></Suspense>{startupError && <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[120] rounded-xl bg-red-600 px-4 py-2 text-center text-xs text-white shadow-lg sm:left-1/2 sm:right-auto sm:-translate-x-1/2">{startupError}</div>}</>
+    return <><Suspense fallback={<PageFallback />}><AuthPage onAuthenticated={(authenticatedUser, portal) => { setStartupError(null); setUser(authenticatedUser); if(portal==='creator'){window.history.replaceState(null,'','/koc')} }} /></Suspense>{startupError && <div className="fixed inset-x-3 bottom-[max(1rem,env(safe-area-inset-bottom))] z-[120] rounded-xl bg-red-600 px-4 py-2 text-center text-xs text-white shadow-lg sm:left-1/2 sm:right-auto sm:-translate-x-1/2">{startupError}</div>}</>
   }
 
   return <FittingRoomApp user={user} onLoggedOut={() => setUser(null)} onUserUpdate={(updated) => setUser(updated)} />

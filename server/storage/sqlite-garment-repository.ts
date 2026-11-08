@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import type { GarmentCategory, GarmentRecord, UpdateGarmentInput } from '../domain/garment.js'
 import type { GarmentRepository } from './garment-repository.js'
+import type { ListOptions } from '../http/pagination.js'
 
 type GarmentRow = {
   id: string
@@ -92,11 +93,17 @@ export class SqliteGarmentRepository implements GarmentRepository {
     `)
   }
 
-  list(userId: string): GarmentRecord[] {
+  list(userId: string, options?: ListOptions): GarmentRecord[] {
+    const paginated = options?.limit !== undefined
     const rows = this.database
-      .prepare('SELECT * FROM garments WHERE user_id = ? ORDER BY created_at DESC')
-      .all(userId) as GarmentRow[]
+      .prepare(`SELECT * FROM garments WHERE user_id = ? ORDER BY created_at DESC${paginated ? ' LIMIT ? OFFSET ?' : ''}`)
+      .all(...(paginated ? [userId, options.limit!, options.offset ?? 0] : [userId])) as GarmentRow[]
     return rows.map(fromRow)
+  }
+
+  count(userId: string): number {
+    const row = this.database.prepare('SELECT count(*) AS count FROM garments WHERE user_id = ?').get(userId) as { count: number }
+    return row.count
   }
 
   findById(userId: string, id: string): GarmentRecord | null {

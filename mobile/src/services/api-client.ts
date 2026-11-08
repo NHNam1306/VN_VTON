@@ -1,6 +1,6 @@
 import { fetch as expoFetch } from 'expo/fetch';
 
-import { supabase } from './supabase';
+import { AuthSessionTimeoutError, getSessionWithTimeout, supabase } from './supabase';
 
 export const apiBaseUrl = (process.env.EXPO_PUBLIC_API_URL ?? 'https://vn-vton.onrender.com').replace(/\/$/, '');
 
@@ -19,17 +19,8 @@ const readTimeoutMs = 30_000;
 const writeTimeoutMs = 150_000;
 
 export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
-  const { data } = await supabase.auth.getSession();
   const { timeoutMs: configuredTimeoutMs, ...requestInit } = init;
-  const headers = new Headers(requestInit.headers);
-  if (data.session?.access_token) {
-    headers.set('Authorization', 'Bearer ' + data.session.access_token);
-  }
   const method = (requestInit.method ?? 'GET').toUpperCase();
-  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
-    headers.set('X-Fitting-Room-Request', '1');
-  }
-
   const isReadRequest = ['GET', 'HEAD', 'OPTIONS'].includes(method);
   const timeoutMs = configuredTimeoutMs ?? (isReadRequest ? readTimeoutMs : writeTimeoutMs);
   const isMultipartUpload = requestInit.body instanceof FormData;
@@ -38,13 +29,19 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
   if (requestInit.signal?.aborted) controller.abort();
   else requestInit.signal?.addEventListener('abort', onExternalAbort, { once: true });
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const request = () => expoFetch(apiBaseUrl + path, {
-    ...requestInit,
-    headers,
-    signal: controller.signal,
-  });
   let response: Response;
   try {
+    const { data } = await getSessionWithTimeout(Math.min(timeoutMs, 10_000));
+    const headers = new Headers(requestInit.headers);
+    if (data.session?.access_token) {
+      headers.set('Authorization', 'Bearer ' + data.session.access_token);
+    }
+    if (!isReadRequest) headers.set('X-Fitting-Room-Request', '1');
+    const request = () => expoFetch(apiBaseUrl + path, {
+      ...requestInit,
+      headers,
+      signal: controller.signal,
+    });
     response = await request();
     if (response.status === 401 && data.session?.refresh_token) {
       const refreshed = await supabase.auth.refreshSession({
@@ -58,7 +55,8 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
     }
   } catch (error) {
     if (__DEV__) console.warn('API request failed:', method, path, error);
-    const timedOut = controller.signal.aborted && !requestInit.signal?.aborted;
+    const timedOut = error instanceof AuthSessionTimeoutError
+      || (controller.signal.aborted && !requestInit.signal?.aborted);
     throw new ApiError(
       timedOut
         ? 'Máy chủ phản hồi quá lâu. Vui lòng thử lại sau ít phút.'

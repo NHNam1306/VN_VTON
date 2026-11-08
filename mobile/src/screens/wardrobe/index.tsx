@@ -1,5 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { fetch } from 'expo/fetch';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, FlatList, Pressable, RefreshControl, ScrollView, View, useWindowDimensions } from 'react-native';
 import { useMemo, useState } from 'react';
@@ -8,11 +7,10 @@ import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
 import { PreviewableImage } from '@/components/previewable-image';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
-import { useAuth } from '@/providers/auth-provider';
-import { apiBaseUrl, apiRequest } from '@/services/api-client';
+import { apiRequest } from '@/services/api-client';
 import { imageUploadFile } from '@/services/image-upload';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
-import type { Garment, GarmentCategory, PlanSnapshot, SavedOutfit } from '@/types/api';
+import type { Garment, GarmentCategory, PageResponse, PlanSnapshot, SavedOutfit } from '@/types/api';
 
 type AiExtractedGarment = {
   id: string;
@@ -51,10 +49,11 @@ const outfitFilters: { value: OutfitFilter; label: string }[] = [
   { value: 'front-only', label: 'Chỉ góc trước' },
 ];
 
+const PAGE_SIZE = 40;
+
 export function WardrobeScreen() {
   const brand = useBrandColors();
   const queryClient = useQueryClient();
-  const { session } = useAuth();
   const { width } = useWindowDimensions();
   const [mode, setMode] = useState<CatalogMode>('garments');
   const [category, setCategory] = useState<CategoryFilter>('all');
@@ -62,13 +61,17 @@ export function WardrobeScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const columns = width >= 700 ? 3 : 2;
 
-  const garments = useQuery({
-    queryKey: ['garments'],
-    queryFn: () => apiRequest<{ items: Garment[] }>('/api/garments'),
+  const garments = useInfiniteQuery({
+    queryKey: ['garments', 'catalog'],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => apiRequest<PageResponse<Garment>>(`/api/garments?limit=${PAGE_SIZE}&offset=${pageParam}`),
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
   });
-  const outfits = useQuery({
-    queryKey: ['saved-outfits'],
-    queryFn: () => apiRequest<{ items: SavedOutfit[] }>('/api/generations/outfits'),
+  const outfits = useInfiniteQuery({
+    queryKey: ['saved-outfits', 'catalog'],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => apiRequest<PageResponse<SavedOutfit>>(`/api/generations/outfits?limit=${PAGE_SIZE}&offset=${pageParam}`),
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
   });
   const plans = useQuery({
     queryKey: ['plans'],
@@ -77,9 +80,13 @@ export function WardrobeScreen() {
 
   const maxItems = plans.data?.current.entitlements.wardrobeItems ?? 0;
   const unlimited = plans.data?.current.unlimited ?? false;
+  const garmentItems = useMemo(() => garments.data?.pages.flatMap((page) => page.items) ?? [], [garments.data?.pages]);
+  const outfitItems = useMemo(() => outfits.data?.pages.flatMap((page) => page.items) ?? [], [outfits.data?.pages]);
+  const garmentTotal = garments.data?.pages[0]?.total ?? 0;
+  const outfitTotal = outfits.data?.pages[0]?.total ?? 0;
   const remainingSlots = unlimited
     ? Number.MAX_SAFE_INTEGER
-    : Math.max(0, maxItems - (garments.data?.items.length ?? 0));
+    : Math.max(0, maxItems - garmentTotal);
 
   const addGarment = useMutation({
     mutationFn: async () => {
@@ -94,46 +101,21 @@ export function WardrobeScreen() {
       if (picked.canceled) return null;
 
       const asset = picked.assets[0];
-      const originalFile = imageUploadFile(asset, 'garment.jpg');
       const extractForm = new FormData();
-      extractForm.append('file', originalFile);
+      extractForm.append('file', imageUploadFile(asset, 'garment.jpg'));
       extractForm.append('category', 'tops');
-      const extracted = await apiRequest<{ items: AiExtractedGarment[] }>('/api/garments/ai-extract', {
+      extractForm.append('persist', 'true');
+      const extracted = await apiRequest<{ items: AiExtractedGarment[]; garments: Garment[] }>('/api/garments/ai-extract', {
         method: 'POST',
         body: extractForm,
       });
-      if (extracted.items.length === 0) {
+      if (extracted.garments.length === 0) {
         throw new Error('Không nhận diện được món đồ trong ảnh. Hãy thử ảnh rõ hơn.');
       }
-      if (extracted.items.length > remainingSlots) {
-        throw new Error('Ảnh có ' + extracted.items.length + ' món nhưng tủ chỉ còn ' + remainingSlots + ' chỗ trống.');
-      }
-
-      const created: Garment[] = [];
-      for (const [index, item] of extracted.items.entries()) {
-        const studioUrl = item.studioImageUrl.startsWith('http')
-          ? item.studioImageUrl
-          : apiBaseUrl + item.studioImageUrl;
-        const processedResponse = await fetch(studioUrl, {
-          headers: session?.access_token ? { Authorization: 'Bearer ' + session.access_token } : undefined,
-        });
-        if (!processedResponse.ok) throw new Error('Không thể tải ảnh món đồ đã xử lý.');
-        const processedBlob = await processedResponse.blob();
-
-        const createForm = new FormData();
-        createForm.append('name', item.name || 'Món đồ mới');
-        createForm.append('category', item.category);
-        createForm.append('frontOriginal', originalFile);
-        createForm.append('frontProcessed', processedBlob, 'front-processed-' + index + '.webp');
-        created.push(await apiRequest<Garment>('/api/garments', { method: 'POST', body: createForm }));
-      }
-      return created;
+      return extracted.garments;
     },
     onSuccess: (items) => {
       if (!items) return;
-      queryClient.setQueryData<{ items: Garment[] }>(['garments'], (current) => ({
-        items: [...items, ...(current?.items ?? [])],
-      }));
       setMessage(items.length === 1 ? 'Đã thêm món đồ vào tủ.' : 'Đã thêm ' + items.length + ' món đồ vào tủ.');
     },
     onSettled: () => void queryClient.invalidateQueries({ queryKey: ['garments'] }),
@@ -141,38 +123,34 @@ export function WardrobeScreen() {
 
   const deleteGarment = useMutation({
     mutationFn: (id: string) => apiRequest<void>('/api/garments/' + encodeURIComponent(id), { method: 'DELETE' }),
-    onSuccess: (_data, id) => {
-      queryClient.setQueryData<{ items: Garment[] }>(['garments'], (current) => ({
-        items: (current?.items ?? []).filter((item) => item.id !== id),
-      }));
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['garments'] });
       setMessage('Đã xoá món đồ.');
     },
   });
 
   const deleteOutfit = useMutation({
     mutationFn: (id: string) => apiRequest<{ deleted: boolean }>('/api/generations/outfits/' + encodeURIComponent(id), { method: 'DELETE' }),
-    onSuccess: (_data, id) => {
-      queryClient.setQueryData<{ items: SavedOutfit[] }>(['saved-outfits'], (current) => ({
-        items: (current?.items ?? []).filter((item) => item.id !== id),
-      }));
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ['saved-outfits'] });
       setMessage('Đã xoá outfit.');
     },
   });
 
   const entries = useMemo<CatalogEntry[]>(() => {
     if (mode === 'garments') {
-      return (garments.data?.items ?? [])
+      return garmentItems
         .filter((item) => category === 'all' || item.category === category)
         .map((item) => ({ key: 'garment-' + item.id, type: 'garment' as const, item }));
     }
-    return (outfits.data?.items ?? [])
+    return outfitItems
       .filter((item) => (
         outfitFilter === 'all'
         || (outfitFilter === 'complete' && Boolean(item.backImageUrl))
         || (outfitFilter === 'front-only' && !item.backImageUrl)
       ))
       .map((item) => ({ key: 'outfit-' + item.id, type: 'outfit' as const, item }));
-  }, [category, garments.data?.items, mode, outfitFilter, outfits.data?.items]);
+  }, [category, garmentItems, mode, outfitFilter, outfitItems]);
 
   const loadError = garments.error ?? outfits.error ?? plans.error;
   if (loadError) {
@@ -189,7 +167,7 @@ export function WardrobeScreen() {
     return <ScreenLoading label="Đang mở kho đồ…"/>;
   }
 
-  const currentCount = mode === 'garments' ? garments.data.items.length : outfits.data.items.length;
+  const currentCount = mode === 'garments' ? garmentTotal : outfitTotal;
   const currentLimit = mode === 'garments'
     ? plans.data.current.entitlements.wardrobeItems
     : plans.data.current.entitlements.savedOutfits;
@@ -204,6 +182,11 @@ export function WardrobeScreen() {
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, flexGrow: 1 }}
       columnWrapperStyle={{ gap: spacing.md }}
+      onEndReachedThreshold={0.45}
+      onEndReached={() => {
+        if (mode === 'garments' && garments.hasNextPage && !garments.isFetchingNextPage) void garments.fetchNextPage();
+        if (mode === 'outfits' && outfits.hasNextPage && !outfits.isFetchingNextPage) void outfits.fetchNextPage();
+      }}
       refreshControl={<RefreshControl
         refreshing={mode === 'garments' ? garments.isRefetching : outfits.isRefetching}
         onRefresh={() => void (mode === 'garments' ? garments.refetch() : outfits.refetch())}
@@ -307,8 +290,8 @@ export function WardrobeScreen() {
         <AppText variant="headline">{mode === 'garments' ? 'Không có món đồ phù hợp' : 'Không có outfit phù hợp'}</AppText>
         <AppText variant="subhead" style={{ textAlign: 'center' }}>
           {mode === 'garments'
-            ? garments.data.items.length === 0 ? 'Thêm ảnh sản phẩm hoặc ảnh phối đồ để bắt đầu.' : 'Hãy chọn bộ lọc khác.'
-            : outfits.data.items.length === 0 ? 'Outfit tạo thành công trong Phòng thử sẽ xuất hiện tại đây.' : 'Hãy chọn bộ lọc khác.'}
+            ? garmentTotal === 0 ? 'Thêm ảnh sản phẩm hoặc ảnh phối đồ để bắt đầu.' : 'Hãy chọn bộ lọc khác.'
+            : outfitTotal === 0 ? 'Outfit tạo thành công trong Phòng thử sẽ xuất hiện tại đây.' : 'Hãy chọn bộ lọc khác.'}
         </AppText>
       </View>}
       renderItem={({ item: entry }) => entry.type === 'garment'

@@ -28,8 +28,8 @@ export function QuickActionSheet({ open, onClose, onUpload, onOutfit, onPoll, on
   const actions = [
     { title: 'Thêm món đồ', description: 'Chụp hoặc chọn ảnh trang phục', icon: Camera, action: onUpload },
     { title: 'Tạo outfit', description: 'Phối đồ trong phòng thử', icon: Sparkles, action: onOutfit },
-    { title: 'Xin ý kiến bạn bè', description: 'Tạo bình chọn riêng tư', icon: MessageSquare, action: onPoll },
-    { title: 'KOC Studio', description: 'Chuẩn bị nội dung và sản phẩm', icon: BadgeDollarSign, action: onKoc },
+    { title: 'Tải outfit', description: 'Đăng ảnh hoặc tạo bình chọn', icon: MessageSquare, action: onPoll },
+    { title: 'KOL/KOC', description: 'Xem người sáng tạo bạn theo dõi', icon: BadgeDollarSign, action: onKoc },
   ]
   return (
     <div className="fixed inset-0 z-[90] flex items-end bg-black/35 p-0 backdrop-blur-sm sm:p-3 lg:items-center lg:justify-center" onClick={onClose}>

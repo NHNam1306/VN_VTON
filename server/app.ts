@@ -1,4 +1,5 @@
 import express, { type ErrorRequestHandler } from 'express'
+import { randomUUID } from 'node:crypto'
 import multer from 'multer'
 import type { GarmentRepository } from './storage/garment-repository.js'
 import type { ImageStorage } from './storage/image-storage.js'
@@ -47,8 +48,10 @@ export function createApp(
   creditService?: CreditService,
   planService?: PlanService,
   billingService?: BillingService,
+  readinessCheck?: () => Promise<void>,
 ) {
   const app = express()
+  const signedImageTtlSeconds = Math.min(3_600, Math.max(60, Number(process.env.R2_SIGNED_READ_TTL_SECONDS ?? 300) || 300))
   const ownImageKeyRequests = new Map<string, Promise<Set<string>>>()
   const sharedRateLimits = rateLimitStore ?? new MemoryRateLimitStore()
   const plans = planService ?? new PlanService(new MemoryPlanRepository())
@@ -56,6 +59,19 @@ export function createApp(
   app.disable('x-powered-by')
   if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
   app.use(setSecurityHeaders)
+  app.use((request, response, next) => {
+    const startedAt = performance.now()
+    const incomingId = request.get('x-request-id')
+    const requestId = incomingId && /^[a-zA-Z0-9_-]{8,100}$/.test(incomingId) ? incomingId : randomUUID()
+    response.setHeader('X-Request-ID', requestId)
+    response.on('finish', () => {
+      const durationMs = Math.round(performance.now() - startedAt)
+      if (durationMs >= 1_000 || response.statusCode >= 400) {
+        console.info(JSON.stringify({ type: 'http_request', requestId, method: request.method, path: request.path, status: response.statusCode, durationMs }))
+      }
+    })
+    next()
+  })
   app.use('/api', createTokenBucketRateLimit({
     requestsPerMinute: runtimeConfig.apiRequestsPerMinute,
     burst: runtimeConfig.apiBurst,
@@ -74,8 +90,13 @@ export function createApp(
       visionModel: process.env.OPENROUTER_VISION_MODEL,
     })
 
-  app.get('/api/health', (_request, response) => {
-    response.json({ status: 'ok' })
+  app.get('/api/health', async (_request, response) => {
+    try {
+      await readinessCheck?.()
+      response.json({ status: 'ok', ready: true })
+    } catch {
+      response.status(503).json({ status: 'degraded', ready: false })
+    }
   })
   const decorateUser = admin ? (user: Parameters<AdminService['resolveAuthenticatedUser']>[0]) => admin.resolveAuthenticatedUser(user) : undefined
   app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits))
@@ -123,9 +144,29 @@ export function createApp(
         response.status(404).end()
         return
       }
-      const image = await images.read(key)
+      // Normal display traffic goes straight to R2. The explicit proxy mode is reserved
+      // for the rare browser-side image processing path that needs a same-origin response.
+      if (images.createReadUrl && request.query.proxy !== '1') {
+        const signedUrl = await images.createReadUrl(key, signedImageTtlSeconds)
+        response.setHeader('Cache-Control', `private, max-age=${Math.max(30, signedImageTtlSeconds - 30)}`)
+        response.setHeader('Vary', 'Authorization, Cookie')
+        response.redirect(302, signedUrl)
+        return
+      }
       response.setHeader('Cache-Control', 'private, max-age=86400, immutable')
-      response.type(image.mimeType).send(image.buffer)
+      if (images.openStream) {
+        const image = await images.openStream(key)
+        response.type(image.mimeType)
+        if (image.contentLength !== undefined) response.setHeader('Content-Length', String(image.contentLength))
+        for await (const chunk of image.body) {
+          if (response.destroyed) return
+          if (!response.write(chunk)) await new Promise<void>((resolve) => response.once('drain', resolve))
+        }
+        response.end()
+      } else {
+        const image = await images.read(key)
+        response.type(image.mimeType).send(image.buffer)
+      }
     } catch (error) {
       next(error)
     }
@@ -134,7 +175,7 @@ export function createApp(
   if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin))
   if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService))
   app.use('/api/plans', requireAuth, createPlanRouter(plans))
-  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans))
+  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans, sharedRateLimits))
   app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
   app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, credits, sharedRateLimits, plans))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())

@@ -1,6 +1,7 @@
 import type { GarmentCategory, GarmentRecord, UpdateGarmentInput } from '../domain/garment.js'
 import type { GarmentRepository } from './garment-repository.js'
 import type { PostgresPool } from './postgres.js'
+import type { ListOptions } from '../http/pagination.js'
 
 type GarmentRow = {
   id: string
@@ -29,12 +30,22 @@ const fromRow = (row: GarmentRow): GarmentRecord => ({
 export class PostgresGarmentRepository implements GarmentRepository {
   constructor(private readonly pool: PostgresPool) {}
 
-  async list(userId: string): Promise<GarmentRecord[]> {
+  async list(userId: string, options?: ListOptions): Promise<GarmentRecord[]> {
+    const values: Array<string | number> = [userId]
+    const pagination = options?.limit !== undefined
+      ? ` LIMIT $${values.push(options.limit)} OFFSET $${values.push(options.offset ?? 0)}`
+      : ''
     const result = await this.pool.query<GarmentRow>(
-      'SELECT * FROM garments WHERE user_id = $1 ORDER BY created_at DESC',
-      [userId],
+      `SELECT id,user_id,name,category,front_original_key,front_processed_key,back_original_key,back_processed_key,created_at
+       FROM garments WHERE user_id = $1 ORDER BY created_at DESC${pagination}`,
+      values,
     )
     return result.rows.map(fromRow)
+  }
+
+  async count(userId: string): Promise<number> {
+    const result = await this.pool.query<{ count: string }>('SELECT count(*)::text AS count FROM garments WHERE user_id=$1', [userId])
+    return Number(result.rows[0]?.count ?? 0)
   }
 
   async findById(userId: string, id: string): Promise<GarmentRecord | null> {

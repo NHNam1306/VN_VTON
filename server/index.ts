@@ -184,6 +184,9 @@ const app = createApp(
   creditService,
   planService,
   billingService,
+  async () => {
+    if (postgresPool) await postgresPool.query('SELECT 1')
+  },
 )
 const server = createHttpServer(app)
 let closeVite: (() => Promise<void>) | undefined

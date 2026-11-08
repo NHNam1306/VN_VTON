@@ -4,6 +4,7 @@ import type { SavedOutfitRecord } from '../domain/saved-outfit.js'
 import type { TryOnResultRecord } from '../domain/try-on-result.js'
 import type { TryOnAngle } from '../providers/image-provider.js'
 import type { DeletedUserData, UserDataRepository } from './user-data-repository.js'
+import type { ListOptions } from '../http/pagination.js'
 
 type PersonImageRow = {
   user_id: string
@@ -217,14 +218,16 @@ export class SqliteUserDataRepository implements UserDataRepository {
     return row?.image_key ?? null
   }
 
-  listSavedOutfits(userId: string): SavedOutfitRecord[] {
+  listSavedOutfits(userId: string, options?: ListOptions): SavedOutfitRecord[] {
+    const paginated = options?.limit !== undefined
     const rows = this.database.prepare(`
       SELECT id, front_image_url, front_image_key, back_image_url, back_image_key,
         garment_ids_json, created_at
       FROM saved_outfits
       WHERE user_id = ?
       ORDER BY created_at DESC
-    `).all(userId) as Array<{
+      ${paginated ? 'LIMIT ? OFFSET ?' : ''}
+    `).all(...(paginated ? [userId, options.limit!, options.offset ?? 0] : [userId])) as Array<{
       id: string
       front_image_url: string
       front_image_key: string | null
@@ -242,6 +245,11 @@ export class SqliteUserDataRepository implements UserDataRepository {
       garmentIds: JSON.parse(row.garment_ids_json) as string[],
       createdAt: row.created_at,
     }))
+  }
+
+  countSavedOutfits(userId: string): number {
+    const row = this.database.prepare('SELECT count(*) AS count FROM saved_outfits WHERE user_id = ?').get(userId) as { count: number }
+    return row.count
   }
 
   findPendingOutfit(userId: string, frontImageUrl: string): SavedOutfitRecord | null {

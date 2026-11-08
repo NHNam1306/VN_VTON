@@ -5,7 +5,7 @@ import type { SocialSnapshot, SocialPoll } from '../../../server/social/types'
 const me={id:'a',name:'An',username:'an_test',avatar:'🌿'}
 const friend={id:'b',name:'Bình',username:'binh_test',avatar:'🌸'}
 const outfits=[{id:'one',frontImageUrl:'/one.png',backImageUrl:null,official:false},{id:'two',frontImageUrl:'/two.png',backImageUrl:null,official:false}]
-const data:SocialSnapshot={me:{...me,birthDate:null,inviteCode:'code',invitePolicy:'known',defaultVisibility:'private'},friends:[friend],incoming:[],outgoing:[],groups:[],polls:[],blocked:[],notifications:[],policies:[]}
+const data:SocialSnapshot={me:{...me,birthDate:null,inviteCode:'code',invitePolicy:'known',defaultVisibility:'private'},friends:[friend],incoming:[],outgoing:[],groups:[],polls:[],blocked:[],notifications:[],policies:[],posts:[],creatorFeed:[],creators:[],followingIds:[]}
 const poll:SocialPoll={id:'poll',owner:me,title:'Đi chơi mặc gì?',createdAt:Date.now(),expiresAt:Date.now()+3600000,closed:false,outfits,recipients:[friend],votes:[],myVote:null,winnerId:null}
 describe('Voting UI',()=>{
  it('requires outfit and audience; displays audience confirmation before POST',async()=>{

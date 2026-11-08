@@ -8,6 +8,7 @@ import { runtimeConfig } from '../config/runtime-config.js'
 import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../http/rate-limit.js'
 import type { CreditService } from '../credits/credit-service.js'
 import type { PlanService } from '../plans/plan-service.js'
+import { pageMetadata, parsePagination } from '../http/pagination.js'
 
 export const MAX_GARMENTS_PER_GENERATION = 8
 export const MAX_SAVED_OUTFITS_PER_USER = 10
@@ -62,14 +63,18 @@ export function createGenerationRouter(
 
   router.get('/outfits', async (request, response, next) => {
     try {
+      const page = parsePagination(request.query)
+      const outfits = await userData.listSavedOutfits(request.authUser.id, page)
+      const total = page ? await userData.countSavedOutfits(request.authUser.id) : outfits.length
       response.json({
-        items: (await userData.listSavedOutfits(request.authUser.id)).map((outfit) => ({
+        items: outfits.map((outfit) => ({
           id: outfit.id,
           frontImageUrl: outfit.frontImageUrl,
           backImageUrl: outfit.backImageUrl,
           garmentIds: outfit.garmentIds,
           createdAt: outfit.createdAt,
         })),
+        ...pageMetadata(page?.offset ?? 0, outfits.length, total),
       })
     } catch (error) {
       next(error)
@@ -107,7 +112,7 @@ export function createGenerationRouter(
         return
       }
       const maxOutfits = await outfitLimit(request.authUser)
-      if (angle === 'front' && (await userData.listSavedOutfits(userId)).length >= maxOutfits) {
+      if (angle === 'front' && await userData.countSavedOutfits(userId) >= maxOutfits) {
         response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxOutfits} outfit.` })
         return
       }

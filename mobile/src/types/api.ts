@@ -1,5 +1,11 @@
 export type GarmentCategory = 'tops' | 'outerwear' | 'bottoms' | 'shoes' | 'accessories';
 
+export type PageResponse<T> = {
+  items: T[];
+  total: number;
+  nextOffset: number | null;
+};
+
 export type Garment = {
   id: string;
   name: string;

@@ -1,4 +1,5 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { createReadStream } from 'node:fs'
+import { mkdir, readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import type { ImageStorage } from './image-storage.js'
@@ -45,6 +46,16 @@ export class LocalImageStorage implements ImageStorage {
       buffer: await readFile(path.join(this.uploadDirectory, safeKey)),
       mimeType,
     }
+  }
+
+  async openStream(key: string) {
+    const safeKey = path.basename(key)
+    if (!key || safeKey !== key) throw new Error('Khoá ảnh không hợp lệ.')
+    const mimeType = mimeTypeByExtension[path.extname(safeKey).toLowerCase()]
+    if (!mimeType) throw new Error('Định dạng ảnh không được hỗ trợ.')
+    const filePath = path.join(this.uploadDirectory, safeKey)
+    const metadata = await stat(filePath)
+    return { body: createReadStream(filePath), mimeType, contentLength: metadata.size }
   }
 
   async delete(key: string): Promise<void> {

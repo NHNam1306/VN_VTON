@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MessageSquare, ImageIcon, Loader2, AlertCircle, PlusCircle } from 'lucide-react'
+import { ImageIcon, Loader2, AlertCircle, Upload } from 'lucide-react'
 import type { SocialSnapshot, SocialPerson, SharedOutfit } from '../../../server/social/types'
 import { socialApi } from '../../services/social-api'
-import { tryOnApi } from '../../services/try-on-api'
 import { FriendsPanel } from './FriendsPanel'
 import { Avatar } from './Avatar'
-import { PollCard, PollComposer } from './Voting'
+import { PollCard } from './Voting'
+import { PostComposer } from './PostComposer'
+import { PostCard } from './PostCard'
 import { ImageLightbox } from '../ImageLightbox'
 import './social.css'
 
 export type Act = (action: string, body: Record<string, unknown>) => Promise<boolean>
 
-export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 'feed' | 'friends'; onCreateOutfit: () => void; composeSignal?: number }) {
+export function SocialPage({ mode, composeSignal = 0 }: { mode: 'feed' | 'friends'; onCreateOutfit: () => void; composeSignal?: number }) {
   const [data, setData] = useState<SocialSnapshot | null>(null)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -21,7 +22,6 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
   })
   const [compose, setCompose] = useState(() => new URLSearchParams(location.search).get('compose') === '1')
   const pollId = new URLSearchParams(location.search).get('poll')
-  const [mine, setMine] = useState<SharedOutfit[]>([])
   const [profile, setProfile] = useState<{ person: SocialPerson; outfits: SharedOutfit[] } | null>(null)
   const [zoom, setZoom] = useState<string | null>(null)
   const [reportText, setReportText] = useState('')
@@ -36,7 +36,6 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
 
   useEffect(() => {
     void refresh()
-    void tryOnApi.listOutfits().then(items => setMine(items.map(o => ({ ...o, official: false })))).catch(e => setError(String(e)))
     const timer = window.setInterval(() => { if (!document.hidden) void refresh() }, 30_000)
     return () => window.clearInterval(timer)
   }, [refresh])
@@ -107,8 +106,8 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
             onClick={() => setCompose(!compose)}
             className="inline-flex shrink-0 items-center gap-2 rounded-full bg-[#16171b] px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-black hover:scale-[1.02]"
           >
-            <PlusCircle size={16} />
-            Xin ý kiến
+            <Upload size={16} />
+            Tải outfit
           </button>
         )}
       </header>
@@ -150,25 +149,27 @@ export function SocialPage({ mode, onCreateOutfit, composeSignal = 0 }: { mode: 
               </>
             ) : (
               <>
-                {compose && <PollComposer data={data} outfits={mine} act={act} onDone={() => setCompose(false)} onCreateOutfit={onCreateOutfit} />}
+                {compose && <PostComposer data={data} onPublished={snapshot => { setData(snapshot); setCompose(false) }} onCancel={() => setCompose(false)} />}
 
-                {data.polls.length === 0 && (
+                {data.posts.length === 0 && data.polls.length === 0 && (
                   <div className="flex flex-col items-center gap-4 rounded-[22px] border border-black/[0.07] bg-white/70 p-8 text-center backdrop-blur-sm sm:p-12">
                     <span className="grid size-14 place-items-center rounded-2xl bg-sage-50 text-sage-600">
-                      <MessageSquare size={26} strokeWidth={1.5} />
+                      <ImageIcon size={26} strokeWidth={1.5} />
                     </span>
                     <div>
-                      <h2 className="font-bold text-ink">Chưa có cuộc bình chọn nào</h2>
-                      <p className="mt-1 text-xs leading-5 text-ink/45">Kết bạn rồi gửi 1–3 outfit để cùng chọn bộ phù hợp.</p>
+                      <h2 className="font-bold text-ink">Chưa có outfit nào</h2>
+                      <p className="mt-1 text-xs leading-5 text-ink/45">Tải ảnh để chia sẻ với bạn bè hoặc tạo bình chọn.</p>
                     </div>
                     <button
                       onClick={() => setCompose(true)}
                       className="inline-flex items-center gap-2 rounded-full bg-[#16171b] px-5 py-2.5 text-sm font-bold text-white shadow-md transition hover:bg-black"
                     >
-                      <PlusCircle size={15} /> Tạo bình chọn đầu tiên
+                      <Upload size={15} /> Tải outfit đầu tiên
                     </button>
                   </div>
                 )}
+
+                {!pollId && data.posts.map(post => <PostCard key={post.id} post={post} me={data.me.id} onZoom={setZoom} onDelete={id=>void act('post-delete',{id})}/>)}
 
                 {pollId && (
                   <p className="mb-4">

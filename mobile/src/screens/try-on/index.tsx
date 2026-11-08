@@ -1,8 +1,8 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { Alert, Pressable, ScrollView, View } from 'react-native';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
@@ -12,9 +12,10 @@ import { useAuth } from '@/providers/auth-provider';
 import { ApiError, apiRequest, protectedImageSource } from '@/services/api-client';
 import { imageUploadFile } from '@/services/image-upload';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
-import type { CreditStatus, Garment, PersonImage, PlanSnapshot, TryOnResult } from '@/types/api';
+import type { CreditStatus, Garment, PageResponse, PersonImage, PlanSnapshot, TryOnResult } from '@/types/api';
 
 type GenerationResponse = TryOnResult & { credits: CreditStatus };
+const GARMENT_PAGE_SIZE = 40;
 
 export function TryOnScreen() {
   const brand = useBrandColors();
@@ -23,10 +24,16 @@ export function TryOnScreen() {
   const [selected, setSelected] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const person = useQuery({ queryKey: ['person-image'], queryFn: () => apiRequest<{ item: PersonImage | null }>('/api/person-image') });
-  const garments = useQuery({ queryKey: ['garments'], queryFn: () => apiRequest<{ items: Garment[] }>('/api/garments') });
+  const garments = useInfiniteQuery({
+    queryKey: ['garments', 'catalog'],
+    initialPageParam: 0,
+    queryFn: ({ pageParam }) => apiRequest<PageResponse<Garment>>(`/api/garments?limit=${GARMENT_PAGE_SIZE}&offset=${pageParam}`),
+    getNextPageParam: (lastPage) => lastPage.nextOffset ?? undefined,
+  });
   const results = useQuery({ queryKey: ['try-on-results'], queryFn: () => apiRequest<{ items: TryOnResult[] }>('/api/generations/results') });
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
-  const selectedGarmentIds = selected.filter((id) => garments.data?.items.some((item) => item.id === id));
+  const garmentItems = useMemo(() => garments.data?.pages.flatMap((page) => page.items) ?? [], [garments.data?.pages]);
+  const selectedGarmentIds = selected.filter((id) => garmentItems.some((item) => item.id === id));
   const upload = useMutation({
     mutationFn: async () => {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -88,7 +95,7 @@ export function TryOnScreen() {
   const toggle = (id: string) => {
     setNotice(null);
     setSelected((current) => {
-      const available = current.filter((itemId) => garments.data!.items.some((item) => item.id === itemId));
+      const available = current.filter((itemId) => garmentItems.some((item) => item.id === itemId));
       return available.includes(id)
         ? available.filter((item) => item !== id)
         : available.length < maxSelected ? [...available, id] : available;
@@ -112,7 +119,7 @@ export function TryOnScreen() {
     </View>
 
     <View style={{ gap: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}><AppText variant="headline">Chọn món đồ</AppText><AppText variant="caption">{selectedGarmentIds.length}/{maxSelected}</AppText></View>
-      {garments.data!.items.length === 0 ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead">Mở tab Tủ đồ để thêm món trước khi tạo ảnh.</AppText></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{garments.data!.items.map((item) => { const active = selected.includes(item.id); return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 132, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderWidth: active ? 3 : 1, borderColor: active ? brand.primary : colors.separator, backgroundColor: active ? brand.secondary : colors.surface, opacity: pressed ? 0.72 : 1 })}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 150, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="contain"/><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="caption" numberOfLines={1} style={{ flex: 1, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>{active && <AppText variant="headline" style={{ color: brand.primary }}>✓</AppText>}</View></Pressable>; })}</ScrollView>}
+      {garmentItems.length === 0 ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead">Mở tab Tủ đồ để thêm món trước khi tạo ảnh.</AppText></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{garmentItems.map((item) => { const active = selected.includes(item.id); return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 132, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderWidth: active ? 3 : 1, borderColor: active ? brand.primary : colors.separator, backgroundColor: active ? brand.secondary : colors.surface, opacity: pressed ? 0.72 : 1 })}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 150, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="contain"/><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="caption" numberOfLines={1} style={{ flex: 1, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>{active && <AppText variant="headline" style={{ color: brand.primary }}>✓</AppText>}</View></Pressable>; })}{garments.hasNextPage && <Pressable onPress={() => void garments.fetchNextPage()} disabled={garments.isFetchingNextPage} style={{ width: 132, minHeight: 190, alignItems: 'center', justifyContent: 'center', padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.separator, backgroundColor: colors.surface }}><AppText variant="headline" style={{ textAlign: 'center', color: brand.primary }}>{garments.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}</AppText></Pressable>}</ScrollView>}
     </View>
 
     <View style={{ gap: spacing.sm }}>

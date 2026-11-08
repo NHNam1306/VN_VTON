@@ -15,9 +15,12 @@ describe('optimizeImageForStorage', () => {
     expect((await sharp(result.buffer).metadata()).format).toBe('webp')
   })
 
-  it('không mã hóa lại JPG', async () => {
-    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9])
+  it('chuẩn hóa JPG sang WebP để giảm dung lượng và loại metadata', async () => {
+    const jpeg = await sharp({
+      create: { width: 320, height: 240, channels: 3, background: { r: 120, g: 80, b: 50 } },
+    }).jpeg({ quality: 95 }).toBuffer()
     const result = await optimizeImageForStorage(jpeg, 'image/jpeg')
-    expect(result).toEqual({ buffer: jpeg, mimeType: 'image/jpeg' })
+    expect(result.mimeType).toBe('image/webp')
+    expect((await sharp(result.buffer).metadata()).format).toBe('webp')
   })
 })

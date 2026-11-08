@@ -68,6 +68,8 @@ export function ProfilePage({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [lightboxImage, setLightboxImage] = useState<{ src: string; alt: string } | null>(null)
+  const [outfitLimit, setOutfitLimit] = useState(24)
+  const [garmentLimit, setGarmentLimit] = useState(40)
 
   // Trạng thái cho modal chỉnh sửa kích thước avatar
   const [cropFile, setCropFile] = useState<File | null>(null)
@@ -145,6 +147,10 @@ export function ProfilePage({
     if (selectedCategory === 'all') return garments
     return garments.filter((g) => g.category === selectedCategory)
   }, [garments, selectedCategory])
+  const renderedOutfits = savedOutfits.slice(0, outfitLimit)
+  const renderedGarments = filteredGarments.slice(0, garmentLimit)
+
+  useEffect(() => setGarmentLimit(40), [selectedCategory])
 
   const roleInfo = user.role === 'user' ? null : (roleLabels[user.role] ?? null)
 
@@ -353,7 +359,7 @@ export function ProfilePage({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-4">
-              {savedOutfits.map((outfit, index) => (
+              {renderedOutfits.map((outfit, index) => (
                 <article
                   key={outfit.id}
                   className="group relative aspect-[4/5] overflow-hidden rounded-[22px] border border-black/[0.08] bg-white shadow-2xs transition duration-300 hover:-translate-y-1 hover:shadow-md"
@@ -398,6 +404,11 @@ export function ProfilePage({
                   </div>
                 </article>
               ))}
+              {renderedOutfits.length < savedOutfits.length && (
+                <button type="button" onClick={() => setOutfitLimit((current) => current + 24)} className="col-span-full mx-auto rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm">
+                  Hiện thêm {Math.min(24, savedOutfits.length - renderedOutfits.length)} bộ
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -467,7 +478,7 @@ export function ProfilePage({
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 sm:gap-4">
-              {filteredGarments.map((garment) => (
+              {renderedGarments.map((garment) => (
                 <article
                   key={garment.id}
                   className="group relative flex flex-col justify-between overflow-hidden rounded-[22px] border border-black/[0.07] bg-white shadow-2xs transition duration-300 hover:-translate-y-1 hover:shadow-md"
@@ -492,6 +503,11 @@ export function ProfilePage({
                   </div>
                 </article>
               ))}
+              {renderedGarments.length < filteredGarments.length && (
+                <button type="button" onClick={() => setGarmentLimit((current) => current + 40)} className="col-span-full mx-auto rounded-full border border-black/10 bg-white px-5 py-2.5 text-xs font-bold text-ink shadow-sm">
+                  Hiện thêm {Math.min(40, filteredGarments.length - renderedGarments.length)} món
+                </button>
+              )}
             </div>
           )}
         </section>

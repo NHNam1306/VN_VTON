@@ -8,14 +8,20 @@ import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { useAuth } from '@/providers/auth-provider';
 import { apiRequest } from '@/services/api-client';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
-import type { Garment, PlanSnapshot, SavedOutfit } from '@/types/api';
+import type { Garment, PageResponse, PlanSnapshot, SavedOutfit } from '@/types/api';
 
 export function HomeScreen() {
   const brand = useBrandColors();
   const { user } = useAuth();
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
-  const garments = useQuery({ queryKey: ['garments'], queryFn: () => apiRequest<{ items: Garment[] }>('/api/garments') });
-  const outfits = useQuery({ queryKey: ['saved-outfits'], queryFn: () => apiRequest<{ items: SavedOutfit[] }>('/api/generations/outfits') });
+  const garments = useQuery({
+    queryKey: ['garments', 'preview'],
+    queryFn: () => apiRequest<PageResponse<Garment>>('/api/garments?limit=6&offset=0'),
+  });
+  const outfits = useQuery({
+    queryKey: ['saved-outfits', 'preview'],
+    queryFn: () => apiRequest<PageResponse<SavedOutfit>>('/api/generations/outfits?limit=1&offset=0'),
+  });
   const loading = plans.data === undefined || garments.data === undefined || outfits.data === undefined;
   const error = plans.error ?? garments.error ?? outfits.error;
   const retry = () => { void plans.refetch(); void garments.refetch(); void outfits.refetch(); };
@@ -39,8 +45,8 @@ export function HomeScreen() {
         <AppText variant="headline">Không gian của bạn</AppText>
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Metric label="Gói hiện tại" value={current.planName}/>
-          <Metric label="Tủ đồ" value={garments.data!.items.length + '/' + (current.unlimited ? '∞' : current.entitlements.wardrobeItems)}/>
-          <Metric label="Outfit" value={outfits.data!.items.length + '/' + (current.unlimited ? '∞' : current.entitlements.savedOutfits)}/>
+          <Metric label="Tủ đồ" value={garments.data!.total + '/' + (current.unlimited ? '∞' : current.entitlements.wardrobeItems)}/>
+          <Metric label="Outfit" value={outfits.data!.total + '/' + (current.unlimited ? '∞' : current.entitlements.savedOutfits)}/>
         </View>
       </View>
 

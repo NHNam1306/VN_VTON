@@ -41,6 +41,10 @@ services:
         value: "4:5"
       - key: OPENROUTER_TIMEOUT_MS
         value: "120000"
+      - key: AI_MAX_CONCURRENCY
+        value: "1"
+      - key: DATABASE_POOL_MAX
+        value: "5"
       - key: AUTH_SESSION_DAYS
         value: "30"
       - key: ADMIN_EMAILS
@@ -63,6 +67,8 @@ services:
         value: "30"
       - key: R2_PREFIX
         value: production
+      - key: R2_SIGNED_READ_TTL_SECONDS
+        value: "300"
       - key: DATABASE_URL
         sync: false
       - key: DATABASE_CA_CERT_BASE64

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { GARMENT_CATEGORIES, type GarmentCategory } from '../domain/garment.js'
 import type { ImageStorage } from '../storage/image-storage.js'
+import { aiImageSemaphore } from './ai-concurrency.js'
 
 export type ExtractedGarment = {
   id: string
@@ -23,6 +24,7 @@ export type GarmentExtractorOptions = {
 export type ExtractTargetsOptions = {
   extractOutfit?: boolean
   extractAccessories?: boolean
+  maxItems?: number
 }
 
 const DEFAULT_CATEGORY_NAMES: Record<GarmentCategory, string> = {
@@ -151,12 +153,18 @@ export class GarmentExtractorService {
       targets = await this.detectGarmentsWithVision(imageBuffer, mimeType, defaultCategory)
     }
 
-    // 3. Gọi model FLUX tuần tự từng món để đảm bảo 100% không bị OpenRouter từ chối do giới hạn đồng thời (Rate limit 429)
+    const requestedLimit = extractOptions?.maxItems
+    const targetLimit = Number.isInteger(requestedLimit) && Number(requestedLimit) >= 0
+      ? Math.min(MAX_DETECTED_TARGETS, Number(requestedLimit))
+      : MAX_DETECTED_TARGETS
+    targets = targets.slice(0, targetLimit)
+
+    // 3. Gọi model FLUX tuần tự từng món và qua semaphore dùng chung để bảo vệ RAM instance.
     const results: ExtractedGarment[] = []
 
     for (const item of targets) {
       try {
-        const generated = await this.generateWithFlux(item, imageBuffer, mimeType)
+        const generated = await aiImageSemaphore.run(() => this.generateWithFlux(item, imageBuffer, mimeType))
         results.push(generated)
       } catch (err) {
         const reason = err instanceof Error ? err.message : String(err)

@@ -2,12 +2,15 @@ import { buildTryOnPrompt } from '../prompts/try-on-prompt.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { GenerateImageInput, GeneratedImage, ImageProvider } from './image-provider.js'
 import { ImageProviderError } from './image-provider-error.js'
+import sharp from 'sharp'
+import { aiImageSemaphore } from '../services/ai-concurrency.js'
 
 const OPENROUTER_IMAGE_API_URL = 'https://openrouter.ai/api/v1/images'
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const MAX_INPUT_IMAGE_BYTES = 10 * 1024 * 1024
 const MAX_OUTPUT_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_REFERENCE_IMAGES = 10
+const MAX_REFERENCE_EDGE = 1_024
 
 type LoadedImage = {
   data: string
@@ -178,8 +181,10 @@ export class OpenRouterImageProvider implements ImageProvider {
     }
 
     try {
-      const images = await Promise.all(referenceUrls.map((url) => this.loadImage(url)))
-      const response = await this.fetchImpl(OPENROUTER_IMAGE_API_URL, {
+      return await aiImageSemaphore.run(async () => {
+        const images: LoadedImage[] = []
+        for (const url of referenceUrls) images.push(await this.loadImage(url))
+        const response = await this.fetchImpl(OPENROUTER_IMAGE_API_URL, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.options.apiKey}`,
@@ -204,8 +209,8 @@ export class OpenRouterImageProvider implements ImageProvider {
           aspect_ratio: this.options.aspectRatio,
           n: 1,
         }),
-        signal: AbortSignal.timeout(this.timeoutMs),
-      })
+          signal: AbortSignal.timeout(this.timeoutMs),
+        })
 
       if (!response.ok) {
         throw mapHttpError(response.status, await responseMessage(response))
@@ -247,10 +252,11 @@ export class OpenRouterImageProvider implements ImageProvider {
       if (typeof cost === 'number' && Number.isFinite(cost)) {
         console.info(`OpenRouter image generated [${input.angle}] model=${this.options.model} cost=$${cost.toFixed(6)}`)
       }
-      return {
-        imageUrl: this.options.outputStorage.publicUrl(storageKey),
-        storageKey,
-      }
+        return {
+          imageUrl: this.options.outputStorage.publicUrl(storageKey),
+          storageKey,
+        }
+      })
     } catch (error) {
       throw mapUnknownError(error)
     }
@@ -288,10 +294,7 @@ export class OpenRouterImageProvider implements ImageProvider {
         if (!ALLOWED_IMAGE_TYPES.has(stored.mimeType) || detectedMimeType !== stored.mimeType) {
           throw new ImageProviderError('invalid_input', 400, 'Ảnh đầu vào có định dạng không hợp lệ.')
         }
-        return {
-          data: stored.buffer.toString('base64'),
-          mimeType: stored.mimeType,
-        }
+        return this.prepareReference(stored.buffer)
       } catch (error) {
         if (error instanceof ImageProviderError) throw error
         throw new ImageProviderError('invalid_input', 400, 'Không thể đọc ảnh đầu vào trong kho lưu trữ.', { cause: error })
@@ -316,6 +319,18 @@ export class OpenRouterImageProvider implements ImageProvider {
     if (buffer.length > MAX_INPUT_IMAGE_BYTES) {
       throw new ImageProviderError('invalid_input', 400, 'Ảnh đầu vào vượt quá 10MB.')
     }
-    return { data: buffer.toString('base64'), mimeType }
+    return this.prepareReference(buffer)
+  }
+
+  private async prepareReference(buffer: Buffer): Promise<LoadedImage> {
+    const prepared = await sharp(buffer, { limitInputPixels: 24_000_000 })
+      .rotate()
+      .resize({ width: MAX_REFERENCE_EDGE, height: MAX_REFERENCE_EDGE, fit: 'inside', withoutEnlargement: true })
+      .webp({ quality: 86, effort: 3 })
+      .toBuffer()
+    if (prepared.length > MAX_INPUT_IMAGE_BYTES) {
+      throw new ImageProviderError('invalid_input', 400, 'Ảnh đầu vào vượt quá giới hạn sau khi tối ưu.')
+    }
+    return { data: prepared.toString('base64'), mimeType: 'image/webp' }
   }
 }

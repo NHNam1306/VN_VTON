@@ -116,6 +116,25 @@ describe('SqliteUserDataRepository', () => {
     repository.close()
   })
 
+  it('đếm và phân trang outfit theo thứ tự mới nhất', () => {
+    const repository = new SqliteUserDataRepository(':memory:')
+    for (const [id, createdAt] of [['old', '2026-01-01T00:00:00.000Z'], ['new', '2026-01-02T00:00:00.000Z']]) {
+      repository.saveOutfit(userId, {
+        id,
+        frontImageUrl: `/uploads/${id}.webp`,
+        frontImageKey: `${id}.webp`,
+        backImageUrl: null,
+        backImageKey: null,
+        garmentIds: [],
+        createdAt,
+      })
+    }
+    expect(repository.countSavedOutfits(userId)).toBe(2)
+    expect(repository.listSavedOutfits(userId, { limit: 1, offset: 0 }).map(item => item.id)).toEqual(['new'])
+    expect(repository.listSavedOutfits(userId, { limit: 1, offset: 1 }).map(item => item.id)).toEqual(['old'])
+    repository.close()
+  })
+
   it('lưu bộ một ảnh rồi cập nhật ảnh sau vào đúng mục', () => {
     const repository = new SqliteUserDataRepository(':memory:')
     const frontOnly = {
