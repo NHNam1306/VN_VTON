@@ -113,10 +113,35 @@ export class PostgresSocialStore implements SocialService {
   private seed(state: State, context: Context) {
     state.posts ??= []
     state.follows ??= []
+    this.removeDeletedUsers(state, context)
     for (const user of context.users) if (!state.profiles.some(profile => profile.id === user.id)) {
       state.profiles.push({ id: user.id, username: `user_${user.id.replace(/-/g, '')}`, avatar: '', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url'), defaultVisibility: 'private' })
     }
     for (const profile of state.profiles) if (profile.defaultVisibility !== 'friends') profile.defaultVisibility = 'private'
+  }
+  private removeDeletedUsers(state: State, context: Context) {
+    const live = new Set(context.users.map(user => user.id))
+    const pairIsLive = ([first, second]: [string, string]) => live.has(first) && live.has(second)
+    state.profiles = state.profiles.filter(profile => live.has(profile.id))
+    state.friends = state.friends.filter(pairIsLive)
+    state.requests = state.requests.filter(request => live.has(request.from) && live.has(request.to))
+    state.groups = state.groups
+      .filter(group => live.has(group.ownerId))
+      .map(group => ({ ...group, members: [group.ownerId, ...group.members.filter(id => id !== group.ownerId && live.has(id))] }))
+    state.polls = state.polls
+      .filter(poll => live.has(poll.ownerId))
+      .map(poll => ({
+        ...poll,
+        recipients: poll.recipients.filter(id => live.has(id)),
+        votes: Object.fromEntries(Object.entries(poll.votes).filter(([id]) => live.has(id))),
+      }))
+    state.posts = state.posts.filter(post => live.has(post.ownerId))
+    state.follows = state.follows.filter(pairIsLive)
+    state.blocks = state.blocks.filter(pairIsLive)
+    state.reports = state.reports.filter(report => live.has(report.from) && live.has(report.target))
+    state.notices = state.notices.filter(notice => live.has(notice.userId) && live.has(notice.actor))
+    state.policies = state.policies.filter(policy => live.has(policy.ownerId))
+    state.temporaryImages = state.temporaryImages.filter(image => live.has(image.ownerId))
   }
   private pruneEphemeralState(state: State) {
     const keepLatestPerUser = <T>(items: T[], userId: (item: T) => string, limit: number): T[] => {
@@ -132,8 +157,21 @@ export class PostgresSocialStore implements SocialService {
     state.temporaryImages = keepLatestPerUser(state.temporaryImages, item => item.ownerId, 100)
   }
   private needsMaintenance(state: State, context: Context, requiredUserId?: string): boolean {
+    const live = new Set(context.users.map(user => user.id))
+    const deleted = (id: string) => !live.has(id)
     if (requiredUserId && (!context.users.some(user => user.id === requiredUserId) || !state.profiles.some(profile => profile.id === requiredUserId))) return true
     if (context.users.some(user => !state.profiles.some(profile => profile.id === user.id))) return true
+    if (state.profiles.some(profile => deleted(profile.id))) return true
+    if (state.friends.some(([first, second]) => deleted(first) || deleted(second))) return true
+    if (state.requests.some(request => deleted(request.from) || deleted(request.to))) return true
+    if (state.groups.some(group => deleted(group.ownerId) || group.members.some(deleted))) return true
+    if (state.polls.some(poll => deleted(poll.ownerId) || poll.recipients.some(deleted) || Object.keys(poll.votes).some(deleted))) return true
+    if (state.posts?.some(post => deleted(post.ownerId))) return true
+    if (state.follows?.some(([follower, creator]) => deleted(follower) || deleted(creator))) return true
+    if (state.blocks.some(([first, second]) => deleted(first) || deleted(second))) return true
+    if (state.reports.some(report => deleted(report.from) || deleted(report.target))) return true
+    if (state.notices.some(notice => deleted(notice.userId) || deleted(notice.actor))) return true
+    if (state.policies.some(policy => deleted(policy.ownerId)) || state.temporaryImages.some(image => deleted(image.ownerId))) return true
     if (state.profiles.some(profile => profile.defaultVisibility !== 'private' && profile.defaultVisibility !== 'friends')) return true
     if (!Array.isArray(state.posts) || !Array.isArray(state.follows)) return true
     return state.polls.some(poll => !poll.notified && (poll.closed || poll.expiresAt <= Date.now()))

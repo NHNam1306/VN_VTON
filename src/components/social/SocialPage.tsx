@@ -112,14 +112,25 @@ export function SocialPage({ mode, composeSignal = 0 }: { mode: 'feed' | 'friend
         )}
       </header>
 
-      {error && (
+      {error && data && (
         <div role="alert" className="mb-5 flex items-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertCircle size={16} className="shrink-0" />
           {error}
         </div>
       )}
 
-      {!data ? (
+      {!data && error ? (
+        <div className="flex min-h-64 flex-col items-center justify-center gap-4 rounded-[22px] border border-red-200 bg-white/70 p-8 text-center" role="status">
+          <AlertCircle size={28} className="text-red-500" />
+          <div>
+            <p className="font-bold text-ink">Chưa tải được bảng tin</p>
+            <p className="mt-1 text-sm text-ink/50">Kết nối hoặc dữ liệu tài khoản đang có vấn đề.</p>
+          </div>
+          <button onClick={() => { setError(''); void refresh() }} className="rounded-full bg-[#16171b] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:bg-black">
+            Thử lại
+          </button>
+        </div>
+      ) : !data ? (
         <div className="flex min-h-64 items-center justify-center text-ink/35" role="status">
           <div className="text-center">
             <Loader2 size={28} className="mx-auto mb-3 animate-spin" />

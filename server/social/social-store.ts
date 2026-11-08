@@ -41,8 +41,33 @@ export class SocialStore {
   private change<T>(f: (s: State) => T): T { return this.db.transaction(() => { const s = this.load(); const result = f(s); this.write(s); return result })() }
   private users() { return this.db.prepare('SELECT id, display_name AS name, role FROM users').all() as { id: string; name: string; role: string }[] }
   private seed(s: State) {
-    for (const u of this.users()) if (!s.profiles.some(p => p.id === u.id)) s.profiles.push({ id: u.id, username: `user_${u.id.replace(/-/g, '')}`, avatar: '', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url'), defaultVisibility: 'private' })
+    const users = this.users()
+    this.removeDeletedUsers(s, new Set(users.map(user => user.id)))
+    for (const u of users) if (!s.profiles.some(p => p.id === u.id)) s.profiles.push({ id: u.id, username: `user_${u.id.replace(/-/g, '')}`, avatar: '', birthDate: null, invitePolicy: 'known', inviteCode: randomBytes(24).toString('base64url'), defaultVisibility: 'private' })
     for (const profile of s.profiles) if (profile.defaultVisibility !== 'friends') profile.defaultVisibility = 'private'
+  }
+  private removeDeletedUsers(s: State, live: Set<string>) {
+    const pairIsLive = ([first, second]: [string, string]) => live.has(first) && live.has(second)
+    s.profiles = s.profiles.filter(profile => live.has(profile.id))
+    s.friends = s.friends.filter(pairIsLive)
+    s.requests = s.requests.filter(request => live.has(request.from) && live.has(request.to))
+    s.groups = s.groups
+      .filter(group => live.has(group.ownerId))
+      .map(group => ({ ...group, members: [group.ownerId, ...group.members.filter(id => id !== group.ownerId && live.has(id))] }))
+    s.polls = s.polls
+      .filter(poll => live.has(poll.ownerId))
+      .map(poll => ({
+        ...poll,
+        recipients: poll.recipients.filter(id => live.has(id)),
+        votes: Object.fromEntries(Object.entries(poll.votes).filter(([id]) => live.has(id))),
+      }))
+    s.posts = s.posts.filter(post => live.has(post.ownerId))
+    s.follows = s.follows.filter(pairIsLive)
+    s.blocks = s.blocks.filter(pairIsLive)
+    s.reports = s.reports.filter(report => live.has(report.from) && live.has(report.target))
+    s.notices = s.notices.filter(notice => live.has(notice.userId) && live.has(notice.actor))
+    s.policies = s.policies.filter(policy => live.has(policy.ownerId))
+    s.temporaryImages = s.temporaryImages.filter(image => live.has(image.ownerId))
   }
   private person(s: State, id: string): SocialPerson {
     const p = s.profiles.find(p => p.id === id)

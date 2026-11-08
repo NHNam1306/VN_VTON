@@ -7,14 +7,15 @@ import { AuthStore } from '../auth/auth-store.js'
 import { SqliteUserDataRepository } from '../storage/sqlite-user-data-repository.js'
 import { SqliteGarmentRepository } from '../storage/sqlite-garment-repository.js'
 import { SocialStore } from './social-store.js'
+import Database from 'better-sqlite3'
 describe('Social access and voting',()=>{
- let dir:string,auth:AuthStore,outfits:SqliteUserDataRepository,garments:SqliteGarmentRepository,social:SocialStore
+ let dir:string,dbPath:string,auth:AuthStore,outfits:SqliteUserDataRepository,garments:SqliteGarmentRepository,social:SocialStore
  beforeEach(()=>{
   dir=mkdtempSync(path.join(tmpdir(),'fitting-social-test-'))
-  const db=path.join(dir,'test.sqlite')
-  auth=new AuthStore(db);outfits=new SqliteUserDataRepository(db);garments=new SqliteGarmentRepository(db)
+  dbPath=path.join(dir,'test.sqlite')
+  auth=new AuthStore(dbPath);outfits=new SqliteUserDataRepository(dbPath);garments=new SqliteGarmentRepository(dbPath)
   for(const id of ['alice','bob','carol','outsider','creator'])auth.createUser({id,email:id+'@test.local',displayName:id,passwordHash:'test',passwordSalt:'test',createdAt:new Date().toISOString(),role:id==='creator'?'koc':'user'})
-  social=new SocialStore(db,outfits)
+  social=new SocialStore(dbPath,outfits)
   social.snapshot('alice')
   for(const id of ['one','two'])outfits.saveOutfit('alice',{id,frontImageUrl:'/uploads/'+id+'.png',frontImageKey:id+'.png',backImageUrl:null,backImageKey:null,garmentIds:[],createdAt:new Date().toISOString()})
  })
@@ -156,5 +157,16 @@ describe('Social access and voting',()=>{
   expect(created.outfits.map(item=>item.frontImageUrl)).toEqual(['/uploads/a.webp','/uploads/b.webp'])
   expect(social.canReadImage('bob','a.webp')).toBe(true)
   expect(social.canReadImage('outsider','a.webp')).toBe(false)
+ })
+ it('removes orphaned social data when an account is deleted',()=>{
+  social.act('creator','post-create',{imageUrls:['/uploads/deleted.webp'],caption:'Tài khoản cũ',visibility:'public',groupIds:[]})
+  social.act('alice','follow',{targetId:'creator'})
+  const cleanup=new Database(dbPath)
+  cleanup.prepare('DELETE FROM users WHERE id = ?').run('creator')
+  cleanup.close()
+  const snapshot=social.snapshot('alice')
+  expect(snapshot.creatorFeed).toEqual([])
+  expect(snapshot.creators.some(item=>item.person.id==='creator')).toBe(false)
+  expect(snapshot.followingIds).not.toContain('creator')
  })
 })
