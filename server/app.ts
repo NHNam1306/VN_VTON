@@ -146,12 +146,16 @@ export function createApp(
       }
       // Normal display traffic goes straight to R2. The explicit proxy mode is reserved
       // for the rare browser-side image processing path that needs a same-origin response.
-      if (images.createReadUrl && request.query.proxy !== '1') {
-        const signedUrl = await images.createReadUrl(key, signedImageTtlSeconds)
-        response.setHeader('Cache-Control', `private, max-age=${Math.max(30, signedImageTtlSeconds - 30)}`)
-        response.setHeader('Vary', 'Authorization, Cookie')
-        response.redirect(302, signedUrl)
-        return
+      if (images.createReadUrl && (images.isDirectReadReady?.() ?? true) && request.query.proxy !== '1') {
+        try {
+          const signedUrl = await images.createReadUrl(key, signedImageTtlSeconds)
+          response.setHeader('Cache-Control', `private, max-age=${Math.max(30, signedImageTtlSeconds - 30)}`)
+          response.setHeader('Vary', 'Authorization, Cookie')
+          response.redirect(302, signedUrl)
+          return
+        } catch {
+          // Availability wins over the optimization: stream the image if URL signing fails.
+        }
       }
       response.setHeader('Cache-Control', 'private, max-age=86400, immutable')
       if (images.openStream) {

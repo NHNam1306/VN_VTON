@@ -81,13 +81,20 @@ if (persistenceBackend === 'postgres') {
 }
 
 if (imageStorageBackend === 'r2') {
-  imageStorage = new R2ImageStorage({
+  const r2Storage = new R2ImageStorage({
     accountId: process.env.R2_ACCOUNT_ID ?? '',
     accessKeyId: process.env.R2_ACCESS_KEY_ID ?? '',
     secretAccessKey: process.env.R2_SECRET_ACCESS_KEY ?? '',
     bucket: process.env.R2_BUCKET ?? '',
     prefix: process.env.R2_PREFIX,
   })
+  try {
+    await r2Storage.configureBrowserCors([new URL(appBaseUrl).origin])
+    console.log('[r2] Direct browser reads are enabled.')
+  } catch (error) {
+    console.warn('[r2] Direct browser reads are disabled; using the authenticated streaming fallback.', error instanceof Error ? error.message : '')
+  }
+  imageStorage = r2Storage
 } else if (imageStorageBackend === 'local') {
   await mkdir(dataDirectory, { recursive: true })
   const localStorage = new LocalImageStorage(uploadDirectory)

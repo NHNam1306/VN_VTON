@@ -14,6 +14,7 @@ export interface ImageStorage {
   read(key: string): Promise<StoredImage>
   openStream?(key: string): Promise<StoredImageStream>
   createReadUrl?(key: string, expiresInSeconds: number): Promise<string>
+  isDirectReadReady?(): boolean
   delete(key: string): Promise<void>
   publicUrl(key: string): string
 }

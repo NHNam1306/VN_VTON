@@ -26,4 +26,30 @@ describe('R2ImageStorage signed reads', () => {
     await storage.createReadUrl('production_image.webp', 99_999)
     expect(getSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn:3_600 })
   })
+
+  it('enables direct reads only after the bucket CORS policy is ready', async () => {
+    const storage = new R2ImageStorage({
+      accountId:'account',accessKeyId:'access',secretAccessKey:'secret',bucket:'bucket',prefix:'production',
+    })
+    const send = vi.fn()
+      .mockResolvedValueOnce({ CORSRules:[] })
+      .mockResolvedValueOnce({})
+    ;(storage as unknown as { client:{ send:typeof send } }).client.send = send
+
+    expect(storage.isDirectReadReady()).toBe(false)
+    await storage.configureBrowserCors(['https://vn-vton.onrender.com'])
+    expect(storage.isDirectReadReady()).toBe(true)
+    expect(send).toHaveBeenCalledTimes(2)
+  })
+
+  it('keeps direct reads disabled when CORS cannot be verified', async () => {
+    const storage = new R2ImageStorage({
+      accountId:'account',accessKeyId:'access',secretAccessKey:'secret',bucket:'bucket',prefix:'production',
+    })
+    const send = vi.fn().mockRejectedValue(new Error('forbidden'))
+    ;(storage as unknown as { client:{ send:typeof send } }).client.send = send
+
+    await expect(storage.configureBrowserCors(['https://vn-vton.onrender.com'])).rejects.toThrow('forbidden')
+    expect(storage.isDirectReadReady()).toBe(false)
+  })
 })

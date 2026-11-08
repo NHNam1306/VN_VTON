@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, GetBucketCorsCommand, GetObjectCommand, PutBucketCorsCommand, PutObjectCommand, S3Client, type CORSRule } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import type { ImageStorage, StoredImage } from './image-storage.js'
 import { optimizeImageForStorage } from './optimize-image.js'
@@ -21,6 +21,7 @@ export type R2ImageStorageOptions = {
 export class R2ImageStorage implements ImageStorage {
   private readonly client: S3Client
   private readonly prefix: string
+  private directReadReady = false
 
   constructor(private readonly options: R2ImageStorageOptions) {
     for (const [name, value] of Object.entries(options)) {
@@ -78,10 +79,50 @@ export class R2ImageStorage implements ImageStorage {
       new GetObjectCommand({
         Bucket: this.options.bucket,
         Key: key,
-        ResponseCacheControl: 'private, max-age=86400, immutable',
       }),
       { expiresIn },
     )
+  }
+
+  isDirectReadReady(): boolean {
+    return this.directReadReady
+  }
+
+  async configureBrowserCors(origins: string[]): Promise<void> {
+    const allowedOrigins = [...new Set(origins.map(origin => origin.trim()).filter(Boolean))]
+    if (!allowedOrigins.length) throw new Error('Không có web origin hợp lệ để cấu hình R2 CORS.')
+
+    let existingRules: CORSRule[] = []
+    try {
+      const current = await this.client.send(new GetBucketCorsCommand({ Bucket: this.options.bucket }))
+      existingRules = current.CORSRules ?? []
+    } catch (error) {
+      const detail = error as { name?: string; $metadata?: { httpStatusCode?: number } }
+      const missing = detail.name === 'NoSuchCORSConfiguration' || detail.$metadata?.httpStatusCode === 404
+      if (!missing) throw error
+    }
+
+    const supportsOrigin = (origin: string) => existingRules.some(rule =>
+      rule.AllowedMethods?.includes('GET') && rule.AllowedOrigins?.some(value => value === '*' || value === origin),
+    )
+    if (!allowedOrigins.every(supportsOrigin)) {
+      await this.client.send(new PutBucketCorsCommand({
+        Bucket: this.options.bucket,
+        CORSConfiguration: {
+          CORSRules: [
+            ...existingRules,
+            {
+              AllowedOrigins: allowedOrigins,
+              AllowedMethods: ['GET', 'HEAD'],
+              AllowedHeaders: ['*'],
+              ExposeHeaders: ['Content-Length', 'Content-Type', 'ETag'],
+              MaxAgeSeconds: 3_600,
+            },
+          ],
+        },
+      }))
+    }
+    this.directReadReady = true
   }
 
   async delete(key: string): Promise<void> {
