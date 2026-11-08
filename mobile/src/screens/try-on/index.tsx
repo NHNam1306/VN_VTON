@@ -70,8 +70,8 @@ export function TryOnScreen() {
   });
   const loading = person.data === undefined || garments.data === undefined || results.data === undefined || plans.data === undefined;
   const loadError = person.error ?? garments.error ?? results.error ?? plans.error;
-  if (loading) return <ScreenLoading label="Đang chuẩn bị phòng thử…"/>;
   if (loadError) return <ScreenError message={loadError instanceof Error ? loadError.message : 'Không thể mở phòng thử.'} onRetry={() => { void person.refetch(); void garments.refetch(); void results.refetch(); void plans.refetch(); }}/>;
+  if (loading) return <ScreenLoading label="Đang chuẩn bị phòng thử…"/>;
 
   const maxSelected = plans.data!.current.entitlements.selectedGarments;
   const latestFront = results.data!.items.find((item) => item.angle === 'front');

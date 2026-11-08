@@ -22,8 +22,8 @@ export default function SettingsRoute() {
     queryKey: ['social'],
     queryFn: () => apiRequest<SocialSnapshot>('/api/social'),
   });
-  if (social.data === undefined) return <ScreenLoading label="Đang tải cài đặt…"/>;
   if (social.error) return <ScreenError message={errorMessage(social.error, 'Không thể tải cài đặt.')} onRetry={() => void social.refetch()}/>;
+  if (social.data === undefined) return <ScreenLoading label="Đang tải cài đặt…"/>;
   return <SettingsContent snapshot={social.data}/>;
 }
 

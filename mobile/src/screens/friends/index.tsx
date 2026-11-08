@@ -43,8 +43,8 @@ export function FriendsScreen() {
     },
   });
 
-  if (query.data === undefined) return <ScreenLoading label="Đang tải bạn bè…"/>;
   if (query.error) return <ScreenError message={query.error instanceof Error ? query.error.message : 'Không thể tải bạn bè.'} onRetry={() => void query.refetch()}/>;
+  if (query.data === undefined) return <ScreenLoading label="Đang tải bạn bè…"/>;
 
   const data = query.data;
   const unread = data.notifications.filter((item) => !item.read).length;

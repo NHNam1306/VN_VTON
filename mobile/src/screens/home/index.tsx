@@ -20,8 +20,8 @@ export function HomeScreen() {
   const error = plans.error ?? garments.error ?? outfits.error;
   const retry = () => { void plans.refetch(); void garments.refetch(); void outfits.refetch(); };
 
-  if (loading) return <ScreenLoading label="Đang mở tủ đồ…"/>;
   if (error && (!plans.data || !garments.data || !outfits.data)) return <ScreenError message={error instanceof Error ? error.message : 'Không thể tải dữ liệu.'} onRetry={retry}/>;
+  if (loading) return <ScreenLoading label="Đang mở tủ đồ…"/>;
 
   const current = plans.data!.current;
   const items = garments.data!.items.slice(0, 6);

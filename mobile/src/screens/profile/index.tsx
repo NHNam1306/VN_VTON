@@ -37,9 +37,9 @@ export function ProfileScreen() {
     },
   });
 
-  if (plans.data === undefined || social.data === undefined) return <ScreenLoading label="Đang tải hồ sơ…"/>;
   const loadError = plans.error ?? social.error;
   if (loadError) return <ScreenError message={loadError instanceof Error ? loadError.message : 'Không thể tải hồ sơ.'} onRetry={() => { void plans.refetch(); void social.refetch(); }}/>;
+  if (plans.data === undefined || social.data === undefined) return <ScreenLoading label="Đang tải hồ sơ…"/>;
 
   const name = social.data.me.name || String(auth.user?.user_metadata.display_name ?? auth.user?.email?.split('@')[0] ?? 'Người dùng');
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md }}>

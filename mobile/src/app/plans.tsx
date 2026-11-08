@@ -23,8 +23,8 @@ export default function PlansRoute() {
     onSuccess: ({ checkoutUrl }) => void Linking.openURL(checkoutUrl),
   });
 
-  if (plans.data === undefined) return <ScreenLoading label="Đang tải các gói…"/>;
   if (plans.error) return <ScreenError message={plans.error instanceof Error ? plans.error.message : 'Không thể tải các gói.'} onRetry={() => void plans.refetch()}/>;
+  if (plans.data === undefined) return <ScreenLoading label="Đang tải các gói…"/>;
 
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, backgroundColor: colors.background }}>
     <View style={{ gap: spacing.xs }}>

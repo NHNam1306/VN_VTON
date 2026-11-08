@@ -174,9 +174,6 @@ export function WardrobeScreen() {
       .map((item) => ({ key: 'outfit-' + item.id, type: 'outfit' as const, item }));
   }, [category, garments.data?.items, mode, outfitFilter, outfits.data?.items]);
 
-  if (garments.data === undefined || outfits.data === undefined || plans.data === undefined) {
-    return <ScreenLoading label="Đang mở kho đồ…"/>;
-  }
   const loadError = garments.error ?? outfits.error ?? plans.error;
   if (loadError) {
     return <ScreenError
@@ -187,6 +184,9 @@ export function WardrobeScreen() {
         void plans.refetch();
       }}
     />;
+  }
+  if (garments.data === undefined || outfits.data === undefined || plans.data === undefined) {
+    return <ScreenLoading label="Đang mở kho đồ…"/>;
   }
 
   const currentCount = mode === 'garments' ? garments.data.items.length : outfits.data.items.length;

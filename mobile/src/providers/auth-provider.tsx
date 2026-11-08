@@ -34,11 +34,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return;
     }
     let active = true;
-    void supabase.auth.getSession().then(({ data }) => {
-      if (!active) return;
-      setSession(data.session);
-      setReady(true);
-    });
+    void supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (!active || error) return;
+        setSession(data.session);
+      })
+      .catch((error: unknown) => {
+        if (__DEV__) console.warn('Unable to restore auth session:', error);
+      })
+      .finally(() => {
+        if (active) setReady(true);
+      });
     const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       if (event === 'PASSWORD_RECOVERY') setRecoveryMode(true);
       if (event === 'SIGNED_OUT') setRecoveryMode(false);

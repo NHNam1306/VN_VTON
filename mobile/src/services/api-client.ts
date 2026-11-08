@@ -11,19 +11,38 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+type ApiRequestInit = RequestInit & {
+  timeoutMs?: number;
+};
+
+const readTimeoutMs = 30_000;
+const writeTimeoutMs = 150_000;
+
+export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
   const { data } = await supabase.auth.getSession();
-  const headers = new Headers(init.headers);
+  const { timeoutMs: configuredTimeoutMs, ...requestInit } = init;
+  const headers = new Headers(requestInit.headers);
   if (data.session?.access_token) {
     headers.set('Authorization', 'Bearer ' + data.session.access_token);
   }
-  const method = (init.method ?? 'GET').toUpperCase();
+  const method = (requestInit.method ?? 'GET').toUpperCase();
   if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
     headers.set('X-Fitting-Room-Request', '1');
   }
 
-  const isMultipartUpload = init.body instanceof FormData;
-  const request = () => expoFetch(apiBaseUrl + path, { ...init, headers });
+  const isReadRequest = ['GET', 'HEAD', 'OPTIONS'].includes(method);
+  const timeoutMs = configuredTimeoutMs ?? (isReadRequest ? readTimeoutMs : writeTimeoutMs);
+  const isMultipartUpload = requestInit.body instanceof FormData;
+  const controller = new AbortController();
+  const onExternalAbort = () => controller.abort();
+  if (requestInit.signal?.aborted) controller.abort();
+  else requestInit.signal?.addEventListener('abort', onExternalAbort, { once: true });
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const request = () => expoFetch(apiBaseUrl + path, {
+    ...requestInit,
+    headers,
+    signal: controller.signal,
+  });
   let response: Response;
   try {
     response = await request();
@@ -39,13 +58,19 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     }
   } catch (error) {
     if (__DEV__) console.warn('API request failed:', method, path, error);
+    const timedOut = controller.signal.aborted && !requestInit.signal?.aborted;
     throw new ApiError(
-      isMultipartUpload
+      timedOut
+        ? 'Máy chủ phản hồi quá lâu. Vui lòng thử lại sau ít phút.'
+        : isMultipartUpload
         ? 'Không thể tải ảnh lên máy chủ. Vui lòng thử lại với ảnh khác.'
         : 'Kết nối tới máy chủ bị gián đoạn. Vui lòng thử lại.',
       0,
-      isMultipartUpload ? 'upload_failed' : 'network_error',
+      timedOut ? 'request_timeout' : isMultipartUpload ? 'upload_failed' : 'network_error',
     );
+  } finally {
+    clearTimeout(timeout);
+    requestInit.signal?.removeEventListener('abort', onExternalAbort);
   }
 
   if (!response.ok) {
