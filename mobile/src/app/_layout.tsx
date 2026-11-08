@@ -64,6 +64,7 @@ function RootNavigator() {
         <Stack.Screen name="reset-password" options={{ headerShown: false }} />
         <Stack.Screen name="plans" options={{ title: 'Gói đăng ký', headerBackTitle: 'Hồ sơ' }} />
         <Stack.Screen name="settings" options={{ title: 'Cài đặt', headerBackTitle: 'Hồ sơ' }} />
+        <Stack.Screen name="image-viewer" options={{ title: 'Xem ảnh', presentation: 'fullScreenModal', headerBackTitle: 'Đóng' }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
     </ThemeProvider>

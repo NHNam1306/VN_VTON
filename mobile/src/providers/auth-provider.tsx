@@ -106,7 +106,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const { error } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password });
       if (error) {
         const unconfirmed = error.code === 'email_not_confirmed' || /email not confirmed/i.test(error.message);
-        throw new Error(unconfirmed ? 'Email chưa được xác minh. Hãy kiểm tra hộp thư hoặc gửi lại email xác minh.' : 'Email hoặc mật khẩu không đúng.');
+        if (unconfirmed) {
+          throw new Error('Email chưa được xác minh. Hãy kiểm tra hộp thư hoặc gửi lại email xác minh.');
+        }
+        const invalidCredentials =
+          error.code === 'invalid_credentials'
+          || /invalid login credentials|invalid credentials/i.test(error.message);
+        if (invalidCredentials) {
+          throw new Error('Email hoặc mật khẩu không đúng.');
+        }
+        const connectionError =
+          error.status === 0
+          || /fetch|network|timeout|connection/i.test(error.message);
+        throw new Error(connectionError
+          ? 'Không thể kết nối máy chủ. Hãy kiểm tra mạng hoặc cập nhật ứng dụng rồi thử lại.'
+          : 'Chưa thể đăng nhập. Vui lòng thử lại sau.');
       }
     },
     signUp: async (name, email, password) => {

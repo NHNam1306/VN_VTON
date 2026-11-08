@@ -1,4 +1,4 @@
-import { fetch } from 'expo/fetch';
+import { fetch as expoFetch } from 'expo/fetch';
 
 import { supabase } from './supabase';
 
@@ -22,7 +22,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     headers.set('X-Fitting-Room-Request', '1');
   }
 
-  const request = () => fetch(apiBaseUrl + path, { ...init, headers });
+  const isMultipartUpload = init.body instanceof FormData;
+  const request = () => expoFetch(apiBaseUrl + path, { ...init, headers });
   let response: Response;
   try {
     response = await request();
@@ -36,11 +37,14 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
         response = await request();
       }
     }
-  } catch {
+  } catch (error) {
+    if (__DEV__) console.warn('API request failed:', method, path, error);
     throw new ApiError(
-      'Không thể kết nối máy chủ. Hãy kiểm tra mạng và thử lại.',
+      isMultipartUpload
+        ? 'Không thể tải ảnh lên máy chủ. Vui lòng thử lại với ảnh khác.'
+        : 'Kết nối tới máy chủ bị gián đoạn. Vui lòng thử lại.',
       0,
-      'network_error',
+      isMultipartUpload ? 'upload_failed' : 'network_error',
     );
   }
 

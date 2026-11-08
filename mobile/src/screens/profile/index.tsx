@@ -10,6 +10,7 @@ import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { TryohMark } from '@/components/tryoh-mark';
 import { useAuth } from '@/providers/auth-provider';
 import { apiRequest, protectedImageSource } from '@/services/api-client';
+import { imageUploadFile } from '@/services/image-upload';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
 import type { PlanSnapshot, SocialSnapshot } from '@/types/api';
 
@@ -28,11 +29,7 @@ export function ProfileScreen() {
       if (picked.canceled) return null;
       const asset = picked.assets[0];
       const form = new FormData();
-      form.append('avatar', {
-        uri: asset.uri,
-        name: asset.fileName ?? 'avatar.jpg',
-        type: asset.mimeType ?? 'image/jpeg',
-      } as unknown as Blob);
+      form.append('avatar', imageUploadFile(asset, 'avatar.jpg'));
       return apiRequest<SocialSnapshot>('/api/social/avatar', { method: 'POST', body: form });
     },
     onSuccess: (snapshot) => {

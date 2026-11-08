@@ -16,7 +16,7 @@ export default function AppTabs() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="wardrobe">
         <NativeTabs.Trigger.Icon sf={{ default: 'tshirt', selected: 'tshirt.fill' }} md="checkroom" />
-        <NativeTabs.Trigger.Label>Tủ đồ</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Label>Kho đồ</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="try-on">
         <NativeTabs.Trigger.Icon sf={{ default: 'wand.and.stars', selected: 'wand.and.stars.inverse' }} md="auto_awesome" />

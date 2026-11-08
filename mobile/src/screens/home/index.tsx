@@ -1,18 +1,18 @@
 import { useQuery } from '@tanstack/react-query';
-import { Image } from 'expo-image';
 import { Link } from 'expo-router';
 import { Pressable, ScrollView, View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
+import { PreviewableImage } from '@/components/previewable-image';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { useAuth } from '@/providers/auth-provider';
-import { apiRequest, protectedImageSource } from '@/services/api-client';
+import { apiRequest } from '@/services/api-client';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
 import type { Garment, PlanSnapshot, SavedOutfit } from '@/types/api';
 
 export function HomeScreen() {
   const brand = useBrandColors();
-  const { session, user } = useAuth();
+  const { user } = useAuth();
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
   const garments = useQuery({ queryKey: ['garments'], queryFn: () => apiRequest<{ items: Garment[] }>('/api/garments') });
   const outfits = useQuery({ queryKey: ['saved-outfits'], queryFn: () => apiRequest<{ items: SavedOutfit[] }>('/api/generations/outfits') });
@@ -48,7 +48,7 @@ export function HomeScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}><AppText variant="headline">Mới trong tủ</AppText><Link href="/(tabs)/wardrobe" asChild><Pressable><AppText variant="subhead" style={{ color: brand.primary, fontWeight: '700' }}>Xem tất cả</AppText></Pressable></Link></View>
         {items.length === 0
           ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead" style={{ textAlign: 'center' }}>Mở tab Tủ đồ để thêm món đầu tiên từ thư viện ảnh.</AppText></View>
-          : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{items.map((item) => <View key={item.id} style={{ width: 132, gap: spacing.sm }}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: 132, height: 164, borderRadius: radius.lg, backgroundColor: colors.groupedBackground }} contentFit="cover"/><AppText variant="caption" numberOfLines={1}>{item.name}</AppText></View>)}</ScrollView>}
+          : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{items.map((item) => <View key={item.id} style={{ width: 132, gap: spacing.sm }}><PreviewableImage uri={item.frontProcessedUrl} title={item.name} style={{ width: 132, height: 164, borderRadius: radius.lg, backgroundColor: colors.groupedBackground }} contentFit="cover"/><AppText variant="caption" numberOfLines={1}>{item.name}</AppText></View>)}</ScrollView>}
       </View>
     </ScrollView>
   );
