@@ -8,7 +8,7 @@ export class PayosGateway implements PaymentGateway {
   constructor(private readonly config: PayosConfig) {}
 
   async createCheckout(order: PaymentOrder, returnUrl: string, cancelUrl: string): Promise<GatewayCheckout> {
-    const description = 'TRYOH ' + order.planId.toUpperCase() + ' ' + order.providerOrderId.slice(-6)
+    const description = 'FITSY ' + order.planId.toUpperCase() + ' ' + order.providerOrderId.slice(-6)
     const signed = {
       amount: order.amountVnd,
       cancelUrl,

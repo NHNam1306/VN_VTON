@@ -30,7 +30,7 @@ export const createBillingRouter = (billing: BillingService) => {
     try {
       const workbook = await billing.exportLedger(request.authUser)
       response.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-      response.setHeader('Content-Disposition', 'attachment; filename="tryoh-payment-transactions.xlsx"')
+      response.setHeader('Content-Disposition', 'attachment; filename="fitsy-payment-transactions.xlsx"')
       response.setHeader('Cache-Control', 'private, no-store')
       response.send(workbook)
     } catch (error) { next(error) }

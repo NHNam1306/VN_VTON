@@ -1,4 +1,4 @@
-# Lộ trình triển khai Tryoh
+# Lộ trình triển khai Fitsy
 
 Tài liệu này chuyển đặc tả sản phẩm thành phạm vi kỹ thuật có thể kiểm chứng. Nguyên tắc là không giả lập các luồng tiền, catalog hay kiểm duyệt khi chưa có quy tắc nghiệp vụ.
 
@@ -30,14 +30,14 @@ Tài liệu này chuyển đặc tả sản phẩm thành phạm vi kỹ thuật
 
 ### P1 — Shop và gợi ý sản phẩm (hướng ưu tiên)
 
-Gợi ý sản phẩm trên Shopee, TikTok Shop và shop ngoài sàn mà KOL/KOC gắn link affiliate; gợi ý phối với tủ đồ là tính năng phụ. Kiến trúc và chi phí đã phân tích trong tài liệu [Tryoh — Gợi ý sản phẩm Shop & phối đồ](https://claude.ai/artifact/KZX9FqAMdgVHmFaZFeAXud). Tóm tắt:
+Gợi ý sản phẩm trên Shopee, TikTok Shop và shop ngoài sàn mà KOL/KOC gắn link affiliate; gợi ý phối với tủ đồ là tính năng phụ. Kiến trúc và chi phí đã phân tích trong tài liệu [Fitsy — Gợi ý sản phẩm Shop & phối đồ](https://claude.ai/artifact/KZX9FqAMdgVHmFaZFeAXud). Tóm tắt:
 
 1. Catalog chung `products` + `product_links` theo KOC; nguồn ban đầu là link KOC dán trong KOC Studio, sau đó API affiliate (Shopee, TikTok Shop, AccessTrade) và feed shop ngoài sàn. Không scrape dữ liệu sàn.
 2. Embedding ảnh sản phẩm (OpenRouter trước, FashionCLIP sau) trong pgvector HNSW; tạo ứng viên từ vector gần nhất, KOC đang theo dõi, xu hướng và về sau collaborative filtering (`implicit`).
 3. Mọi lượt mua đi qua `/go/:productId` để đếm click và ghi công KOC; bảng `product_events` lưu xem/thử/click/đơn để học lại.
 4. Ghi nhãn “Liên kết tiếp thị”, làm mới giá và tồn kho hằng đêm, ẩn sản phẩm hết hàng.
 
-Cần chốt trước khi code: tài khoản affiliate làm trước, có bắt đầu chỉ với link KOC dán tay không, Tryoh có thu hoa hồng không, nơi chạy embedding.
+Cần chốt trước khi code: tài khoản affiliate làm trước, có bắt đầu chỉ với link KOC dán tay không, Fitsy có thu hoa hồng không, nơi chạy embedding.
 
 ## Phạm vi năm 2 — Inspiration/KOC
 

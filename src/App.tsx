@@ -8,6 +8,7 @@ import { useTryOnGeneration } from './hooks/useTryOnGeneration'
 import { usePlanStatus } from './hooks/usePlanStatus'
 import { appViewPaths, resolveAppView, type AppView } from './navigation'
 import { authApi } from './services/auth-api'
+import { readStoredValue, storageKeys, writeStoredValue } from './services/local-storage-keys'
 import { garmentApi } from './services/garment-api'
 import { personApi } from './services/person-api'
 import { socialApi } from './services/social-api'
@@ -57,8 +58,8 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const [isUploadOpen, setIsUploadOpen] = useState(false)
   const [isQuickActionOpen, setIsQuickActionOpen] = useState(false)
   const [composeSignal, setComposeSignal] = useState(0)
-  const [showOnboarding, setShowOnboarding] = useState(() => window.localStorage.getItem(`tryoh:onboarding:${user.id}:v1`) !== 'complete')
-  const [darkMode, setDarkMode] = useState(() => window.localStorage.getItem('tryoh:theme') === 'dark')
+  const [showOnboarding, setShowOnboarding] = useState(() => readStoredValue(storageKeys.onboarding(user.id)) !== 'complete')
+  const [darkMode, setDarkMode] = useState(() => readStoredValue(storageKeys.theme) === 'dark')
   const [activeView, setActiveView] = useState<AppView>(() => resolveAppView(window.location.pathname) ?? 'feed')
   const [isLoggingOut, setIsLoggingOut] = useState(false)
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
@@ -88,7 +89,7 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode)
-    window.localStorage.setItem('tryoh:theme', darkMode ? 'dark' : 'light')
+    writeStoredValue(storageKeys.theme, darkMode ? 'dark' : 'light')
   }, [darkMode])
 
   useEffect(() => {
@@ -389,7 +390,7 @@ function App() {
   }, [])
 
   if (user === undefined) {
-    return <div className="grid min-h-[100dvh] place-items-center bg-canvas"><div className="text-center text-ink/40"><BrandMark className="mx-auto mb-3 size-12" label="Tryoh" /><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
+    return <div className="grid min-h-[100dvh] place-items-center bg-canvas"><div className="text-center text-ink/40"><BrandMark className="mx-auto mb-3 size-12" label="Fitsy" /><LoaderCircle size={20} className="mx-auto animate-spin" /><p className="mt-3 text-xs font-semibold">Đang mở phòng thử…</p></div></div>
   }
 
   if (!user) {

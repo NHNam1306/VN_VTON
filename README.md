@@ -153,7 +153,7 @@ Supabase Auth có thể yêu cầu xác minh email. Nếu bật, sau đăng ký 
 - đặt **Site URL** thành URL production, ví dụ `https://vn-vton.onrender.com`;
 - thêm chính xác `https://vn-vton.onrender.com/reset-password` vào **Redirect URLs**;
 - khi chạy local, có thể thêm `http://127.0.0.1:8787/reset-password`;
-- app mobile cần thêm `tryoh://auth-callback`.
+- app mobile cần thêm `fitsy://auth-callback` và `fitsy://reset-password` (giữ `tryoh://auth-callback` đến khi người dùng đã cập nhật hết bản app cũ).
 
 Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ phần URL fragment. API trả thông báo chung dù email có tồn tại hay không để tránh dò tài khoản. Email production gửi qua SMTP riêng (Brevo) cấu hình tại Supabase **Authentication → SMTP Settings**, không dùng dịch vụ email mặc định bị giới hạn của Supabase.
 

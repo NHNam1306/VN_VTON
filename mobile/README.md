@@ -1,6 +1,6 @@
-# Tryoh Mobile
+# Fitsy Mobile
 
-Ứng dụng Expo/React Native dùng chung tài khoản, tủ đồ, kết quả thử đồ và dữ liệu bạn bè với Tryoh Web.
+Ứng dụng Expo/React Native dùng chung tài khoản, tủ đồ, kết quả thử đồ và dữ liệu bạn bè với Fitsy Web.
 
 ## Chạy local
 
@@ -16,7 +16,7 @@ npm start
 
 Người dùng xoá tài khoản trong **Cài đặt → Xóa tài khoản**; app gọi `DELETE /api/auth/account` rồi đăng xuất.
 
-Trong Supabase Authentication, thêm `tryoh://auth-callback` vào Redirect URLs để liên kết xác minh email mở lại ứng dụng.
+Trong Supabase Authentication, thêm `fitsy://auth-callback` và `fitsy://reset-password` vào Redirect URLs để liên kết xác minh email và đặt lại mật khẩu mở lại ứng dụng.
 
 ## Kiểm tra
 

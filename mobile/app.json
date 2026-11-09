@@ -5,10 +5,10 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "tryoh",
+    "scheme": "fitsy",
     "userInterfaceStyle": "light",
     "ios": {
-      "bundleIdentifier": "vn.tryoh.app"
+      "bundleIdentifier": "vn.fitsy.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +18,7 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "vn.tryoh.app"
+      "package": "vn.fitsy.app"
     },
     "web": {
       "output": "server",

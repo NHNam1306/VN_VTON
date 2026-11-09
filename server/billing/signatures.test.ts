@@ -3,8 +3,8 @@ import { hmacSha256, payosDataString, secureSignatureEqual } from './signatures.
 
 describe('payment signatures', () => {
   it('sorts payOS fields before signing', () => {
-    expect(payosDataString({ orderCode: 12, amount: 89000, description: 'TRYOH PLUS' }))
-      .toBe('amount=89000&description=TRYOH PLUS&orderCode=12')
+    expect(payosDataString({ orderCode: 12, amount: 89000, description: 'FITSY PLUS' }))
+      .toBe('amount=89000&description=FITSY PLUS&orderCode=12')
   })
 
   it('compares HMAC signatures without accepting malformed values', () => {

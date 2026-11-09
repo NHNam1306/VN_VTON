@@ -25,8 +25,8 @@ export class ExcelPaymentLedger {
   private async buildWorkbook(): Promise<ExcelJS.Workbook> {
     const orders = await this.repository.listAll()
     const workbook = new ExcelJS.Workbook()
-    workbook.creator = 'Tryoh'
-    workbook.company = 'Tryoh'
+    workbook.creator = 'Fitsy'
+    workbook.company = 'Fitsy'
     workbook.title = 'Sổ giao dịch thanh toán'
     workbook.subject = 'VietQR/payOS và MoMo'
     workbook.created = new Date()
@@ -42,7 +42,7 @@ export class ExcelPaymentLedger {
     const sheet = workbook.addWorksheet('Tổng quan', { views: [{ showGridLines: false }] })
     sheet.columns = [{ width: 30 }, { width: 24 }]
     sheet.mergeCells('A1:B1')
-    sheet.getCell('A1').value = 'TỔNG QUAN THANH TOÁN TRYOH'
+    sheet.getCell('A1').value = 'TỔNG QUAN THANH TOÁN FITSY'
     sheet.getCell('A1').font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 16 }
     sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF17211D' } }
     sheet.getCell('A1').alignment = { vertical: 'middle', horizontal: 'center' }

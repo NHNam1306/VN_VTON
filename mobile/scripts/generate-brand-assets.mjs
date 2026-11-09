@@ -4,7 +4,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 const root = path.resolve(import.meta.dirname, '..');
-const logo = await readFile(path.resolve(root, '../public/tryoh-mark.svg'));
+const logo = await readFile(path.resolve(root, '../public/fitsy-mark.svg'));
 const images = path.resolve(root, 'assets/images');
 const centeredLogo = (size, markSize) => ({
   create: { width: size, height: size, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },

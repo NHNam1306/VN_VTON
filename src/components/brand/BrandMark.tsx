@@ -8,32 +8,14 @@ export function BrandMark({ className = '', label, ...props }: BrandMarkProps) {
   return (
     <span
       {...props}
-      className={`inline-grid shrink-0 place-items-center overflow-hidden rounded-[30%] bg-gradient-to-br from-[#111719] via-[#18201f] to-[#2d332f] shadow-[0_10px_24px_rgba(17,23,25,0.22)] ring-1 ring-white/10 ${className}`}
+      className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-[30%] bg-[#141A3C] shadow-[0_10px_24px_rgba(20,26,60,0.22)] ring-1 ring-white/10 ${className}`}
       role={label ? 'img' : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
     >
-      <svg viewBox="0 0 48 48" className="size-[72%]" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M23.8 15.7c0-3.1 2.1-5.5 5.2-5.5 2.7 0 4.8 1.9 4.8 4.4 0 3.4-3.5 4.8-6.2 6.4"
-          stroke="#F6D25F"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-        />
-        <path
-          d="m24 18.2-14 13c-1.6 1.5-.5 4.2 1.7 4.2h24.6c2.2 0 3.3-2.7 1.7-4.2l-10.4-9.6"
-          stroke="#F6D25F"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path d="M15.2 34.9h17.6" stroke="#DCEAD8" strokeWidth="2.3" strokeLinecap="round" />
-        <path
-          d="M38.4 7.2v5.2M35.8 9.8H41"
-          stroke="#DCEAD8"
-          strokeWidth="2"
-          strokeLinecap="round"
-        />
+      <svg viewBox="0 0 64 64" className="size-full" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M21 17.5h19.5a3 3 0 0 1 0 6H27.5v6h10a3 3 0 0 1 0 6h-10v8.5a3.25 3.25 0 0 1-6.5 0z" fill="#FFFFFF" />
+        <path d="M47 11.5l1.6 4.4 4.4 1.6-4.4 1.6L47 23.5l-1.6-4.4-4.4-1.6 4.4-1.6z" fill="#FF5A6E" />
       </svg>
     </span>
   )
@@ -53,12 +35,12 @@ export function BrandLogo({
   inverse = false,
 }: BrandLogoProps) {
   return (
-    <span className={`inline-flex items-center gap-3 ${className}`} aria-label="Tryoh">
+    <span className={`inline-flex items-center gap-3 ${className}`} aria-label="Fitsy">
       <BrandMark className={markClassName} />
       <span
         className={`font-display text-xl font-extrabold tracking-[-0.04em] ${inverse ? 'text-white' : 'text-ink'} ${wordmarkClassName}`}
       >
-        Tryoh
+        Fitsy<span aria-hidden="true" className="ml-0.5 align-super text-[0.55em] text-[#FF5A6E]">✦</span>
       </span>
     </span>
   )

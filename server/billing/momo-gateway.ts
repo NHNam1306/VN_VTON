@@ -17,7 +17,7 @@ export class MomoGateway implements PaymentGateway {
 
   async createCheckout(order: PaymentOrder, returnUrl: string, _cancelUrl: string): Promise<GatewayCheckout> {
     const requestId = order.providerOrderId
-    const orderInfo = 'Thanh toan goi Tryoh ' + order.planId.toUpperCase()
+    const orderInfo = 'Thanh toan goi Fitsy ' + order.planId.toUpperCase()
     const extraData = ''
     const ipnUrl = new URL('/api/billing/webhooks/momo', returnUrl).toString()
     const redirectUrl = returnUrl
@@ -38,8 +38,8 @@ export class MomoGateway implements PaymentGateway {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         partnerCode: this.config.partnerCode,
-        partnerName: 'Tryoh',
-        storeId: 'Tryoh',
+        partnerName: 'Fitsy',
+        storeId: 'Fitsy',
         requestType: this.config.requestType,
         ipnUrl,
         redirectUrl,

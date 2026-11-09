@@ -2,7 +2,7 @@ import type { SubscriptionPlan, SubscriptionPlanId } from './types.js'
 
 export const SUBSCRIPTION_PLANS: Readonly<Record<SubscriptionPlanId, SubscriptionPlan>> = {
   free: {
-    id: 'free', name: 'Free', description: 'Dùng thử các tính năng cốt lõi của Tryoh.', monthlyPriceVnd: 0, recommended: false,
+    id: 'free', name: 'Free', description: 'Dùng thử các tính năng cốt lõi của Fitsy.', monthlyPriceVnd: 0, recommended: false,
     entitlements: { imageCredits: 10, wardrobeItems: 20, savedOutfits: 10, selectedGarments: 8 },
     highlights: ['10 ảnh tạo thử trọn đời', 'Tủ đồ 20 món', 'Lưu 10 outfit'],
   },

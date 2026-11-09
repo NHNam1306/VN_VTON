@@ -1,4 +1,4 @@
-# Vận hành trang quản trị Tryoh
+# Vận hành trang quản trị Fitsy
 
 ## Phạm vi hiện tại
 
