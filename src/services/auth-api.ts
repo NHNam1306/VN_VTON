@@ -106,4 +106,13 @@ export const authApi = {
     const response = await apiFetch('/api/auth/logout', { method: 'POST' })
     if (!response.ok) throw new Error(await parseError(response))
   },
+
+  async deleteAccount(): Promise<void> {
+    const response = await apiFetch('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    })
+    if (!response.ok) throw new Error(await parseError(response))
+  },
 }

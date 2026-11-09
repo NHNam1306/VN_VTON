@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import sharp from 'sharp'
 import { GARMENT_CATEGORIES, type GarmentCategory } from '../domain/garment.js'
 import type { ImageStorage } from '../storage/image-storage.js'
-import { aiImageSemaphore } from './ai-concurrency.js'
+import { AiQueueBusyError, aiImageSemaphore } from './ai-concurrency.js'
 
 export type ExtractedGarment = {
   id: string
@@ -45,7 +45,7 @@ const DEFAULT_CATEGORY_DESCRIPTIONS: Record<GarmentCategory, string> = {
 
 const OPENROUTER_IMAGE_API_URL = 'https://openrouter.ai/api/v1/images'
 const OPENROUTER_CHAT_API_URL = 'https://openrouter.ai/api/v1/chat/completions'
-const MAX_DETECTED_TARGETS = 5
+export const MAX_DETECTED_TARGETS = 5
 const MAX_GENERATED_IMAGE_BYTES = 20 * 1024 * 1024
 const MAX_GENERATED_BASE64_CHARS = Math.ceil(MAX_GENERATED_IMAGE_BYTES / 3) * 4
 
@@ -167,6 +167,9 @@ export class GarmentExtractorService {
         const generated = await aiImageSemaphore.run(() => this.generateWithFlux(item, imageBuffer, mimeType))
         results.push(generated)
       } catch (err) {
+        // No provider work started when the shared queue is saturated. Surface
+        // a retryable error so the reserved credits are refunded.
+        if (err instanceof AiQueueBusyError) throw err
         const reason = err instanceof Error ? err.message : String(err)
         // Phân biệt rõ lỗi có tốn phí (HTTP 200 nhưng payload hỏng) vs không tốn phí (HTTP 4xx/5xx/timeout)
         const chargedLikely = reason.includes('invalid image payload') || reason.includes('empty image payload')

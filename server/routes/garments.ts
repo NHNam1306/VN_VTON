@@ -4,13 +4,16 @@ import sharp from 'sharp'
 import { GARMENT_CATEGORIES, type GarmentCategory, type GarmentRecord, type GarmentResponse } from '../domain/garment.js'
 import type { GarmentRepository } from '../storage/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
-import { GarmentExtractorService } from '../services/garment-extractor.js'
+import { GarmentExtractorService, MAX_DETECTED_TARGETS } from '../services/garment-extractor.js'
 import type { SocialService } from '../social/social-service.js'
 import { runtimeConfig } from '../config/runtime-config.js'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../http/rate-limit.js'
 import type { PlanService } from '../plans/plan-service.js'
 import { pageMetadata, parsePagination } from '../http/pagination.js'
+import type { CreditService } from '../credits/credit-service.js'
+import type { CreditReservation } from '../credits/types.js'
+import { AuthError } from '../auth/auth-service.js'
 
 const upload = createImageUpload(4)
 export const MAX_GARMENTS_PER_USER = 20
@@ -42,6 +45,7 @@ export function createGarmentRouter(
   social?: SocialService,
   plans?: PlanService,
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
+  credits?: CreditService,
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
@@ -67,6 +71,8 @@ export function createGarmentRouter(
   })
 
   router.post('/ai-extract', aiRateLimit, singleUpload, async (request, response, next) => {
+    let reservation: CreditReservation | null = null
+    let outstandingCredits = 0
     try {
       const maxItems = await wardrobeLimit(request.authUser)
       const existingCount = await repository.count(request.authUser.id)
@@ -75,6 +81,8 @@ export function createGarmentRouter(
         response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
+      // Validate and decode the upload before touching credits, so a missing or
+      // malformed file can never leave reserved credits behind.
       const file = request.file
       if (!file) {
         response.status(400).json({ message: 'Vui lòng tải lên một ảnh để tách nền và tái tạo bằng FLUX.' })
@@ -86,6 +94,19 @@ export function createGarmentRouter(
         .resize({ width: 1_536, height: 1_536, fit: 'inside', withoutEnlargement: true })
         .webp({ quality: 88, effort: 3 })
         .toBuffer()
+
+      let maxGeneratedItems = Math.min(remainingSlots, MAX_DETECTED_TARGETS)
+      if (credits) {
+        const status = await credits.status(request.authUser)
+        if (!status.unlimited) maxGeneratedItems = Math.min(maxGeneratedItems, status.remaining ?? 0)
+        if (maxGeneratedItems <= 0) {
+          throw new AuthError(402, 'Bạn đã dùng hết lượt tạo ảnh. Hãy đăng ký gói phù hợp để tiếp tục.')
+        }
+        // tryConsume is atomic: if the balance dropped since status(), this throws 402
+        // and nothing is reserved.
+        reservation = await credits.reserve(request.authUser, maxGeneratedItems)
+        outstandingCredits = reservation.amount
+      }
 
       const defaultCategory = (GARMENT_CATEGORIES.includes(request.body.category)
         ? request.body.category
@@ -113,8 +134,14 @@ export function createGarmentRouter(
         optimizedInput,
         'image/webp',
         defaultCategory,
-        { ...extractOptions, maxItems: remainingSlots },
+        { ...extractOptions, maxItems: maxGeneratedItems },
       )
+
+      if (credits && reservation) {
+        const unused = Math.max(0, reservation.amount - items.length)
+        if (unused > 0) await credits.refund(request.authUser, { ...reservation, amount: unused })
+        outstandingCredits = Math.min(reservation.amount, items.length)
+      }
 
       console.info(`[AI Extract] Completed items=${items.length}`)
       const persist = request.body.persist === 'true' || request.body.persist === true
@@ -141,6 +168,7 @@ export function createGarmentRouter(
           }
           garments.push(toResponse(created, images))
         }
+        outstandingCredits = 0
         response.json({ items, garments })
         return
       }
@@ -148,8 +176,16 @@ export function createGarmentRouter(
         await social?.trackTemporaryImage(request.authUser.id, decodeURIComponent(item.studioImageUrl.slice('/uploads/'.length)))
       }
 
+      outstandingCredits = 0
       response.json({ items })
     } catch (error) {
+      if (credits && reservation && outstandingCredits > 0) {
+        try {
+          await credits.refund(request.authUser, { ...reservation, amount: outstandingCredits })
+        } catch (refundError) {
+          console.error('[AI Extract] Could not refund reserved credits:', refundError instanceof Error ? refundError.message : 'Unknown error')
+        }
+      }
       console.warn('[AI Extract] Failed safely')
       next(error)
     }

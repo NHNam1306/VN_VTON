@@ -1,11 +1,12 @@
-import { Activity, ArrowLeft, Ban, CheckCircle2, Coins, Crown, Download, Loader2, Save, Search, ShieldCheck, UserCog, Users } from 'lucide-react'
+import { Activity, ArrowLeft, Ban, CheckCircle2, Coins, Crown, Download, EyeOff, Flag, Loader2, Save, Search, ShieldCheck, UserCog, Users } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import type { AdminAuditEntry, AdminSummary, AdminUser, SubscriptionPlanId, UserRole, UserStatus } from '../../../server/admin/types'
+import type { ModerationReport } from '../../../server/social/social-service'
 import type { AppView } from '../../navigation'
-import { adminApi } from '../../services/admin-api'
+import { adminApi, type ModerationDecision } from '../../services/admin-api'
 import type { AuthUser } from '../../types/auth'
 
-type AdminTab='overview'|'users'|'audit'
+type AdminTab='overview'|'users'|'moderation'|'audit'
 const roleLabels:Record<UserRole,string>={user:'Người dùng',koc:'KOC',moderator:'Kiểm duyệt',admin:'Quản trị'}
 const planLabels:Record<SubscriptionPlanId,string>={free:'Free',plus:'Plus',pro:'Pro',max:'Max'}
 
@@ -15,6 +16,7 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
   const [summary,setSummary]=useState<AdminSummary|null>(null)
   const [users,setUsers]=useState<AdminUser[]>([])
   const [audit,setAudit]=useState<AdminAuditEntry[]>([])
+  const [reports,setReports]=useState<ModerationReport[]>([])
   const [query,setQuery]=useState('')
   const [role,setRole]=useState<UserRole|''>('')
   const [status,setStatus]=useState<UserStatus|''>('')
@@ -25,12 +27,13 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
   const refresh=useCallback(async()=>{
     setLoading(true);setError('')
     try{
-      const [nextSummary,nextUsers,nextAudit]=await Promise.all([
+      const [nextSummary,nextUsers,nextReports,nextAudit]=await Promise.all([
         adminApi.summary(),
         adminApi.users({q:query.trim(),role,status}),
+        adminApi.moderationReports(),
         user.role==='admin'?adminApi.audit():Promise.resolve([]),
       ])
-      setSummary(nextSummary);setUsers(nextUsers);setAudit(nextAudit)
+      setSummary(nextSummary);setUsers(nextUsers);setReports(nextReports);setAudit(nextAudit)
     }catch(cause){setError(cause instanceof Error?cause.message:'Không thể tải trang quản trị.')}
     finally{setLoading(false)}
   },[query,role,status,user.role])
@@ -41,6 +44,13 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
     setBusyId(target.id);setError('')
     try{await adminApi.updateUser(target.id,changes);await refresh()}
     catch(cause){setError(cause instanceof Error?cause.message:'Không thể cập nhật người dùng.')}
+    finally{setBusyId('')}
+  }
+
+  const resolveReport=async(id:string,decision:ModerationDecision)=>{
+    setBusyId(id);setError('')
+    try{await adminApi.resolveModerationReport(id,decision);setReports(current=>current.filter(report=>report.id!==id))}
+    catch(cause){setError(cause instanceof Error?cause.message:'Không thể xử lý báo cáo.')}
     finally{setBusyId('')}
   }
 
@@ -57,7 +67,7 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
       </section>
 
       <nav className="mt-5 flex gap-2 overflow-x-auto rounded-[22px] border border-black/[0.06] bg-panel p-2 shadow-sm" aria-label="Quản trị">
-        {([{id:'overview',label:'Tổng quan',icon:Activity},{id:'users',label:'Người dùng',icon:Users},...(user.role==='admin'?[{id:'audit',label:'Audit log',icon:ShieldCheck}]:[])] as Array<{id:AdminTab;label:string;icon:typeof Users}>).map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>setTab(item.id)} className={`inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-bold transition ${tab===item.id?'bg-ink text-white shadow':'text-ink/50 hover:bg-black/[0.04]'}`}><Icon size={15}/>{item.label}</button>})}
+        {([{id:'overview',label:'Tổng quan',icon:Activity},{id:'users',label:'Người dùng',icon:Users},{id:'moderation',label:`Báo cáo${reports.length?` (${reports.length})`:''}`,icon:Flag},...(user.role==='admin'?[{id:'audit',label:'Audit log',icon:ShieldCheck}]:[])] as Array<{id:AdminTab;label:string;icon:typeof Users}>).map(item=>{const Icon=item.icon;return <button key={item.id} onClick={()=>setTab(item.id)} className={`inline-flex shrink-0 items-center gap-2 rounded-2xl px-4 py-2.5 text-xs font-bold transition ${tab===item.id?'bg-ink text-white shadow':'text-ink/50 hover:bg-black/[0.04]'}`}><Icon size={15}/>{item.label}</button>})}
       </nav>
 
       {error&&<div role="alert" className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -65,11 +75,16 @@ export function AdminPage({user,onNavigate}:{user:AuthUser;onNavigate:(view:AppV
         <div key={tab} className="app-page-transition mt-5">
           {tab==='overview'&&summary&&<Overview summary={summary} onUsers={()=>setTab('users')} canExportPayments={user.role==='admin'}/>}
           {tab==='users'&&<UsersPanel currentUser={user} users={users} query={query} role={role} status={status} busyId={busyId} onQuery={setQuery} onRole={setRole} onStatus={setStatus} onUpdate={update}/>}
+          {tab==='moderation'&&<ModerationPanel reports={reports} busyId={busyId} canSuspend={user.role==='admin'} onResolve={resolveReport}/>}
           {tab==='audit'&&user.role==='admin'&&<AuditPanel entries={audit}/>}
         </div>
       )}
     </main>
   )
+}
+
+function ModerationPanel({reports,busyId,canSuspend,onResolve}:{reports:ModerationReport[];busyId:string;canSuspend:boolean;onResolve:(id:string,decision:ModerationDecision)=>void}){
+  return <section className="rounded-[28px] border border-black/[0.06] bg-panel p-5 shadow-sm sm:p-6"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">Nội dung cộng đồng</p><h2 className="mt-1 font-display text-xl font-bold text-ink">Báo cáo chờ xử lý</h2><div className="mt-5 space-y-3">{reports.length===0?<p className="rounded-2xl border border-dashed border-black/10 p-10 text-center text-sm text-ink/40">Không có báo cáo nào đang chờ.</p>:reports.map(report=><article key={report.id} className="rounded-2xl border border-black/[0.06] bg-white/70 p-4"><div className="flex flex-col gap-4 sm:flex-row sm:items-start"><span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-red-50 text-red-700"><Flag size={16}/></span><div className="min-w-0 flex-1"><p className="text-sm font-bold text-ink">{report.targetName||'Người dùng bị báo cáo'}</p><p className="mt-1 text-xs text-ink/45">Người báo cáo: {report.fromName||report.from}</p><p className="mt-3 whitespace-pre-wrap rounded-xl bg-black/[0.025] p-3 text-sm text-ink/70">{report.reason}</p><p className="mt-2 text-[10px] text-ink/30">{new Date(report.createdAt).toLocaleString('vi-VN')} · ID đối tượng: {report.target}</p></div><div className="flex shrink-0 flex-wrap gap-2 sm:flex-col"><button type="button" disabled={busyId===report.id} onClick={()=>onResolve(report.id,{status:'resolved'})} className="inline-flex items-center justify-center gap-2 rounded-xl bg-ink px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50">{busyId===report.id?<Loader2 size={13} className="animate-spin"/>:<CheckCircle2 size={13}/>}Đã xử lý</button><button type="button" disabled={busyId===report.id} onClick={()=>onResolve(report.id,{status:'resolved',hidePosts:true})} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-bold text-red-700 disabled:opacity-50"><EyeOff size={13}/>Ẩn bài đăng</button>{canSuspend&&<button type="button" disabled={busyId===report.id} onClick={()=>onResolve(report.id,{status:'resolved',suspend:true})} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white disabled:opacity-50"><Ban size={13}/>Khoá tài khoản</button>}<button type="button" disabled={busyId===report.id} onClick={()=>onResolve(report.id,{status:'dismissed'})} className="inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-bold text-ink/50 hover:bg-black/[0.04] disabled:opacity-50">Bỏ qua</button></div></div></article>)}</div></section>
 }
 
 function Overview({summary,onUsers,canExportPayments}:{summary:AdminSummary;onUsers:()=>void;canExportPayments:boolean}){
@@ -93,6 +108,6 @@ function CreditEditor({target,disabled,onSave}:{target:AdminUser;disabled:boolea
   return <div className="flex items-center gap-1.5 rounded-xl border border-black/[0.07] bg-white p-1.5"><Coins size={14} className="ml-1 text-amber-600"/><label><span className="sr-only">Credit của {target.email}</span><input type="number" min="0" max="1000000" step="1" value={value} disabled={disabled} onChange={event=>setValue(event.target.value)} className="w-16 bg-transparent px-1 text-center text-xs font-bold text-ink outline-none disabled:opacity-50"/></label><button type="button" aria-label={`Lưu credit của ${target.email}`} disabled={disabled||!valid||parsed===target.creditBalance} onClick={()=>onSave(parsed)} className="grid size-7 place-items-center rounded-lg bg-ink text-white transition hover:bg-black disabled:bg-black/10 disabled:text-ink/25"><Save size={12}/></button></div>
 }
 
-const auditLabels:Record<AdminAuditEntry['action'],string>={'user.role_changed':'Thay đổi role','user.status_changed':'Thay đổi trạng thái','user.credits_changed':'Thay đổi credit','user.plan_changed':'Thay đổi gói'}
+const auditLabels:Record<AdminAuditEntry['action'],string>={'user.role_changed':'Thay đổi role','user.status_changed':'Thay đổi trạng thái','user.credits_changed':'Thay đổi credit','user.plan_changed':'Thay đổi gói','user.posts_hidden':'Ẩn bài đăng','report.resolved':'Xử lý báo cáo','report.dismissed':'Bỏ qua báo cáo'}
 function AuditPanel({entries}:{entries:AdminAuditEntry[]}){return <section className="rounded-[28px] border border-black/[0.06] bg-panel p-5 shadow-sm sm:p-6"><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">Bảo mật</p><h2 className="mt-1 font-display text-xl font-bold text-ink">Lịch sử thao tác</h2><div className="mt-5 space-y-2">{entries.length===0?<p className="rounded-2xl border border-dashed border-black/10 p-10 text-center text-sm text-ink/40">Chưa có thay đổi quản trị.</p>:entries.map(entry=><article key={entry.id} className="flex gap-3 rounded-2xl bg-black/[0.025] p-4"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sage-100 text-sage-700"><UserCog size={15}/></span><div className="min-w-0"><p className="text-xs font-bold text-ink">{auditLabels[entry.action]}</p><p className="mt-1 text-xs text-ink/45">{entry.actorEmail} · {entry.details.from} → {entry.details.to}</p><p className="mt-1 text-[10px] text-ink/30">Đối tượng {entry.targetId} · {new Date(entry.createdAt).toLocaleString('vi-VN')}</p></div></article>)}</div></section>}
 function AccessDenied({onBack}:{onBack:()=>void}){return <main className="grid min-h-[70vh] place-items-center p-6"><div className="max-w-md rounded-[28px] border border-black/[0.06] bg-panel p-8 text-center shadow-soft"><ShieldCheck size={34} className="mx-auto text-ink/20"/><h1 className="mt-4 text-xl font-bold text-ink">Không có quyền truy cập</h1><p className="mt-2 text-sm text-ink/45">Tài khoản này không thuộc nhóm quản trị hoặc kiểm duyệt.</p><button onClick={onBack} className="mt-6 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white">Về trang chủ</button></div></main>}

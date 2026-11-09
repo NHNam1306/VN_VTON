@@ -34,7 +34,20 @@ export class SqliteAdminRepository implements AdminRepository {
     return (this.database.prepare(sql).all(...params) as UserRow[]).map(fromUserRow)
   }
   getUser(id:string):AdminUser|null{const row=this.database.prepare('SELECT id,email,display_name,role,status,credit_balance,subscription_plan,created_at,last_seen_at FROM users WHERE id=?').get(id) as UserRow|undefined;return row?fromUserRow(row):null}
-  updateUser(id:string,changes:{role?:UserRole;status?:UserStatus;creditBalance?:number;subscriptionPlan?:SubscriptionPlanId}):AdminUser|null{this.database.prepare('UPDATE users SET role=COALESCE(?,role),status=COALESCE(?,status),credit_balance=COALESCE(?,credit_balance),subscription_plan=COALESCE(?,subscription_plan),subscription_expires_at=CASE WHEN ? IS NULL THEN subscription_expires_at ELSE NULL END WHERE id=?').run(changes.role??null,changes.status??null,changes.creditBalance??null,changes.subscriptionPlan??null,changes.subscriptionPlan??null,id);return this.getUser(id)}
+  updateUser(id:string,changes:{role?:UserRole;status?:UserStatus;creditBalance?:number;subscriptionPlan?:SubscriptionPlanId}):AdminUser|null{
+    return this.database.transaction(()=>{
+      const before=this.database.prepare('SELECT credit_balance FROM users WHERE id=?').get(id) as {credit_balance:number}|undefined
+      if(!before)return null
+      this.database.prepare('UPDATE users SET role=COALESCE(?,role),status=COALESCE(?,status),credit_balance=COALESCE(?,credit_balance),subscription_plan=COALESCE(?,subscription_plan),subscription_expires_at=CASE WHEN ? IS NULL THEN subscription_expires_at ELSE NULL END WHERE id=?').run(changes.role??null,changes.status??null,changes.creditBalance??null,changes.subscriptionPlan??null,changes.subscriptionPlan??null,id)
+      const after=this.getUser(id)
+      const delta=after?after.creditBalance-before.credit_balance:0
+      if(after&&delta!==0){
+        this.database.exec("CREATE TABLE IF NOT EXISTS credit_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT NOT NULL,delta INTEGER NOT NULL,balance_after INTEGER NOT NULL,event_type TEXT NOT NULL,payment_order_id TEXT,created_at TEXT NOT NULL)")
+        this.database.prepare("INSERT INTO credit_ledger(user_id,delta,balance_after,event_type,created_at) VALUES(?,?,?,'admin_adjustment',?)").run(id,delta,after.creditBalance,new Date().toISOString())
+      }
+      return after
+    })()
+  }
   countAdmins():number{return (this.database.prepare("SELECT count(*) AS count FROM users WHERE role='admin' AND status='active'").get() as {count:number}).count}
   summary():AdminSummary{const rows=this.database.prepare('SELECT role,status,count(*) AS count FROM users GROUP BY role,status').all() as Array<{role:UserRole;status:UserStatus;count:number}>;const count=(fn:(row:typeof rows[number])=>boolean)=>rows.filter(fn).reduce((sum,row)=>sum+row.count,0);return{users:count(()=>true),activeUsers:count(row=>row.status==='active'),suspendedUsers:count(row=>row.status==='suspended'),kocUsers:count(row=>row.role==='koc'),moderators:count(row=>row.role==='moderator'),admins:count(row=>row.role==='admin')}}
   addAudit(entry:AdminAuditEntry):void{this.database.prepare('INSERT INTO admin_audit_logs VALUES (?,?,?,?,?,?,?)').run(entry.id,entry.actorId,entry.actorEmail,entry.action,entry.targetId,JSON.stringify(entry.details),entry.createdAt)}

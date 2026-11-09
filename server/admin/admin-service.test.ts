@@ -19,7 +19,7 @@ describe('AdminService authorization',()=>{
     directory=mkdtempSync(path.join(tmpdir(),'tryoh-admin-'))
     const databasePath=path.join(directory,'test.sqlite')
     auth=new AuthStore(databasePath)
-    admin=auth.createUser({id:'admin',email:'owner@example.com',displayName:'Owner',passwordHash:'hash',passwordSalt:'salt',createdAt:new Date().toISOString()})
+    admin=auth.createUser({id:'admin',email:'owner@example.com',displayName:'Owner',passwordHash:'hash',passwordSalt:'salt',createdAt:new Date().toISOString(),role:'admin'})
     member=auth.createUser({id:'member',email:'member@example.com',displayName:'Member',passwordHash:'hash',passwordSalt:'salt',createdAt:new Date().toISOString()})
     repository=new SqliteAdminRepository(databasePath)
     service=new AdminService(repository,['owner@example.com'])
@@ -34,6 +34,12 @@ describe('AdminService authorization',()=>{
     expect(member.role).toBe('user')
     await expect(service.summary(member)).rejects.toMatchObject({statusCode:403})
     await expect(service.summary(admin)).resolves.toMatchObject({users:2,admins:1})
+  })
+
+  it('does not grant admin from an allowlisted email without trusted app metadata',async()=>{
+    const impostor=auth.createUser({id:'impostor',email:'another-owner@example.com',displayName:'Impostor',passwordHash:'hash',passwordSalt:'salt',createdAt:new Date().toISOString()})
+    const guarded=new AdminService(repository,['another-owner@example.com'])
+    await expect(guarded.resolveAuthenticatedUser(impostor)).resolves.toMatchObject({role:'user'})
   })
 
   it('prevents self privilege changes and records changes to other accounts',async()=>{

@@ -21,6 +21,7 @@ import type { AuthBackend } from './auth/auth-backend.js'
 import { SupabaseAuthService } from './auth/supabase-auth-service.js'
 import { SocialStore } from './social/social-store.js'
 import { PostgresSocialStore } from './social/postgres-social-store.js'
+import { ImmediateStorageCleanup, PostgresStorageCleanup, type StorageCleanup } from './storage/storage-cleanup.js'
 import type { SocialService } from './social/social-service.js'
 import { runtimeConfig } from './config/runtime-config.js'
 import { AdminService } from './admin/admin-service.js'
@@ -88,12 +89,7 @@ if (imageStorageBackend === 'r2') {
     bucket: process.env.R2_BUCKET ?? '',
     prefix: process.env.R2_PREFIX,
   })
-  try {
-    await r2Storage.configureBrowserCors([new URL(appBaseUrl).origin])
-    console.log('[r2] Direct browser reads are enabled.')
-  } catch (error) {
-    console.warn('[r2] Direct browser reads are disabled; using the authenticated streaming fallback.', error instanceof Error ? error.message : '')
-  }
+  console.log('[r2] Signed browser redirects are enabled; image bytes bypass the web service.')
   imageStorage = r2Storage
 } else if (imageStorageBackend === 'local') {
   await mkdir(dataDirectory, { recursive: true })
@@ -109,6 +105,7 @@ if (authBackend === 'supabase') {
     process.env.SUPABASE_URL ?? '',
     process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '',
     appBaseUrl,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
   )
 } else if (authBackend === 'local') {
   if (persistenceBackend !== 'sqlite') {
@@ -124,6 +121,13 @@ const imageProvider = createImageProvider(imageStorage, { port })
 const social: SocialService = persistenceBackend === 'sqlite'
   ? new SocialStore(path.join(dataDirectory, 'fitting-room.sqlite'), userDataRepository as SqliteUserDataRepository)
   : new PostgresSocialStore(postgresPool!)
+// Background jobs: poll results, notification pruning and R2 object cleanup.
+// Safe to run on several instances; work is claimed with row locks.
+const storageCleanup: StorageCleanup = postgresPool
+  ? new PostgresStorageCleanup(postgresPool, imageStorage)
+  : new ImmediateStorageCleanup(imageStorage)
+storageCleanup.start?.()
+social.startMaintenance?.()
 const adminRepository:AdminRepository=persistenceBackend==='sqlite'
   ? new SqliteAdminRepository(sqliteDatabasePath!)
   : new PostgresAdminRepository(postgresPool!)
@@ -168,7 +172,6 @@ const billingRepository = persistenceBackend === 'postgres'
     : new SqliteBillingRepository(sqliteDatabasePath!)
 const paymentLedger = new ExcelPaymentLedger(
   billingRepository,
-  path.join(dataDirectory, 'reports', 'payment-transactions.xlsx'),
 )
 const billingService = new BillingService(
   billingRepository,
@@ -194,6 +197,7 @@ const app = createApp(
   async () => {
     if (postgresPool) await postgresPool.query('SELECT 1')
   },
+  storageCleanup,
 )
 const server = createHttpServer(app)
 let closeVite: (() => Promise<void>) | undefined
@@ -245,6 +249,7 @@ const shutdown = async () => {
     repository.close()
     userDataRepository.close()
     authStore?.close()
+    storageCleanup.stop?.()
     void social.close()
     void admin.close()
     void rateLimitStore.close?.()

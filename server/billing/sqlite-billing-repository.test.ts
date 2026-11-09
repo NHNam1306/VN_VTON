@@ -40,7 +40,9 @@ describe('SqliteBillingRepository', () => {
 
     expect(first?.status).toBe('paid')
     expect(repeated?.paidAt).toBe(first?.paidAt)
-    expect(user).toEqual({ subscription_plan: 'pro', credit_balance: 300 })
+    expect(user).toEqual({ subscription_plan: 'pro', credit_balance: 310 })
+    const ledger = database.prepare('SELECT delta,balance_after,event_type FROM credit_ledger WHERE payment_order_id=?').get(order.id)
+    expect(ledger).toEqual({ delta: 300, balance_after: 310, event_type: 'subscription_granted' })
 
     database.close()
     billing.close()

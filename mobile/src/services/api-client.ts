@@ -2,7 +2,14 @@ import { fetch as expoFetch } from 'expo/fetch';
 
 import { AuthSessionTimeoutError, getSessionWithTimeout, supabase } from './supabase';
 
-export const apiBaseUrl = (process.env.EXPO_PUBLIC_API_URL ?? 'https://vn-vton.onrender.com').replace(/\/$/, '');
+const configuredApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim();
+if (!configuredApiUrl) {
+  throw new Error('Thiếu EXPO_PUBLIC_API_URL. Hãy cấu hình URL backend cho bản build này.');
+}
+export const apiBaseUrl = configuredApiUrl.replace(/\/$/, '');
+// Store builds (Google Play / App Store) must not reach external payment gateways;
+// the backend enforces this from the channel header.
+const clientChannel = process.env.EXPO_PUBLIC_BILLING_MODE === 'external' ? 'direct' : 'store';
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number, public readonly code?: string) {
@@ -37,6 +44,7 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
       headers.set('Authorization', 'Bearer ' + data.session.access_token);
     }
     if (!isReadRequest) headers.set('X-Fitting-Room-Request', '1');
+    headers.set('X-Client-Channel', clientChannel);
     const request = () => expoFetch(apiBaseUrl + path, {
       ...requestInit,
       headers,

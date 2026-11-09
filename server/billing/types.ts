@@ -5,7 +5,7 @@ export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'cancelled'
 
 export type PaymentOrder = {
   id: string
-  userId: string
+  userId: string | null
   customerEmail: string
   customerName: string
   planId: SubscriptionPlanId
@@ -23,7 +23,7 @@ export type PaymentOrder = {
 
 export type CreatePaymentOrder = Omit<PaymentOrder,
   'providerTransactionId' | 'status' | 'checkoutUrl' | 'createdAt' | 'updatedAt' | 'paidAt' | 'accessExpiresAt'
->
+> & { userId: string }
 
 export type GatewayCheckout = { checkoutUrl: string }
 

@@ -31,7 +31,8 @@ export class SqliteBillingRepository implements BillingRepository {
     }
     this.database.exec(
       "CREATE TABLE IF NOT EXISTS payment_orders (id TEXT PRIMARY KEY,user_id TEXT NOT NULL,customer_email TEXT NOT NULL DEFAULT '',customer_name TEXT NOT NULL DEFAULT '',plan_id TEXT NOT NULL,provider TEXT NOT NULL,provider_order_id TEXT NOT NULL,provider_transaction_id TEXT,amount_vnd INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'pending',checkout_url TEXT,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,paid_at TEXT,access_expires_at TEXT,UNIQUE(provider,provider_order_id));" +
-      'CREATE INDEX IF NOT EXISTS idx_payment_orders_user_created ON payment_orders(user_id,created_at DESC);',
+      'CREATE INDEX IF NOT EXISTS idx_payment_orders_user_created ON payment_orders(user_id,created_at DESC);' +
+      "CREATE TABLE IF NOT EXISTS credit_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,user_id TEXT NOT NULL,delta INTEGER NOT NULL,balance_after INTEGER NOT NULL,event_type TEXT NOT NULL,payment_order_id TEXT UNIQUE,created_at TEXT NOT NULL);",
     )
     const paymentColumns = this.database.pragma('table_info(payment_orders)') as Array<{ name: string }>
     if (!paymentColumns.some((column) => column.name === 'customer_email')) {
@@ -72,12 +73,16 @@ export class SqliteBillingRepository implements BillingRepository {
   complete(provider: PaymentProvider, providerOrderId: string, transactionId: string, imageCredits: number): PaymentOrder | null {
     return this.database.transaction(() => {
       const order = this.getByProviderOrder(provider, providerOrderId)
-      if (!order || order.status === 'paid') return order
+      if (!order || order.status !== 'pending') return order
       const profile = this.database.prepare('SELECT subscription_plan,subscription_expires_at FROM users WHERE id=?').get(order.userId) as { subscription_plan: string; subscription_expires_at: string | null } | undefined
       const current = profile?.subscription_expires_at ? new Date(profile.subscription_expires_at) : null
-      const startsAt = profile?.subscription_plan === order.planId && current && current.getTime() > Date.now() ? current : new Date()
+      const startsAt = current && current.getTime() > Date.now() ? current : new Date()
       const expiresAt = new Date(startsAt.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString()
-      this.database.prepare('UPDATE users SET subscription_plan=?,credit_balance=?,subscription_expires_at=? WHERE id=?').run(order.planId, imageCredits, expiresAt, order.userId)
+      this.database.prepare('UPDATE users SET subscription_plan=?,credit_balance=MIN(1000000,credit_balance+?),subscription_expires_at=? WHERE id=?').run(order.planId, imageCredits, expiresAt, order.userId)
+      const balance = (this.database.prepare('SELECT credit_balance FROM users WHERE id=?').get(order.userId) as { credit_balance: number } | undefined)?.credit_balance
+      if (balance === undefined) throw new Error('Không tìm thấy hồ sơ nhận quyền lợi thanh toán.')
+      this.database.prepare("INSERT INTO credit_ledger(user_id,delta,balance_after,event_type,payment_order_id,created_at) VALUES(?,?,?,'subscription_granted',?,?)")
+        .run(order.userId, imageCredits, balance, order.id, new Date().toISOString())
       const now = new Date().toISOString()
       this.database.prepare("UPDATE payment_orders SET status='paid',provider_transaction_id=?,paid_at=?,access_expires_at=?,updated_at=? WHERE id=?").run(transactionId, now, expiresAt, now, order.id)
       return this.get(order.id)

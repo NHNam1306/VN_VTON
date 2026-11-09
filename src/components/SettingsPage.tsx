@@ -14,6 +14,7 @@ import {
   Settings,
   Shield,
   Sun,
+  Trash2,
   UserRound,
   UserX,
 } from 'lucide-react'
@@ -24,6 +25,7 @@ import { authApi } from '../services/auth-api'
 import { socialApi } from '../services/social-api'
 import type { AuthUser } from '../types/auth'
 import { Avatar } from './social/Avatar'
+import { ConfirmDialog } from './ConfirmDialog'
 
 type SettingsPageProps = {
   user: AuthUser
@@ -85,6 +87,9 @@ export function SettingsPage({
   const [socialLoading, setSocialLoading] = useState(true)
   const [socialBusy, setSocialBusy] = useState(false)
   const [socialMessage, setSocialMessage] = useState<Message>(null)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteMessage, setDeleteMessage] = useState<Message>(null)
 
   const loadSocialSettings = useCallback(async () => {
     setSocialLoading(true)
@@ -210,6 +215,19 @@ export function SettingsPage({
     if (saved) setSocialMessage({ type: 'success', text: 'Đã lưu quyền riêng tư.' })
   }
 
+  const deleteAccount = async () => {
+    setDeletingAccount(true)
+    setDeleteMessage(null)
+    try {
+      await authApi.deleteAccount()
+      window.location.assign('/')
+    } catch (cause) {
+      setDeleteMessage({ type: 'error', text: cause instanceof Error ? cause.message : 'Không thể xóa tài khoản.' })
+      setDeleteDialogOpen(false)
+      setDeletingAccount(false)
+    }
+  }
+
   const sections: Array<{ id: SettingsSection; label: string; icon: typeof Settings }> = [
     { id: 'account', label: 'Tài khoản', icon: UserRound },
     { id: 'privacy', label: 'Quyền riêng tư', icon: Shield },
@@ -293,8 +311,14 @@ export function SettingsPage({
               </SettingsCard>
 
               <section className="flex flex-col gap-4 rounded-[26px] border border-red-100 bg-red-50/70 p-5 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
-                <h2 className="text-sm font-bold text-red-900">Phiên đăng nhập</h2>
-                <button type="button" onClick={onLogout} disabled={isLoggingOut} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50">{isLoggingOut ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />} Đăng xuất</button>
+                <div>
+                  <h2 className="text-sm font-bold text-red-900">Tài khoản</h2>
+                  <Feedback message={deleteMessage} />
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" onClick={onLogout} disabled={isLoggingOut || deletingAccount} className="inline-flex items-center justify-center gap-2 rounded-xl border border-red-200 bg-white px-4 py-2.5 text-xs font-bold text-red-700 transition hover:bg-red-50 disabled:opacity-50">{isLoggingOut ? <Loader2 size={13} className="animate-spin" /> : <LogOut size={13} />} Đăng xuất</button>
+                  <button type="button" onClick={() => setDeleteDialogOpen(true)} disabled={deletingAccount} className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"><Trash2 size={13} /> Xóa tài khoản</button>
+                </div>
               </section>
             </section>
           )}
@@ -366,6 +390,15 @@ export function SettingsPage({
           )}
         </div>
       </div>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title="Xóa vĩnh viễn tài khoản?"
+        description="Hồ sơ, tủ đồ, outfit, ảnh thử đồ và nội dung đã đăng sẽ bị xóa. Giao dịch bắt buộc lưu theo quy định sẽ được ẩn danh. Hành động này không thể hoàn tác."
+        confirmLabel="Xóa tài khoản"
+        isBusy={deletingAccount}
+        onCancel={() => setDeleteDialogOpen(false)}
+        onConfirm={() => void deleteAccount()}
+      />
     </main>
   )
 }

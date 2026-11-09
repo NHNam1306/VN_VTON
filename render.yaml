@@ -43,6 +43,10 @@ services:
         value: "120000"
       - key: AI_MAX_CONCURRENCY
         value: "1"
+      - key: AI_MAX_WAITING_REQUESTS
+        value: "4"
+      - key: AI_QUEUE_TIMEOUT_MS
+        value: "30000"
       - key: DATABASE_POOL_MAX
         value: "5"
       - key: AUTH_SESSION_DAYS
@@ -76,6 +80,8 @@ services:
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
       - key: R2_ACCOUNT_ID
         sync: false

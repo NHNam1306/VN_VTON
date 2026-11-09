@@ -25,7 +25,7 @@ const paidOrder: PaymentOrder = {
 describe('ExcelPaymentLedger', () => {
   it('exports payment details, summary formulas and identifiers as text', async () => {
     const repository = { listAll: () => [paidOrder] } as unknown as BillingRepository
-    const ledger = new ExcelPaymentLedger(repository, 'unused.xlsx')
+    const ledger = new ExcelPaymentLedger(repository)
     const buffer = await ledger.toBuffer()
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(buffer)

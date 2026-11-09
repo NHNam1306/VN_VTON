@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import type { BillingService } from './billing-service.js'
 
 export const createBillingWebhookRouter = (billing: BillingService) => {
@@ -18,9 +18,14 @@ export const createBillingWebhookRouter = (billing: BillingService) => {
   return router
 }
 
+// Builds distributed through Google Play / App Store send `X-Client-Channel: store`.
+// Store policies require their own billing for digital goods, so external
+// gateways (VietQR/payOS, MoMo) are never offered to those builds.
+const isStoreBuild = (request: Request) => request.get('x-client-channel')?.trim().toLowerCase() === 'store'
+
 export const createBillingRouter = (billing: BillingService) => {
   const router = Router()
-  router.get('/providers', (_request, response) => { response.json({ providers: billing.providers() }) })
+  router.get('/providers', (request, response) => { response.json({ providers: isStoreBuild(request) ? [] : billing.providers() }) })
   router.get('/ledger.xlsx', async (request, response, next) => {
     try {
       const workbook = await billing.exportLedger(request.authUser)
@@ -32,6 +37,10 @@ export const createBillingRouter = (billing: BillingService) => {
   })
   router.post('/checkout', async (request, response, next) => {
     try {
+      if (isStoreBuild(request)) {
+        response.status(403).json({ message: 'Bản ứng dụng trên cửa hàng chưa hỗ trợ mua gói.', code: 'store_billing_required' })
+        return
+      }
       response.status(201).json(await billing.createCheckout(request.authUser, request.body))
     } catch (error) { next(error) }
   })

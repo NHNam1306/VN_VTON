@@ -128,6 +128,15 @@ export class AuthStore {
     this.database.prepare('DELETE FROM auth_sessions WHERE expires_at <= ?').run(new Date().toISOString())
   }
 
+  deleteUser(id: string): void {
+    this.database.transaction(() => {
+      this.database.prepare('DELETE FROM auth_sessions WHERE user_id = ?').run(id)
+      const hasPayments = this.database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='payment_orders'").get()
+      if (hasPayments) this.database.prepare('DELETE FROM payment_orders WHERE user_id = ?').run(id)
+      this.database.prepare('DELETE FROM users WHERE id = ?').run(id)
+    })()
+  }
+
   claimLegacyData(userId: string): void {
     const tables = ['garments', 'person_image', 'try_on_images', 'saved_outfits']
     const transaction = this.database.transaction(() => {

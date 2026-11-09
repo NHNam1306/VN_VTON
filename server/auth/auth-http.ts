@@ -74,6 +74,8 @@ export const createRequireAuth = (auth: AuthBackend, secureCookies = false, sess
   next: NextFunction,
 ) => {
   try {
+    // Already authenticated by an earlier middleware on the same request.
+    if (request.authUser) { next(); return }
     const user = await resolveUser(auth, request, response, { secure: secureCookies, sessionDays }, decorate)
     if (!user) {
       response.status(401).json({ message: 'Vui lòng đăng nhập để tiếp tục.', code: 'authentication_required' })
@@ -92,6 +94,7 @@ export function createAuthRouter(
   sessionDays = 30,
   decorate?: UserDecorator,
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
+  deleteAccountData?: (user: PublicUser, token: string | null) => Promise<void>,
 ) {
   const router = Router()
   const cookieOptions = { secure: secureCookies, sessionDays }
@@ -270,6 +273,25 @@ export function createAuthRouter(
       const token = readAccessToken(request)
       const updated = await auth.changeEmail(user.id, { newEmail, password }, token)
       response.json({ user: decorate ? await decorate(updated) : updated, message: 'Đổi email thành công.' })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.delete('/account', async (request, response, next) => {
+    try {
+      const user = await resolveUser(auth, request, response, cookieOptions, decorate)
+      if (!user) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+      if (request.body?.confirmation !== 'DELETE') {
+        throw new AuthError(400, 'Vui lòng xác nhận xóa tài khoản.')
+      }
+      if (!auth.deleteAccount) throw new AuthError(501, 'Xóa tài khoản chưa được hỗ trợ.')
+      const token = readAccessToken(request)
+      if (deleteAccountData) await deleteAccountData(user, token)
+      else await auth.deleteAccount(user.id, token)
+      response.clearCookie(SESSION_COOKIE, { httpOnly: true, sameSite: 'lax', secure: secureCookies, path: '/' })
+      response.clearCookie(REFRESH_COOKIE, { httpOnly: true, sameSite: 'lax', secure: secureCookies, path: '/' })
+      response.status(204).end()
     } catch (error) {
       next(error)
     }

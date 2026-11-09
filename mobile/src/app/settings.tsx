@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { type ComponentProps, type ReactNode, useState } from 'react';
-import { Pressable, ScrollView, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
@@ -113,6 +113,18 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
       setPasswordFeedback({ tone: 'success', text: 'Đổi mật khẩu thành công.' });
     },
     onError: (error) => setPasswordFeedback({ tone: 'error', text: errorMessage(error, 'Không thể đổi mật khẩu.') }),
+  });
+
+  const deleteAccount = useMutation({
+    mutationFn: () => apiRequest('/api/auth/account', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirmation: 'DELETE' }),
+    }),
+    onSuccess: async () => {
+      await supabase.auth.signOut({ scope: 'local' });
+    },
+    onError: (error) => setAccountFeedback({ tone: 'error', text: errorMessage(error, 'Không thể xóa tài khoản.') }),
   });
 
   const savePrivacy = useMutation({
@@ -251,6 +263,23 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
               </Pressable>
             </View>
           ))}
+      </SettingsCard>
+
+      <SettingsCard title="Xóa tài khoản">
+        <AppText variant="subhead">Xóa hồ sơ, ảnh, tủ đồ, outfit và nội dung đã đăng. Hành động này không thể hoàn tác.</AppText>
+        <AppButton
+          title="Xóa vĩnh viễn tài khoản"
+          variant="destructive"
+          loading={deleteAccount.isPending}
+          onPress={() => Alert.alert(
+            'Xóa vĩnh viễn tài khoản?',
+            'Dữ liệu cá nhân và nội dung đã đăng sẽ bị xóa. Giao dịch bắt buộc lưu sẽ được ẩn danh.',
+            [
+              { text: 'Hủy', style: 'cancel' },
+              { text: 'Xóa tài khoản', style: 'destructive', onPress: () => deleteAccount.mutate() },
+            ],
+          )}
+        />
       </SettingsCard>
     </ScrollView>
   );

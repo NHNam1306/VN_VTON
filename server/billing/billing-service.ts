@@ -87,7 +87,6 @@ export class BillingService {
       await this.activate(order, String(data.reference ?? data.paymentLinkId ?? providerOrderId))
     } else {
       await this.repository.setStatus('payos', providerOrderId, 'failed')
-      await this.syncLedgerSafely()
     }
   }
 
@@ -103,7 +102,6 @@ export class BillingService {
       await this.activate(order, String(payload.transId ?? providerOrderId))
     } else if (resultCode !== 9000) {
       await this.repository.setStatus('momo', providerOrderId, 'failed')
-      await this.syncLedgerSafely()
     }
   }
 
@@ -111,15 +109,6 @@ export class BillingService {
 
   private async activate(order: PaymentOrder, transactionId: string) {
     const plan = SUBSCRIPTION_PLANS[order.planId]
-    const completed = await this.repository.complete(order.provider, order.providerOrderId, transactionId, plan.entitlements.imageCredits)
-    if (completed) await this.syncLedgerSafely()
-  }
-
-  private async syncLedgerSafely() {
-    try {
-      await this.ledger?.sync()
-    } catch (error) {
-      console.error('Không thể đồng bộ sổ giao dịch Excel:', error instanceof Error ? error.message : 'Lỗi không xác định')
-    }
+    await this.repository.complete(order.provider, order.providerOrderId, transactionId, plan.entitlements.imageCredits)
   }
 }

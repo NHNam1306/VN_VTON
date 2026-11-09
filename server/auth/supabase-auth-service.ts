@@ -17,6 +17,30 @@ const toPublicUser = (user: User): PublicUser => ({
   status: 'active',
 })
 
+const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | null => {
+  const id = typeof claims.sub === 'string' ? claims.sub : ''
+  const email = typeof claims.email === 'string' ? claims.email : ''
+  if (!id || !email) return null
+  const userMetadata = claims.user_metadata && typeof claims.user_metadata === 'object'
+    ? claims.user_metadata as Record<string, unknown>
+    : {}
+  const appMetadata = claims.app_metadata && typeof claims.app_metadata === 'object'
+    ? claims.app_metadata as Record<string, unknown>
+    : {}
+  const displayName = typeof userMetadata.display_name === 'string' && userMetadata.display_name.trim()
+    ? userMetadata.display_name.trim()
+    : email.split('@')[0] ?? 'Người dùng'
+  const roleValue = String(appMetadata.role ?? 'user')
+  return {
+    id,
+    email,
+    displayName,
+    createdAt: new Date((typeof claims.iat === 'number' ? claims.iat : Math.floor(Date.now() / 1000)) * 1000).toISOString(),
+    role: (['user', 'koc', 'moderator', 'admin'].includes(roleValue) ? roleValue : 'user') as UserRole,
+    status: 'active',
+  }
+}
+
 const validate = (email: string, displayName: string, password: string): void => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     throw new AuthError(400, 'Email không hợp lệ.')
@@ -31,15 +55,20 @@ const validate = (email: string, displayName: string, password: string): void =>
 
 export class SupabaseAuthService implements AuthBackend {
   private readonly client
+  private readonly adminClient
 
   constructor(
     private readonly url: string,
     private readonly publishableKey: string,
     private readonly appBaseUrl: string,
+    serviceRoleKey?: string,
   ) {
     if (!url || !publishableKey) throw new Error('Thiếu SUPABASE_URL hoặc SUPABASE_PUBLISHABLE_KEY.')
     if (!appBaseUrl) throw new Error('Thiếu APP_BASE_URL cho luồng khôi phục mật khẩu.')
     this.client = this.createAuthClient()
+    this.adminClient = serviceRoleKey
+      ? createClient(this.url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
+      : null
   }
 
   private createAuthClient() {
@@ -61,7 +90,6 @@ export class SupabaseAuthService implements AuthBackend {
       },
     })
     if (error) {
-      const duplicate = /already|registered|exists/i.test(error.message)
       const mailFailure = /confirmation email|sending email|smtp/i.test(error.message)
       console.error('[auth.signup] Supabase rejected signup', {
         code: error.code,
@@ -69,10 +97,10 @@ export class SupabaseAuthService implements AuthBackend {
         message: error.message,
       })
       throw new AuthError(
-        duplicate ? 409 : (mailFailure ? 502 : 400),
-        duplicate
-          ? 'Email này đã được sử dụng.'
-          : (mailFailure ? 'Tài khoản chưa thể gửi email xác minh. Vui lòng thử lại sau.' : error.message),
+        mailFailure ? 502 : 400,
+        mailFailure
+          ? 'Tài khoản chưa thể gửi email xác minh. Vui lòng thử lại sau.'
+          : 'Chưa thể tạo tài khoản. Hãy kiểm tra thông tin hoặc đăng nhập nếu bạn đã có tài khoản.',
       )
     }
     if (!data.user || !data.session) {
@@ -165,8 +193,10 @@ export class SupabaseAuthService implements AuthBackend {
 
   async authenticate(token: string | null): Promise<PublicUser | null> {
     if (!token) return null
-    const { data, error } = await this.client.auth.getUser(token)
-    return error || !data.user ? null : toPublicUser(data.user)
+    // getClaims verifies signature/issuer/expiry and caches Supabase JWKS locally for
+    // asymmetric projects, avoiding a remote Auth request for every API/image request.
+    const { data, error } = await this.client.auth.getClaims(token)
+    return error || !data?.claims ? null : toPublicUserFromClaims(data.claims)
   }
 
   async refresh(refreshToken: string | null): Promise<AuthResult | null> {
@@ -231,6 +261,15 @@ export class SupabaseAuthService implements AuthBackend {
     if (error) {
       throw new AuthError(400, error.message || 'Không thể đổi mật khẩu.')
     }
+  }
+
+  async deleteAccount(userId: string, token?: string | null): Promise<void> {
+    if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
+    const verified = await this.authenticate(token)
+    if (!verified || verified.id !== userId) throw new AuthError(401, 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.')
+    if (!this.adminClient) throw new AuthError(503, 'Chức năng xóa tài khoản chưa được cấu hình trên máy chủ.')
+    const { error } = await this.adminClient.auth.admin.deleteUser(userId)
+    if (error) throw new AuthError(502, 'Chưa thể xóa tài khoản. Vui lòng thử lại sau.')
   }
 
   private fromSession(

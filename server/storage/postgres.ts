@@ -40,3 +40,22 @@ export const createPostgresPool = (connectionString: string): PostgresPool => {
     connectionTimeoutMillis: 10_000,
   })
 }
+
+/**
+ * Runs `fn` inside a single transaction on one pooled connection.
+ * Rolls back on any error and always releases the connection.
+ */
+export const withTransaction = async <T>(pool: PostgresPool, fn: (client: pg.PoolClient) => Promise<T>): Promise<T> => {
+  const client = await pool.connect()
+  try {
+    await client.query('BEGIN')
+    const result = await fn(client)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined)
+    throw error
+  } finally {
+    client.release()
+  }
+}

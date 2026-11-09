@@ -139,8 +139,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
         },
       });
       if (error) {
-        if (/already registered/i.test(error.message)) throw new Error('Email này đã được đăng ký.');
-        throw new Error('Chưa thể tạo tài khoản. Vui lòng thử lại.');
+        throw new Error('Chưa thể tạo tài khoản. Hãy kiểm tra thông tin hoặc đăng nhập nếu bạn đã có tài khoản.');
       }
       return data.session ? 'signed-in' : 'confirmation-required';
     },

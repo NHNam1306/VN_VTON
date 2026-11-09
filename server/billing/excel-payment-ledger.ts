@@ -1,5 +1,3 @@
-import { mkdir } from 'node:fs/promises'
-import path from 'node:path'
 import ExcelJS from 'exceljs'
 import { SUBSCRIPTION_PLANS } from '../plans/catalog.js'
 import type { BillingRepository } from './billing-repository.js'
@@ -16,22 +14,7 @@ const safeText = (value: string) => /^[=+\-@]/.test(value) ? `'${value}` : value
 const asDate = (value: string | null) => value ? new Date(value) : null
 
 export class ExcelPaymentLedger {
-  private writeQueue: Promise<void> = Promise.resolve()
-
-  constructor(
-    private readonly repository: BillingRepository,
-    private readonly filePath: string,
-  ) {}
-
-  sync(): Promise<void> {
-    const next = this.writeQueue.then(async () => {
-      const workbook = await this.buildWorkbook()
-      await mkdir(path.dirname(this.filePath), { recursive: true })
-      await workbook.xlsx.writeFile(this.filePath)
-    })
-    this.writeQueue = next.catch(() => undefined)
-    return next
-  }
+  constructor(private readonly repository: BillingRepository) {}
 
   async toBuffer(): Promise<Buffer> {
     const workbook = await this.buildWorkbook()
@@ -112,7 +95,7 @@ export class ExcelPaymentLedger {
     for (const order of orders) {
       sheet.addRow({
         id: safeText(order.id),
-        userId: safeText(order.userId),
+        userId: safeText(order.userId ?? ''),
         customerName: safeText(order.customerName),
         customerEmail: safeText(order.customerEmail),
         plan: SUBSCRIPTION_PLANS[order.planId].name,

@@ -17,8 +17,19 @@ export const runtimeConfig = {
   trustProxyHops: optionalPositiveInteger(process.env.TRUST_PROXY_HOPS),
   aiRequestsPerWindow: positiveInteger(process.env.AI_REQUESTS_PER_15_MIN, 10),
   aiRequestWindowMs: 15 * 60 * 1000,
+  // Total AI requests (extract + generation) allowed per rolling day across all users; unset disables.
+  aiDailyRequestLimit: optionalPositiveInteger(process.env.AI_DAILY_REQUEST_LIMIT),
   apiRequestsPerMinute: positiveInteger(process.env.API_REQUESTS_PER_MINUTE, 600),
   apiBurst: positiveInteger(process.env.API_RATE_LIMIT_BURST, 120),
+  // Shared ceiling per IP across all sessions; defaults to 4x the per-session limit.
+  apiIpRequestsPerMinute: positiveInteger(
+    process.env.API_IP_REQUESTS_PER_MINUTE,
+    positiveInteger(process.env.API_REQUESTS_PER_MINUTE, 600) * 4,
+  ),
+  apiIpBurst: positiveInteger(
+    process.env.API_IP_RATE_LIMIT_BURST,
+    positiveInteger(process.env.API_RATE_LIMIT_BURST, 120) * 4,
+  ),
   authLoginAccountPerWindow: positiveInteger(process.env.AUTH_LOGIN_ACCOUNT_PER_15_MIN, 10),
   authLoginIpPerWindow: positiveInteger(process.env.AUTH_LOGIN_IP_PER_15_MIN, 60),
   authRegisterIpPerHour: positiveInteger(process.env.AUTH_REGISTER_IP_PER_HOUR, 20),

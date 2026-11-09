@@ -12,8 +12,10 @@ import type { ImageProvider } from './providers/image-provider.js'
 import { ImageProviderError } from './providers/image-provider-error.js'
 import type { AuthBackend } from './auth/auth-backend.js'
 import { AuthError } from './auth/auth-service.js'
-import { createAuthRouter, createRequireAuth } from './auth/auth-http.js'
+import { createAuthRouter, createRequireAuth, SESSION_COOKIE } from './auth/auth-http.js'
 import { GarmentExtractorService } from './services/garment-extractor.js'
+import { AiQueueBusyError } from './services/ai-concurrency.js'
+import { ImmediateStorageCleanup, type StorageCleanup } from './storage/storage-cleanup.js'
 import type { SocialService } from './social/social-service.js'
 import { createSocialRouter } from './social/router.js'
 import { runtimeConfig } from './config/runtime-config.js'
@@ -21,6 +23,7 @@ import { requireMutationHeader, setSecurityHeaders } from './http/security.js'
 import type { AdminService } from './admin/admin-service.js'
 import { createAdminRouter } from './admin/router.js'
 import {
+  createFixedWindowRateLimit,
   createTokenBucketRateLimit,
   MemoryRateLimitStore,
   type RateLimitStore,
@@ -49,7 +52,9 @@ export function createApp(
   planService?: PlanService,
   billingService?: BillingService,
   readinessCheck?: () => Promise<void>,
+  storageCleanup?: StorageCleanup,
 ) {
+  const cleanup = storageCleanup ?? new ImmediateStorageCleanup(images)
   const app = express()
   const signedImageTtlSeconds = Math.min(3_600, Math.max(60, Number(process.env.R2_SIGNED_READ_TTL_SECONDS ?? 300) || 300))
   const ownImageKeyRequests = new Map<string, Promise<Set<string>>>()
@@ -72,9 +77,28 @@ export function createApp(
     })
     next()
   })
+  // The per-session bucket below runs before authentication, so its key is an
+  // unverified credential. This IP ceiling always applies and stops a client
+  // from minting fresh buckets by rotating fake tokens, while still leaving
+  // headroom for many real users behind one carrier-grade NAT address.
+  app.use('/api', createTokenBucketRateLimit({
+    requestsPerMinute: runtimeConfig.apiIpRequestsPerMinute,
+    burst: runtimeConfig.apiIpBurst,
+    key: (request) => `ip-ceiling:${request.ip ?? request.socket.remoteAddress ?? 'unknown'}`,
+    skip: (request) => request.path === '/health',
+  }))
   app.use('/api', createTokenBucketRateLimit({
     requestsPerMinute: runtimeConfig.apiRequestsPerMinute,
     burst: runtimeConfig.apiBurst,
+    // Authenticated mobile/web users get an isolated bucket even when many of
+    // them share one carrier-grade NAT address. The limiter hashes this value.
+    key: (request) => {
+      const bearer = request.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1]
+      if (bearer) return `session:${bearer}`
+      const sessionCookie = request.headers.cookie?.split(';').map(part => part.trim()).find(part => part.startsWith(`${SESSION_COOKIE}=`))
+      if (sessionCookie) return `session:${sessionCookie.slice(SESSION_COOKIE.length + 1)}`
+      return `ip:${request.ip ?? request.socket.remoteAddress ?? 'unknown'}`
+    },
     skip: (request) => request.path === '/health',
   }))
   app.use(express.json({ limit: '32kb' }))
@@ -99,7 +123,39 @@ export function createApp(
     }
   })
   const decorateUser = admin ? (user: Parameters<AdminService['resolveAuthenticatedUser']>[0]) => admin.resolveAuthenticatedUser(user) : undefined
-  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits))
+  const deleteAccountData = async (user: Express.Request['authUser'], token: string | null) => {
+    if (!authService.deleteAccount) throw new AuthError(501, 'Xóa tài khoản chưa được hỗ trợ.')
+    // Collect every image key before the account row is removed: the database
+    // cascades away the rows that reference them.
+    const [garments, person, results, outfits, socialKeys] = await Promise.all([
+      repository.list(user.id),
+      userDataRepository.getPersonImage(user.id),
+      userDataRepository.listTryOnResults(user.id),
+      userDataRepository.listSavedOutfits(user.id),
+      social ? social.listUserImageKeys(user.id) : Promise.resolve([] as string[]),
+    ])
+    const imageKeys = new Set<string>([
+      ...garments.flatMap(item => [item.frontOriginalKey, item.frontProcessedKey, item.backOriginalKey, item.backProcessedKey]),
+      person?.imageKey,
+      ...results.map(item => item.imageKey),
+      ...outfits.flatMap(item => [item.frontImageKey, item.backImageKey]),
+      ...socialKeys,
+    ].filter((key): key is string => Boolean(key)))
+
+    await authService.deleteAccount(user.id, token)
+
+    try {
+      // PostgreSQL cascades these from auth.users; SQLite needs explicit cleanup.
+      await social?.deleteUserData(user.id)
+      await Promise.all(garments.map(item => repository.delete(user.id, item.id)))
+      await userDataRepository.clearAllUserData(user.id)
+    } catch (error) {
+      console.error('[account.delete] Database cleanup needs retry:', error instanceof Error ? error.message : 'Unknown error')
+    }
+    // Durable in production: failed object deletions are retried in the background.
+    await cleanup.enqueue(imageKeys, 'account_deleted')
+  }
+  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits, deleteAccountData))
   const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser)
 
   const getOwnImageKeys = (userId: string) => {
@@ -128,6 +184,27 @@ export function createApp(
     return request
   }
 
+  // Positive access decisions are cached briefly: a page full of thumbnails would
+  // otherwise re-check the same keys on every render. Browsers already cache the
+  // signed redirect for longer than this, so revocation latency is unchanged.
+  const imageAccessCache = new Map<string, number>()
+  const IMAGE_ACCESS_TTL_MS = 30_000
+  const canReadImage = async (userId: string, key: string): Promise<boolean> => {
+    const cacheKey = `${userId}\u0000${key}`
+    const cachedUntil = imageAccessCache.get(cacheKey)
+    if (cachedUntil && cachedUntil > Date.now()) return true
+    // The social store checks the user's own images too, with indexed queries in
+    // PostgreSQL, so the full per-user key list is only needed without it.
+    const allowed = social
+      ? await social.canReadImage(userId, key)
+      : (await getOwnImageKeys(userId)).has(key)
+    if (allowed) {
+      if (imageAccessCache.size >= 50_000) imageAccessCache.delete(imageAccessCache.keys().next().value as string)
+      imageAccessCache.set(cacheKey, Date.now() + IMAGE_ACCESS_TTL_MS)
+    }
+    return allowed
+  }
+
   app.get('/uploads/:key', requireAuth, async (request, response, next) => {
     try {
       const rawKey = request.params.key
@@ -136,11 +213,7 @@ export function createApp(
         return
       }
       const key = decodeURIComponent(rawKey)
-      const isOwnImage = (await getOwnImageKeys(request.authUser.id)).has(key)
-      const canReadSharedImage = !isOwnImage && social
-        ? await social.canReadImage(request.authUser.id, key)
-        : false
-      if (!isOwnImage && !canReadSharedImage) {
+      if (!(await canReadImage(request.authUser.id, key))) {
         response.status(404).end()
         return
       }
@@ -176,10 +249,24 @@ export function createApp(
     }
   })
   if (social) app.use('/api/social', requireAuth, createSocialRouter(social, images))
-  if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin))
+  if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin, social))
   if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService))
   app.use('/api/plans', requireAuth, createPlanRouter(plans))
-  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans, sharedRateLimits))
+  // Global circuit breaker for paid AI calls, shared across instances through the
+  // rate-limit store. Disabled unless AI_DAILY_REQUEST_LIMIT is set.
+  if (runtimeConfig.aiDailyRequestLimit) {
+    const aiDailyBudget = createFixedWindowRateLimit({
+      max: runtimeConfig.aiDailyRequestLimit,
+      windowMs: 24 * 60 * 60 * 1000,
+      namespace: 'ai.global.daily',
+      store: sharedRateLimits,
+      key: () => 'all',
+      message: 'Hệ thống đã đạt giới hạn tạo ảnh trong ngày. Vui lòng thử lại sau.',
+    })
+    app.post('/api/garments/ai-extract', requireAuth, aiDailyBudget)
+    app.post('/api/generations/angles/:angle', requireAuth, aiDailyBudget)
+  }
+  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans, sharedRateLimits, credits))
   app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
   app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, credits, sharedRateLimits, plans))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())
@@ -202,6 +289,10 @@ export function createApp(
         message: error.publicMessage,
         code: error.code,
       })
+      return
+    }
+    if (error instanceof AiQueueBusyError) {
+      response.status(503).json({ message: error.message, code: 'ai_queue_busy' })
       return
     }
     if (error instanceof AuthError) {

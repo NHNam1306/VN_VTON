@@ -11,7 +11,7 @@ type Group = { id: string; ownerId: string; name: string; members: string[] }
 type Poll = { id: string; ownerId: string; title: string; outfitIds: string[]; imageOptions?: { id: string; imageUrl: string }[]; visibility?: SocialVisibility; groupIds?: string[]; recipients: string[]; votes: Record<string, string>; createdAt: number; expiresAt: number; closed: boolean; winnerId: string | null; notified: boolean }
 type Post = { id: string; ownerId: string; caption: string; imageUrls: string[]; visibility: SocialVisibility; groupIds: string[]; createdAt: number }
 type Notice = { id: string; userId: string; actor: string; kind: 'request' | 'poll' | 'result'; targetId: string; read: boolean; createdAt: number }
-type State = { profiles: Profile[]; friends: [string, string][]; requests: RequestRow[]; groups: Group[]; polls: Poll[]; posts: Post[]; follows: [string, string][]; blocks: [string, string][]; reports: { id: string; from: string; target: string; reason: string; createdAt: number }[]; notices: Notice[]; policies: (OutfitPolicy & { ownerId: string })[]; temporaryImages: { key: string; ownerId: string }[] }
+type State = { profiles: Profile[]; friends: [string, string][]; requests: RequestRow[]; groups: Group[]; polls: Poll[]; posts: Post[]; follows: [string, string][]; blocks: [string, string][]; reports: { id: string; from: string; target: string; reason: string; createdAt: number }[]; notices: Notice[]; policies: (OutfitPolicy & { ownerId: string })[]; temporaryImages: { key: string; ownerId: string; createdAt?: number }[] }
 const fresh = (): State => ({ profiles: [], friends: [], requests: [], groups: [], polls: [], posts: [], follows: [], blocks: [], reports: [], notices: [], policies: [], temporaryImages: [] })
 const fail = (message: string, code = 400): never => { throw new AuthError(code, message) }
 const str = (v: unknown, max = 120): string => typeof v === 'string' && v.trim().length <= max ? v.trim() : fail('Dữ liệu văn bản không hợp lệ.')
@@ -35,6 +35,10 @@ export class SocialStore {
     const state = JSON.parse((this.db.prepare('SELECT data FROM social_state WHERE id = 1').get() as { data: string }).data) as State
     state.posts ??= []
     state.follows ??= []
+    const now = Date.now()
+    state.temporaryImages = (state.temporaryImages ?? [])
+      .map(image => ({ ...image, createdAt: image.createdAt ?? now }))
+      .filter(image => image.createdAt >= now - 24 * 60 * 60 * 1000)
     return state
   }
   private write(s: State) { this.db.prepare('UPDATE social_state SET data = ? WHERE id = 1').run(JSON.stringify(s)) }
@@ -164,7 +168,37 @@ export class SocialStore {
     if (user !== target && !this.friend(s,user,target)) return fail('Hồ sơ không khả dụng.',404)
     return { person:this.person(s,target), outfits:this.outfits.listSavedOutfits(target).filter(o => this.canViewOutfit(s,user,target,o.id)).map(o => ({ id:o.id,frontImageUrl:o.frontImageUrl,backImageUrl:o.backImageUrl,official:s.policies.some(p => p.outfitId === o.id && p.official) })) }
   }
-  trackTemporaryImage(user: string, key: string) { this.change(s => { s.temporaryImages.push({ownerId:user,key}) }) }
+  trackTemporaryImage(user: string, key: string) { this.change(s => { s.temporaryImages=s.temporaryImages.filter(item=>item.key!==key);s.temporaryImages.push({ownerId:user,key,createdAt:Date.now()}) }) }
+  private userImageKeys(s: State, user: string): string[] {
+    const keys = new Set<string>()
+    const addUrl = (url: string) => { const key = imageKeyFromUrl(url); if (key) keys.add(key) }
+    const profile = s.profiles.find(item => item.id === user)
+    if (profile?.avatar) addUrl(profile.avatar)
+    for (const image of s.temporaryImages) if (image.ownerId === user) keys.add(image.key)
+    for (const post of s.posts) if (post.ownerId === user) post.imageUrls.forEach(addUrl)
+    for (const poll of s.polls) if (poll.ownerId === user) poll.imageOptions?.forEach(option => addUrl(option.imageUrl))
+    return [...keys]
+  }
+  listUserImageKeys(user: string): string[] { return this.userImageKeys(this.load(), user) }
+  deleteUserData(user: string): string[] {
+    return this.change(s => {
+      const keys = this.userImageKeys(s, user)
+      const live = new Set(this.users().map(item => item.id).filter(id => id !== user))
+      this.removeDeletedUsers(s, live)
+      return keys
+    })
+  }
+  moderationReports() {
+    const state=this.load()
+    const users=this.users()
+    return [...state.reports].sort((a,b)=>b.createdAt-a.createdAt).map(report=>({
+      ...report,
+      fromName:users.find(user=>user.id===report.from)?.name,
+      targetName:users.find(user=>user.id===report.target)?.name,
+    }))
+  }
+  hideUserPosts(user: string): number { return this.change(s => { const before = s.posts.length; s.posts = s.posts.filter(post => post.ownerId !== user); return before - s.posts.length }) }
+  resolveModerationReport(reportId: string) { return this.change(s=>{const before=s.reports.length;s.reports=s.reports.filter(report=>report.id!==reportId);return s.reports.length<before}) }
   canReadImage(user: string, key: string): boolean {
     const s = this.load()
     if (s.profiles.some(profile => imageKeyFromUrl(profile.avatar) === key)) return true

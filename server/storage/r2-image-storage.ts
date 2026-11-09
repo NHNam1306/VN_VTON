@@ -21,7 +21,9 @@ export type R2ImageStorageOptions = {
 export class R2ImageStorage implements ImageStorage {
   private readonly client: S3Client
   private readonly prefix: string
-  private directReadReady = false
+  // Signed redirects work for normal <img> traffic without bucket CORS.
+  // Browser-side pixel processing explicitly requests the same-origin proxy.
+  private directReadReady = true
 
   constructor(private readonly options: R2ImageStorageOptions) {
     for (const [name, value] of Object.entries(options)) {

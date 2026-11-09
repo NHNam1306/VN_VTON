@@ -13,6 +13,7 @@ type CheckoutProvider = 'payos' | 'momo';
 
 export default function PlansRoute() {
   const brand = useBrandColors();
+  const externalBilling = process.env.EXPO_PUBLIC_BILLING_MODE === 'external';
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
   const checkout = useMutation({
     mutationFn: ({ planId, provider }: { planId: Plan['id']; provider: CheckoutProvider }) => apiRequest<{ orderId: string; checkoutUrl: string }>('/api/billing/checkout', {
@@ -29,7 +30,7 @@ export default function PlansRoute() {
   return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, backgroundColor: colors.background }}>
     <View style={{ gap: spacing.xs }}>
       <AppText variant="title">Chọn gói phù hợp</AppText>
-      <AppText variant="subhead">Thanh toán qua VietQR hoặc MoMo. Gói được kích hoạt khi hệ thống nhận webhook thành công.</AppText>
+      <AppText variant="subhead">{externalBilling ? 'Thanh toán qua VietQR hoặc MoMo. Gói được kích hoạt khi hệ thống nhận webhook thành công.' : 'Xem quyền lợi và gói hiện đang sử dụng trên tài khoản của bạn.'}</AppText>
     </View>
     {plans.data.plans.map((plan) => {
       const current = plans.data.current.planId === plan.id && !plans.data.current.unlimited;
@@ -44,7 +45,7 @@ export default function PlansRoute() {
         <View style={{ gap: spacing.xs }}>
           {plan.highlights.map((highlight) => <AppText key={highlight} variant="subhead">✓ {highlight}</AppText>)}
         </View>
-        {plan.id !== 'free' && !current && <>
+        {externalBilling && plan.id !== 'free' && !current && <>
           <AppButton title="Thanh toán VietQR" loading={busy && checkout.variables?.provider === 'payos'} disabled={checkout.isPending} onPress={() => checkout.mutate({ planId: plan.id, provider: 'payos' })}/>
           <AppButton title="Thanh toán MoMo" variant="secondary" loading={busy && checkout.variables?.provider === 'momo'} disabled={checkout.isPending} onPress={() => checkout.mutate({ planId: plan.id, provider: 'momo' })}/>
         </>}

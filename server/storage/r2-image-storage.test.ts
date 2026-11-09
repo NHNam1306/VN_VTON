@@ -27,7 +27,7 @@ describe('R2ImageStorage signed reads', () => {
     expect(getSignedUrl.mock.calls[0]?.[2]).toEqual({ expiresIn:3_600 })
   })
 
-  it('enables direct reads only after the bucket CORS policy is ready', async () => {
+  it('keeps signed image redirects enabled independently of bucket CORS', async () => {
     const storage = new R2ImageStorage({
       accountId:'account',accessKeyId:'access',secretAccessKey:'secret',bucket:'bucket',prefix:'production',
     })
@@ -36,13 +36,13 @@ describe('R2ImageStorage signed reads', () => {
       .mockResolvedValueOnce({})
     ;(storage as unknown as { client:{ send:typeof send } }).client.send = send
 
-    expect(storage.isDirectReadReady()).toBe(false)
+    expect(storage.isDirectReadReady()).toBe(true)
     await storage.configureBrowserCors(['https://vn-vton.onrender.com'])
     expect(storage.isDirectReadReady()).toBe(true)
     expect(send).toHaveBeenCalledTimes(2)
   })
 
-  it('keeps direct reads disabled when CORS cannot be verified', async () => {
+  it('does not disable signed redirects when optional CORS setup fails', async () => {
     const storage = new R2ImageStorage({
       accountId:'account',accessKeyId:'access',secretAccessKey:'secret',bucket:'bucket',prefix:'production',
     })
@@ -50,6 +50,6 @@ describe('R2ImageStorage signed reads', () => {
     ;(storage as unknown as { client:{ send:typeof send } }).client.send = send
 
     await expect(storage.configureBrowserCors(['https://vn-vton.onrender.com'])).rejects.toThrow('forbidden')
-    expect(storage.isDirectReadReady()).toBe(false)
+    expect(storage.isDirectReadReady()).toBe(true)
   })
 })

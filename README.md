@@ -81,7 +81,7 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 
 ## Deploy production: Render + Supabase + Cloudflare R2
 
-1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql), [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql), [`004_image_credits.sql`](supabase/migrations/004_image_credits.sql), [`005_subscription_plans.sql`](supabase/migrations/005_subscription_plans.sql) và [`006_billing.sql`](supabase/migrations/006_billing.sql). Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
+1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql), [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql), [`004_image_credits.sql`](supabase/migrations/004_image_credits.sql), [`005_subscription_plans.sql`](supabase/migrations/005_subscription_plans.sql), [`006_billing.sql`](supabase/migrations/006_billing.sql), [`007_credit_ledger_and_performance.sql`](supabase/migrations/007_credit_ledger_and_performance.sql), [`008_account_deletion_retention.sql`](supabase/migrations/008_account_deletion_retention.sql) và [`009_social_normalized.sql`](supabase/migrations/009_social_normalized.sql). **Chạy migration trước khi deploy code tương ứng**: code mới ghi vào `credit_ledger` và các bảng social mới. Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
 2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode. Trong **Database Settings → SSL Configuration**, tải certificate, chuyển file sang Base64 và đặt vào `DATABASE_CA_CERT_BASE64` để Render xác minh TLS đầy đủ.
 3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
 4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:
@@ -109,7 +109,11 @@ Không đặt `PORT`; Render tự cấp. `APP_BASE_URL` cũng có thể bỏ qua
 
 Rate limiting dùng token bucket nhanh tại từng instance và PostgreSQL atomic cho auth/AI để scale nhiều replica. Cấu hình và hướng nâng lên Redis/Valkey nằm trong [`docs/rate-limiting.md`](docs/rate-limiting.md).
 
-Module social hiện được lưu trong một hàng `social_state` dạng JSONB và dùng `SELECT ... FOR UPDATE` cho mọi mutation. Cách này an toàn cho một Render instance/MVP; trước khi scale ngang nhiều instance hoặc có lượng người dùng lớn, nên chuẩn hoá thành các bảng quan hệ riêng.
+Module social dùng các bảng quan hệ có index (migration 009): mỗi request chỉ đọc vùng dữ liệu của người dùng liên quan, mỗi thao tác ghi chỉ khoá theo user (`pg_advisory_xact_lock`), nên người dùng không xếp hàng chờ nhau. Migration 009 tự backfill từ `social_state` cũ và giữ nguyên bảng đó để rollback; xoá `social_state` sau khi xác nhận ổn định.
+
+Tác vụ nền chạy trong tiến trình web (an toàn khi nhiều instance vì dùng khoá hàng): gửi kết quả bình chọn hết hạn, dọn thông báo cũ, và hàng đợi `storage_cleanup_queue` xoá object R2 (ảnh tạm quá 24 giờ, ảnh của tài khoản đã xoá) có retry. Object còn được tham chiếu ở bất kỳ bảng nào sẽ không bị xoá.
+
+Biến môi trường vận hành bổ sung: `AI_DAILY_REQUEST_LIMIT` (trần tổng request AI/24 giờ cho cả hệ thống), `API_IP_REQUESTS_PER_MINUTE` / `API_IP_RATE_LIMIT_BURST` (trần theo IP cho mọi phiên). Khi tăng số người dùng, nên dùng Supabase **transaction pooler** (port `6543`) và tăng `DATABASE_POOL_MAX`; các khoá trong code đều là khoá theo transaction nên tương thích.
 
 Supabase Auth mặc định có thể yêu cầu xác minh email. Nếu bật xác minh, sau đăng ký người dùng phải mở email rồi đăng nhập; nếu tắt trong giai đoạn thử nghiệm, đăng ký sẽ tạo phiên ngay. Không dùng `service_role` key cho luồng này.
 

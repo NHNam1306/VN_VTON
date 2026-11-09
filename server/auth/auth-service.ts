@@ -117,6 +117,10 @@ export class AuthService {
     this.store.updatePassword(userId, newPasswordHash, newSalt)
   }
 
+  async deleteAccount(userId: string): Promise<void> {
+    this.store.deleteUser(userId)
+  }
+
   private validate(email: string, displayName: string, password: string): void {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
       throw new AuthError(400, 'Email không hợp lệ.')

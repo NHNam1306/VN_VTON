@@ -5,7 +5,7 @@ import type { CreatePaymentOrder, PaymentOrder, PaymentProvider, PaymentStatus }
 
 type Row = {
   id: string
-  user_id: string
+  user_id: string | null
   customer_email: string
   customer_name: string
   plan_id: PaymentOrder['planId']
@@ -92,15 +92,22 @@ export class PostgresBillingRepository implements BillingRepository {
         await client.query('ROLLBACK')
         return null
       }
-      if (row.status === 'paid') {
+      if (row.status !== 'pending') {
         await client.query('COMMIT')
+        return fromRow(row)
+      }
+      if (!row.user_id) {
+        await client.query('ROLLBACK')
         return fromRow(row)
       }
       const profile = await client.query<{ subscription_plan: string; subscription_expires_at: Date | string | null }>('SELECT subscription_plan,subscription_expires_at FROM profiles WHERE id=$1 FOR UPDATE', [row.user_id])
       const currentExpiry = profile.rows[0]?.subscription_expires_at ? new Date(profile.rows[0].subscription_expires_at) : null
-      const startsAt = profile.rows[0]?.subscription_plan === row.plan_id && currentExpiry && currentExpiry.getTime() > Date.now() ? currentExpiry : new Date()
+      const startsAt = currentExpiry && currentExpiry.getTime() > Date.now() ? currentExpiry : new Date()
       const expiresAt = new Date(startsAt.getTime() + 30 * 24 * 60 * 60 * 1000)
-      await client.query('UPDATE profiles SET subscription_plan=$2,credit_balance=$3,subscription_expires_at=$4 WHERE id=$1', [row.user_id, row.plan_id, imageCredits, expiresAt])
+      const granted = await client.query<{ credit_balance: number }>('UPDATE profiles SET subscription_plan=$2,credit_balance=least(1000000,credit_balance+$3),subscription_expires_at=$4 WHERE id=$1 RETURNING credit_balance', [row.user_id, row.plan_id, imageCredits, expiresAt])
+      const balanceAfter = granted.rows[0]?.credit_balance
+      if (balanceAfter === undefined) throw new Error('Không tìm thấy hồ sơ nhận quyền lợi thanh toán.')
+      await client.query("INSERT INTO credit_ledger(user_id,delta,balance_after,event_type,payment_order_id) VALUES($1,$2,$3,'subscription_granted',$4)", [row.user_id, imageCredits, balanceAfter, row.id])
       const updated = await client.query<Row>(
         "UPDATE payment_orders SET status='paid',provider_transaction_id=$3,paid_at=now(),access_expires_at=$4,updated_at=now() WHERE provider=$1 AND provider_order_id=$2 RETURNING " + columns,
         [provider, providerOrderId, transactionId, expiresAt],

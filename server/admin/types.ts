@@ -18,7 +18,7 @@ export type AdminAuditEntry = {
   id: string
   actorId: string
   actorEmail: string
-  action: 'user.role_changed' | 'user.status_changed' | 'user.credits_changed' | 'user.plan_changed'
+  action: 'user.role_changed' | 'user.status_changed' | 'user.credits_changed' | 'user.plan_changed' | 'user.posts_hidden' | 'report.resolved' | 'report.dismissed'
   targetId: string
   details: Record<string, string>
   createdAt: string

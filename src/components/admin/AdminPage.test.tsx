@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { adminApi } from '../../services/admin-api'
 import { AdminPage } from './AdminPage'
 
-vi.mock('../../services/admin-api',()=>({adminApi:{summary:vi.fn(),users:vi.fn(),audit:vi.fn(),updateUser:vi.fn()}}))
+vi.mock('../../services/admin-api',()=>({adminApi:{summary:vi.fn(),users:vi.fn(),audit:vi.fn(),updateUser:vi.fn(),moderationReports:vi.fn(),resolveModerationReport:vi.fn()}}))
 
 const admin={id:'admin',email:'owner@example.com',displayName:'Owner',createdAt:'2026-01-01T00:00:00.000Z',role:'admin' as const,status:'active' as const,creditBalance:10,subscriptionPlan:'free' as const}
 const member={id:'member',email:'member@example.com',displayName:'Member',createdAt:'2026-01-02T00:00:00.000Z',lastSeenAt:null,role:'user' as const,status:'active' as const,creditBalance:10,subscriptionPlan:'free' as const}
@@ -13,6 +13,7 @@ describe('AdminPage',()=>{
     vi.mocked(adminApi.summary).mockResolvedValue({users:2,activeUsers:2,suspendedUsers:0,kocUsers:0,moderators:0,admins:1})
     vi.mocked(adminApi.users).mockResolvedValue([{...admin,lastSeenAt:null},member])
     vi.mocked(adminApi.audit).mockResolvedValue([])
+    vi.mocked(adminApi.moderationReports).mockResolvedValue([])
     vi.mocked(adminApi.updateUser).mockResolvedValue({...member,role:'koc'})
   })
 
