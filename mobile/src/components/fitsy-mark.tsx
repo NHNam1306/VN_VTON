@@ -1,7 +1,8 @@
+import { Image } from 'expo-image';
 import { View } from 'react-native';
 
 import { AppText } from '@/components/app-text';
-import { radius, shadows, useBrandColors } from '@/theme';
+import { shadows, useBrandColors } from '@/theme';
 
 /** Chữ "Fitsy" kèm dấu lấp lánh, dùng cho header và màn đăng nhập. */
 export function FitsyWordmark({ size = 30 }: { size?: number }) {
@@ -12,11 +13,9 @@ export function FitsyWordmark({ size = 30 }: { size?: number }) {
   </View>;
 }
 
-/** Ô vuông logo (avatar mặc định, màn đăng nhập). */
+/** Ô vuông logo (avatar mặc định, màn đăng nhập) — dùng chính icon app. */
 export function FitsyMark({ size = 58 }: { size?: number }) {
-  const brand = useBrandColors();
-  return <View accessibilityRole="image" accessibilityLabel="Fitsy" style={{ width: size, height: size, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: brand.primary, alignItems: 'center', justifyContent: 'center', boxShadow: shadows.raised }}>
-    <AppText selectable={false} style={{ fontSize: size * 0.48, fontWeight: '800', color: '#FFFFFF' }}>F</AppText>
-    <AppText selectable={false} style={{ position: 'absolute', top: size * 0.14, right: size * 0.16, fontSize: size * 0.2, fontWeight: '800', color: brand.sparkle }}>✦</AppText>
+  return <View accessibilityRole="image" accessibilityLabel="Fitsy" style={{ width: size, height: size, borderRadius: size * 0.28, borderCurve: 'continuous', overflow: 'hidden', boxShadow: shadows.raised }}>
+    <Image source={require('../../assets/images/icon.png')} contentFit="cover" style={{ width: size, height: size }} />
   </View>;
 }
