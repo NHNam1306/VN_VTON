@@ -10,7 +10,7 @@ import {
 
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
-import { TryohMark } from '@/components/tryoh-mark';
+import { FitsyMark, FitsyWordmark } from '@/components/fitsy-mark';
 import { useAuth } from '@/providers/auth-provider';
 import { colors, radius, shadows, spacing } from '@/theme';
 
@@ -187,9 +187,9 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
         }}>
         <View style={{ width: '100%', maxWidth: 520, gap: spacing.lg }}>
           <View style={{ alignItems: 'center', gap: spacing.md }}>
-            <TryohMark size={64} />
+            <FitsyMark size={64} />
             <View style={{ alignItems: 'center', gap: spacing.xs }}>
-              <AppText variant="title">Tryoh</AppText>
+              <FitsyWordmark size={32} />
               <AppText variant="subhead" style={{ textAlign: 'center' }}>
                 Phòng thử đồ AI trong túi của bạn
               </AppText>

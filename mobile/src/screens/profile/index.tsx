@@ -7,7 +7,7 @@ import { ScrollView, View } from 'react-native';
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
-import { TryohMark } from '@/components/tryoh-mark';
+import { FitsyMark } from '@/components/fitsy-mark';
 import { useAuth } from '@/providers/auth-provider';
 import { apiRequest, protectedImageSource } from '@/services/api-client';
 import { imageUploadFile } from '@/services/image-upload';
@@ -46,7 +46,7 @@ export function ProfileScreen() {
     <View style={{ alignItems: 'center', gap: spacing.sm, padding: spacing.xl, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: colors.surface }}>
       {social.data.me.avatar
         ? <Image source={protectedImageSource(social.data.me.avatar, auth.session?.access_token)} style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.groupedBackground }} contentFit="cover"/>
-        : <TryohMark size={88}/>}
+        : <FitsyMark size={88}/>}
       <AppText variant="title">{name}</AppText>
       <AppText variant="subhead">@{social.data.me.username}</AppText>
       <AppText variant="caption">{auth.user?.email}</AppText>

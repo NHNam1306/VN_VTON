@@ -19,7 +19,7 @@ type AiExtractedGarment = {
   studioImageUrl: string;
 };
 
-type CatalogMode = 'garments' | 'outfits';
+export type CatalogMode = 'garments' | 'outfits';
 type CategoryFilter = 'all' | GarmentCategory;
 type OutfitFilter = 'all' | 'complete' | 'front-only';
 type CatalogEntry =
@@ -51,11 +51,13 @@ const outfitFilters: { value: OutfitFilter; label: string }[] = [
 
 const PAGE_SIZE = 40;
 
-export function WardrobeScreen() {
+/** `fixedMode` khoá màn ở một chế độ và ẩn công tắc Món đồ/Outfit (segment Tủ đồ, tab Yêu thích). */
+export function WardrobeScreen({ fixedMode }: { fixedMode?: CatalogMode } = {}) {
   const brand = useBrandColors();
   const queryClient = useQueryClient();
   const { width } = useWindowDimensions();
-  const [mode, setMode] = useState<CatalogMode>('garments');
+  const [selectedMode, setMode] = useState<CatalogMode>('garments');
+  const mode = fixedMode ?? selectedMode;
   const [category, setCategory] = useState<CategoryFilter>('all');
   const [outfitFilter, setOutfitFilter] = useState<OutfitFilter>('all');
   const [message, setMessage] = useState<string | null>(null);
@@ -180,6 +182,7 @@ export function WardrobeScreen() {
       numColumns={columns}
       keyExtractor={(entry) => entry.key}
       contentInsetAdjustmentBehavior="automatic"
+      style={{ backgroundColor: colors.background }}
       contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, flexGrow: 1 }}
       columnWrapperStyle={{ gap: spacing.md }}
       onEndReachedThreshold={0.45}
@@ -193,7 +196,7 @@ export function WardrobeScreen() {
         tintColor={brand.primary as string}
       />}
       ListHeaderComponent={<View style={{ gap: spacing.md, marginBottom: spacing.sm }}>
-        <View
+        {!fixedMode && <View
           accessibilityRole="tablist"
           style={{
             flexDirection: 'row',
@@ -236,7 +239,7 @@ export function WardrobeScreen() {
               </AppText>
             </Pressable>;
           })}
-        </View>
+        </View>}
 
         <View style={{ flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' }}>
           <AppText variant="headline">{mode === 'garments' ? 'Món đồ đã thêm' : 'Outfit đã lưu'}</AppText>

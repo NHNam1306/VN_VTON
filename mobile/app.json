@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Tryoh",
+    "name": "Fitsy",
     "slug": "nam-nguyen",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,7 +12,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#17211D",
+        "backgroundColor": "#141A3C",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -29,7 +29,7 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#17211D",
+          "backgroundColor": "#141A3C",
           "image": "./assets/images/icon.png",
           "imageWidth": 76
         }

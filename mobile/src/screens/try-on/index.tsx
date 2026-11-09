@@ -5,6 +5,7 @@ import { Alert, Pressable, ScrollView, View } from 'react-native';
 import { useMemo, useState } from 'react';
 
 import { AppButton } from '@/components/app-button';
+import { AppIcon } from '@/components/icon';
 import { AppText } from '@/components/app-text';
 import { PreviewableImage } from '@/components/previewable-image';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
@@ -17,7 +18,7 @@ import type { CreditStatus, Garment, PageResponse, PersonImage, PlanSnapshot, Tr
 type GenerationResponse = TryOnResult & { credits: CreditStatus };
 const GARMENT_PAGE_SIZE = 40;
 
-export function TryOnScreen() {
+export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } = {}) {
   const brand = useBrandColors();
   const queryClient = useQueryClient();
   const { session } = useAuth();
@@ -102,12 +103,102 @@ export function TryOnScreen() {
     });
   };
 
-  return <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.lg }}>
-    <View style={{ gap: spacing.sm }}><AppText variant="title">Ảnh của bạn</AppText><AppText variant="subhead">Chọn ảnh toàn thân, rõ người và đủ sáng.</AppText>
-      {person.data!.item ? <PreviewableImage uri={person.data!.item.imageUrl} title="Ảnh toàn thân" style={{ width: '100%', aspectRatio: 4 / 5, maxHeight: 520, borderRadius: radius.xl, backgroundColor: colors.groupedBackground }} contentFit="contain"/> : <View style={{ minHeight: 260, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, borderRadius: radius.xl, borderWidth: 1, borderStyle: 'dashed', borderColor: colors.separator, backgroundColor: colors.surface }}><AppText variant="headline">Chưa có ảnh toàn thân</AppText></View>}
+  const personItem = person.data!.item;
+  const selectedItems = selectedGarmentIds
+    .map((id) => garmentItems.find((item) => item.id === id))
+    .filter((item): item is Garment => Boolean(item));
+  const visibleSelected = selectedItems.slice(0, 3);
+  const hiddenCount = selectedItems.length - visibleSelected.length;
+  const preview = latestFront?.imageUrl ?? personItem?.imageUrl ?? null;
+  const canGenerate = !generate.isPending && Boolean(personItem) && selectedGarmentIds.length > 0;
+  const generateHint = !personItem
+    ? 'Thêm ảnh toàn thân để bắt đầu.'
+    : selectedGarmentIds.length === 0
+      ? 'Chọn món đồ bên dưới để phối.'
+      : null;
+
+  return <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ backgroundColor: colors.background }} contentContainerStyle={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.lg }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+      <View style={{ width: '36%', gap: spacing.sm }}>
+        {visibleSelected.length === 0
+          ? <Pressable accessibilityRole="button" accessibilityLabel="Chọn món đồ" onPress={onOpenWardrobe} style={({ pressed }) => ({ aspectRatio: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.xs, padding: spacing.sm, borderRadius: radius.lg, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.separator, backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 })}>
+              <AppIcon name="plus" size={22} color={brand.accent}/>
+              <AppText variant="caption" style={{ textAlign: 'center' }}>Chọn đồ bên dưới</AppText>
+            </Pressable>
+          : visibleSelected.map((item, index) => <View key={item.id} style={{ aspectRatio: 1, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: colors.surface, boxShadow: '0 2px 10px rgba(20, 26, 60, 0.06)' }}>
+              <Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ flex: 1, margin: spacing.sm }} contentFit="contain"/>
+              <CheckBadge/>
+              {index === visibleSelected.length - 1 && hiddenCount > 0 && <View style={{ position: 'absolute', bottom: 6, right: 6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radius.full, backgroundColor: brand.primary }}><AppText variant="caption" style={{ color: colors.onBrand, fontWeight: '700' }}>+{hiddenCount}</AppText></View>}
+            </View>)}
+      </View>
+      <AppIcon name="arrow" size={26} color={brand.primary}/>
+      <View style={{ flex: 1 }}>
+        {preview
+          ? <PreviewableImage uri={preview} title={latestFront ? 'Outfit mới nhất' : 'Ảnh toàn thân'} style={{ width: '100%', aspectRatio: 3 / 5, borderRadius: radius.xl, backgroundColor: colors.groupedBackground }} contentFit="cover" transition={250}/>
+          : <Pressable accessibilityRole="button" accessibilityLabel="Thêm ảnh toàn thân" onPress={() => upload.mutate()} disabled={upload.isPending} style={({ pressed }) => ({ width: '100%', aspectRatio: 3 / 5, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.xl, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.separator, backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 })}>
+              <AppIcon name="photo" size={32} color={brand.accent}/>
+              <AppText variant="headline" style={{ textAlign: 'center' }}>{upload.isPending ? 'Đang tải ảnh…' : 'Thêm ảnh toàn thân'}</AppText>
+              <AppText variant="caption" style={{ textAlign: 'center' }}>Ảnh rõ người, đủ sáng</AppText>
+            </Pressable>}
+      </View>
+    </View>
+
+    <View style={{ gap: spacing.sm }}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Tạo outfit ngay"
+        accessibilityState={{ disabled: !canGenerate, busy: generate.isPending && generate.variables === 'front' }}
+        disabled={!canGenerate}
+        onPress={() => generate.mutate('front')}
+        style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, minHeight: 58, borderRadius: radius.full, backgroundColor: brand.primary, opacity: !canGenerate ? 0.45 : pressed ? 0.8 : 1 })}>
+        {generate.isPending && generate.variables === 'front'
+          ? <AppText variant="headline" style={{ color: colors.onBrand }}>Đang tạo outfit…</AppText>
+          : <><AppIcon name="sparkles" size={22} color={colors.onBrand}/><AppText variant="headline" style={{ color: colors.onBrand, fontSize: 19 }}>Tạo outfit ngay</AppText></>}
+      </Pressable>
+      {generateHint && <AppText variant="caption" style={{ textAlign: 'center' }}>{generateHint}</AppText>}
+      {latestFront && <AppButton title="Thêm góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || selectedGarmentIds.length === 0} onPress={() => generate.mutate('back')}/>}
+    </View>
+
+    {mutationError && <View accessibilityRole="alert" style={{ gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.destructiveBackground }}><AppText variant="headline" style={{ color: colors.destructive }}>{mutationTitle}</AppText><AppText variant="subhead">{exhausted ? 'Hãy đăng ký thêm để tiếp tục tạo ảnh.' : mutationError instanceof Error ? mutationError.message : 'Dịch vụ chưa được hỗ trợ, vui lòng thử ảnh khác.'}</AppText></View>}
+    {notice && <AppText variant="subhead" style={{ textAlign: 'center', color: brand.accent, fontWeight: '600' }}>{notice}</AppText>}
+
+    <View style={{ gap: spacing.sm }}>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <AppText variant="headline">Chọn món đồ</AppText>
+        <AppText variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{selectedGarmentIds.length}/{maxSelected}</AppText>
+      </View>
+      {garmentItems.length === 0
+        ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm, borderRadius: radius.xl, backgroundColor: colors.surface }}>
+            <AppText variant="headline">Tủ đồ đang trống</AppText>
+            <AppText variant="subhead" style={{ textAlign: 'center' }}>Thêm món đầu tiên trong mục Tủ đồ.</AppText>
+            {onOpenWardrobe && <AppButton title="Mở Tủ đồ" variant="secondary" onPress={onOpenWardrobe}/>}
+          </View>
+        : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm, paddingVertical: 2 }}>
+            {garmentItems.map((item) => {
+              const active = selected.includes(item.id);
+              return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityLabel={item.name} accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 112, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderCurve: 'continuous', borderWidth: 2, borderColor: active ? brand.accent : 'transparent', backgroundColor: colors.surface, opacity: pressed ? 0.72 : 1 })}>
+                <Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 112, borderRadius: radius.md }} contentFit="contain"/>
+                <AppText variant="caption" numberOfLines={1} style={{ paddingHorizontal: 2, color: active ? brand.primary : colors.secondaryLabel, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>
+                {active && <CheckBadge/>}
+              </Pressable>;
+            })}
+            {garments.hasNextPage && <Pressable onPress={() => void garments.fetchNextPage()} disabled={garments.isFetchingNextPage} style={{ width: 112, alignItems: 'center', justifyContent: 'center', padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.surface }}><AppText variant="headline" style={{ textAlign: 'center', color: brand.accent }}>{garments.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}</AppText></Pressable>}
+          </ScrollView>}
+    </View>
+
+    <View style={{ gap: spacing.sm, padding: spacing.md, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: colors.surface }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+        {personItem
+          ? <PreviewableImage uri={personItem.imageUrl} title="Ảnh toàn thân" style={{ width: 56, height: 72, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="cover"/>
+          : <View style={{ width: 56, height: 72, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', backgroundColor: brand.secondary }}><AppIcon name="photo" size={24} color={brand.accent}/></View>}
+        <View style={{ flex: 1, gap: 2 }}>
+          <AppText variant="headline">Ảnh của bạn</AppText>
+          <AppText variant="caption">{personItem ? 'Dùng cho mọi lần thử đồ.' : 'Chọn ảnh toàn thân, rõ người và đủ sáng.'}</AppText>
+        </View>
+      </View>
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-        <AppButton title={person.data!.item ? 'Đổi ảnh' : 'Chọn ảnh toàn thân'} variant="secondary" loading={upload.isPending} onPress={() => upload.mutate()} style={{ flex: 1 }}/>
-        {person.data!.item && <AppButton title="Gỡ ảnh" variant="destructive" loading={deletePerson.isPending} onPress={() => Alert.alert(
+        <AppButton title={personItem ? 'Đổi ảnh' : 'Chọn ảnh toàn thân'} variant="secondary" loading={upload.isPending} onPress={() => upload.mutate()} style={{ flex: 1 }}/>
+        {personItem && <AppButton title="Gỡ ảnh" variant="destructive" loading={deletePerson.isPending} onPress={() => Alert.alert(
           'Gỡ ảnh đã tải lên?',
           'Chỉ ảnh toàn thân hiện tại bị gỡ. Các outfit đã tạo vẫn được giữ nguyên.',
           [
@@ -118,25 +209,21 @@ export function TryOnScreen() {
       </View>
     </View>
 
-    <View style={{ gap: spacing.sm }}><View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline' }}><AppText variant="headline">Chọn món đồ</AppText><AppText variant="caption">{selectedGarmentIds.length}/{maxSelected}</AppText></View>
-      {garmentItems.length === 0 ? <View style={{ paddingVertical: spacing.xl, alignItems: 'center', gap: spacing.sm }}><AppText variant="headline">Tủ đồ đang trống</AppText><AppText variant="subhead">Mở tab Tủ đồ để thêm món trước khi tạo ảnh.</AppText></View> : <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>{garmentItems.map((item) => { const active = selected.includes(item.id); return <Pressable key={item.id} accessibilityRole="checkbox" accessibilityState={{ checked: active }} onPress={() => toggle(item.id)} style={({ pressed }) => ({ width: 132, gap: spacing.xs, padding: spacing.xs, borderRadius: radius.lg, borderWidth: active ? 3 : 1, borderColor: active ? brand.primary : colors.separator, backgroundColor: active ? brand.secondary : colors.surface, opacity: pressed ? 0.72 : 1 })}><Image source={protectedImageSource(item.frontProcessedUrl, session?.access_token)} style={{ width: '100%', height: 150, borderRadius: radius.md, backgroundColor: colors.groupedBackground }} contentFit="contain"/><View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}><AppText variant="caption" numberOfLines={1} style={{ flex: 1, fontWeight: active ? '700' : '500' }}>{item.name}</AppText>{active && <AppText variant="headline" style={{ color: brand.primary }}>✓</AppText>}</View></Pressable>; })}{garments.hasNextPage && <Pressable onPress={() => void garments.fetchNextPage()} disabled={garments.isFetchingNextPage} style={{ width: 132, minHeight: 190, alignItems: 'center', justifyContent: 'center', padding: spacing.md, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.separator, backgroundColor: colors.surface }}><AppText variant="headline" style={{ textAlign: 'center', color: brand.primary }}>{garments.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}</AppText></Pressable>}</ScrollView>}
-    </View>
-
-    <View style={{ gap: spacing.sm }}>
-      <AppButton title="Tạo góc trước" loading={generate.isPending && generate.variables === 'front'} disabled={generate.isPending || !person.data!.item || selectedGarmentIds.length === 0} onPress={() => generate.mutate('front')}/>
-      <AppButton title="Tạo góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || !latestFront || selectedGarmentIds.length === 0} onPress={() => generate.mutate('back')}/>
-      <AppText variant="caption" style={{ textAlign: 'center' }}>Góc sau dùng kết quả góc trước làm tham chiếu để giữ trang phục nhất quán.</AppText>
-    </View>
-    {mutationError && <View accessibilityRole="alert" style={{ gap: spacing.sm, padding: spacing.md, borderRadius: radius.lg, backgroundColor: colors.destructiveBackground }}><AppText variant="headline" style={{ color: colors.destructive }}>{mutationTitle}</AppText><AppText variant="subhead">{exhausted ? 'Hãy đăng ký thêm để tiếp tục tạo ảnh.' : mutationError instanceof Error ? mutationError.message : 'Dịch vụ chưa được hỗ trợ, vui lòng thử ảnh khác.'}</AppText></View>}
-    {notice && <AppText variant="subhead" style={{ textAlign: 'center', color: brand.primary }}>{notice}</AppText>}
-    {latestFront && <View style={{ gap: spacing.sm }}>
+    {latestBack && latestFront && <View style={{ gap: spacing.sm }}>
       <AppText variant="headline">Kết quả mới nhất</AppText>
       <View style={{ flexDirection: 'row', gap: spacing.sm }}>
         <ResultImage label="Góc trước" result={latestFront}/>
-        {latestBack && <ResultImage label="Góc sau" result={latestBack}/>}
+        <ResultImage label="Góc sau" result={latestBack}/>
       </View>
     </View>}
   </ScrollView>;
+}
+
+function CheckBadge() {
+  const brand = useBrandColors();
+  return <View style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: brand.accent, borderWidth: 2, borderColor: colors.surface }}>
+    <AppIcon name="check" size={13} color={colors.onBrand}/>
+  </View>;
 }
 
 function ResultImage({ label, result }: { label: string; result: TryOnResult }) {

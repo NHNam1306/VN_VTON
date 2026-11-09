@@ -1,9 +1,9 @@
 export const colors = {
-  label: '#17211D',
-  secondaryLabel: '#66706A',
-  separator: '#DDE3DE',
-  background: '#F7F5EF',
-  groupedBackground: '#F1EFE8',
+  label: '#141A3C',
+  secondaryLabel: '#6B6F85',
+  separator: '#E7E4EE',
+  background: '#FBF8F6',
+  groupedBackground: '#F3F1F6',
   surface: '#FFFFFF',
   destructive: '#C93434',
   destructiveBackground: '#FFF0F0',
@@ -12,7 +12,13 @@ export const colors = {
   onBrand: '#FFFFFF',
 } as const;
 
-const brand = { primary: '#17211D', secondary: '#DCEAD8', accent: '#F6D25F' } as const;
+/** Fitsy: navy chủ đạo, tím nhấn, hồng cho dấu lấp lánh của logo. */
+const brand = {
+  primary: '#141A3C',
+  secondary: '#EFEAFF',
+  accent: '#6E4BF2',
+  sparkle: '#FF5A6E',
+} as const;
 
 export function useBrandColors() {
   return brand;

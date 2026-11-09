@@ -29,12 +29,12 @@ export function AppButton({
       disabled={disabled || loading}
       onPress={onPress}
       style={({ pressed }) => [{
-        minHeight: 50,
+        minHeight: 52,
         alignItems: 'center',
         justifyContent: 'center',
         paddingHorizontal: spacing.md,
         backgroundColor,
-        borderRadius: radius.lg,
+        borderRadius: radius.full,
         borderCurve: 'continuous',
         opacity: disabled ? 0.45 : pressed ? 0.72 : 1,
       }, style]}>
