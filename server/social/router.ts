@@ -3,7 +3,6 @@ import sharp from 'sharp'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { SocialService } from './social-service.js'
-import { AuthError } from '../auth/auth-service.js'
 
 const avatarUpload = createImageUpload(1).single('avatar')
 const postUpload = createImageUpload(3).array('images', 3)
@@ -19,20 +18,7 @@ export function createSocialRouter(store: SocialService, images: ImageStorage) {
   router.get('/search', async (req,res,next) => { try { res.json(await store.search(req.authUser.id, String(req.query.q ?? ''))) } catch (error) { next(error) } })
   router.get('/invite', async (req,res,next) => { try { res.json(await store.resolveInvite(req.authUser.id, String(req.query.code ?? ''))) } catch (error) { next(error) } })
   router.get('/profile/:id', async (req,res,next) => { try { res.json(await store.profile(req.authUser.id, String(req.params.id))) } catch (error) { next(error) } })
-  router.get('/moderation/reports', async (req,res,next) => {
-    try {
-      if (req.authUser.role !== 'admin' && req.authUser.role !== 'moderator') throw new AuthError(403, 'Bạn không có quyền xem báo cáo.')
-      res.json({ items: await store.moderationReports() })
-    } catch (error) { next(error) }
-  })
-  router.delete('/moderation/reports/:id', async (req,res,next) => {
-    try {
-      if (req.authUser.role !== 'admin' && req.authUser.role !== 'moderator') throw new AuthError(403, 'Bạn không có quyền xử lý báo cáo.')
-      const resolved = await store.resolveModerationReport(String(req.params.id))
-      if (!resolved) throw new AuthError(404, 'Báo cáo không còn tồn tại.')
-      res.status(204).end()
-    } catch (error) { next(error) }
-  })
+  // Moderation lives under /api/admin/moderation (admin router), where every action is audited.
   router.post('/avatar', avatarUpload, async (req,res,next) => {
     let savedKey: string | null = null
     try {

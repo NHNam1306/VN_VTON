@@ -12,7 +12,9 @@ npm start
 
 Điền `EXPO_PUBLIC_SUPABASE_URL` và `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` bằng cùng project Supabase của web. `EXPO_PUBLIC_API_URL` là bắt buộc và nên trỏ tới domain API riêng để có thể đổi hạ tầng mà không đổi thương hiệu.
 
-Đặt `EXPO_PUBLIC_BILLING_MODE=external` cho APK phân phối trực tiếp dùng VietQR/MoMo. Với bản gửi Google Play hoặc App Store, bỏ biến này để không mở cổng thanh toán ngoài ứng dụng; tích hợp sản phẩm in-app trước khi phát hành store.
+Đặt `EXPO_PUBLIC_BILLING_MODE=external` cho APK phân phối trực tiếp dùng VietQR/MoMo. Với bản gửi Google Play hoặc App Store, bỏ biến này: app ẩn nút thanh toán và gửi header `X-Client-Channel: store`, backend cũng từ chối tạo đơn thanh toán ngoài cho bản đó. Cần tích hợp sản phẩm in-app trước khi bán gói trên cửa hàng.
+
+Người dùng xoá tài khoản trong **Cài đặt → Xóa tài khoản**; app gọi `DELETE /api/auth/account` rồi đăng xuất.
 
 Trong Supabase Authentication, thêm `tryoh://auth-callback` vào Redirect URLs để liên kết xác minh email mở lại ứng dụng.
 

@@ -37,45 +37,79 @@ npm start
 
 `npm start` chạy backend đã build trong `dist-server/` và phục vụ frontend production từ `dist/`.
 
+Test của các repository PostgreSQL (credit ledger, social, moderation, dọn ảnh R2) chạy trên PostgreSQL nhúng [PGlite](https://pglite.dev) với toàn bộ migration trong `supabase/migrations/`, không cần Supabase hay Docker. Helper nằm ở `server/__tests__/pglite-pool.ts`.
+
 ## Biến môi trường
+
+### Chung
 
 | Biến | Mặc định | Mô tả |
 | --- | --- | --- |
-| `HOST` | local `127.0.0.1`, production `0.0.0.0` | Interface Express lắng nghe; Railway cần `0.0.0.0` |
-| `PORT` | `8787` | Cổng Express API |
-| `DATA_DIR` | `./data` | Vị trí SQLite và thư mục ảnh |
-| `PERSISTENCE_BACKEND` | `sqlite` | `sqlite` ở local; production dùng `postgres` |
-| `AUTH_BACKEND` | `local` | `local` ở development; production dùng `supabase` |
-| `IMAGE_STORAGE` | `local` | `local` ở development; production dùng `r2` |
-| `DATABASE_URL` | trống | Supabase Session pooler URI, thêm `sslmode=require` |
-| `DATABASE_POOL_MAX` | `10` | Số kết nối tối đa của tiến trình backend |
-| `DATABASE_CA_CERT_BASE64` | trống | Base64 của Supabase database CA; giữ xác minh TLS trên Render |
-| `SUPABASE_URL` | trống | Project URL của Supabase |
-| `SUPABASE_PUBLISHABLE_KEY` | trống | Publishable key dùng cho Supabase Auth phía backend |
-| `R2_ACCOUNT_ID` | trống | Cloudflare account ID |
-| `R2_ACCESS_KEY_ID` | trống | Access key của token chỉ có quyền trên bucket ứng dụng |
-| `R2_SECRET_ACCESS_KEY` | trống | Secret key R2, chỉ đặt ở backend |
-| `R2_BUCKET` | trống | Tên bucket R2 private |
-| `R2_PREFIX` | `uploads` | Tiền tố object để tách môi trường |
+| `HOST` | local `127.0.0.1`, production `0.0.0.0` | Interface Express lắng nghe |
+| `PORT` | `8787` | Cổng Express; Render tự cấp, không đặt tay |
+| `DATA_DIR` | `./data` | Vị trí SQLite và thư mục ảnh khi chạy local |
+| `PERSISTENCE_BACKEND` | `sqlite` | `sqlite` ở local; production `postgres` |
+| `AUTH_BACKEND` | `local` | `local` ở development; production `supabase` |
+| `IMAGE_STORAGE` | `local` | `local` ở development; production `r2` |
+| `APP_BASE_URL` | `RENDER_EXTERNAL_URL` rồi `http://127.0.0.1:8787` | URL gốc dùng cho email khôi phục mật khẩu và đọc ảnh local |
 | `AUTH_SESSION_DAYS` | `30` | Số ngày duy trì phiên đăng nhập |
 | `COOKIE_SECURE` | theo `NODE_ENV` | Production mặc định bật; local HTTP đặt `false` |
-| `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Railway thường cấu hình `1` sau khi xác minh topology |
-| `API_REQUESTS_PER_MINUTE` | `600` | Tốc độ token bucket theo IP trên mỗi instance |
-| `API_RATE_LIMIT_BURST` | `120` | Burst API tối đa theo IP trên mỗi instance |
-| `AI_REQUESTS_PER_15_MIN` | `10` | Quota tạo ảnh theo user; production dùng bộ đếm PostgreSQL chung |
-| `LEGACY_DATA_CLAIM_TOKEN` | trống | Token backend một lần để account đầu tiên claim dữ liệu bản cũ; xoá sau migration |
-| `IMAGE_PROVIDER` | `openrouter` | Provider tạo ảnh; hỗ trợ `openrouter`, `gemini` và `mock` |
-| `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock để kiểm thử loading |
-| `OPENROUTER_API_KEY` | trống | API key OpenRouter, chỉ đặt ở backend |
-| `OPENROUTER_IMAGE_MODEL` | `black-forest-labs/flux-3-image-klein` | Model OpenRouter tạo/chỉnh ảnh |
-| `OPENROUTER_IMAGE_RESOLUTION` | `768` | Mức phân giải output để kiểm soát chi phí |
+| `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Render đặt `1` |
+| `ADMIN_EMAILS` | trống | Email được phép bootstrap admin; tài khoản còn phải có `app_metadata.role = admin` trên Supabase |
+| `LEGACY_DATA_CLAIM_TOKEN` | trống | Token một lần để account đầu tiên claim dữ liệu bản cũ; xoá sau migration |
+
+### Supabase và R2 (production)
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `DATABASE_URL` | trống | URI pooler của Supabase, thêm `sslmode=require` |
+| `DATABASE_POOL_MAX` | `5` | Số kết nối tối đa mỗi tiến trình (1–20) |
+| `DATABASE_CA_CERT_BASE64` | trống | Base64 của Supabase database CA để xác minh TLS |
+| `SUPABASE_URL` | trống | Project URL |
+| `SUPABASE_PUBLISHABLE_KEY` | trống | Publishable key cho Supabase Auth phía backend (`SUPABASE_ANON_KEY` cũng được nhận) |
+| `SUPABASE_SERVICE_ROLE_KEY` | trống | Chỉ dùng để xoá tài khoản Auth; không bao giờ đặt vào `VITE_*`/`EXPO_PUBLIC_*` |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | trống | Bucket R2 private và token chỉ có quyền trên bucket đó |
+| `R2_PREFIX` | `uploads` | Tiền tố object để tách môi trường |
+| `R2_PUBLIC_URL` | trống | Tuỳ chọn: domain HTTPS riêng của bucket, được thêm vào CSP `img-src` |
+| `R2_SIGNED_READ_TTL_SECONDS` | `300` | Thời hạn URL ký ngắn hạn khi trình duyệt đọc ảnh R2 (60–3600) |
+
+### AI
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `IMAGE_PROVIDER` | `openrouter` | `openrouter`, `gemini` hoặc `mock` |
+| `OPENROUTER_API_KEY` | trống | Chỉ đặt ở backend |
+| `OPENROUTER_IMAGE_MODEL` | `black-forest-labs/flux-3-image-klein` | Model tạo/chỉnh ảnh |
+| `OPENROUTER_VISION_MODEL` | trống | Model nhận diện món đồ cho AI Extract |
+| `OPENROUTER_IMAGE_RESOLUTION` | `768` | Độ phân giải output |
 | `OPENROUTER_IMAGE_ASPECT_RATIO` | `4:5` | Tỷ lệ ảnh toàn thân |
 | `OPENROUTER_TIMEOUT_MS` | `120000` | Timeout mỗi request OpenRouter |
-| `GEMINI_API_KEY` | trống | Chỉ đặt ở backend |
-| `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image` | Model Gemini tạo/chỉnh ảnh |
-| `GEMINI_TIMEOUT_MS` | `120000` | Timeout mỗi request Gemini, tính bằng ms |
-| `APP_BASE_URL` | `http://127.0.0.1:8787` | Base URL để backend đọc ảnh local trước khi gửi bytes tới Gemini |
-| `MUAPI_API_KEY` | trống | Chỉ đặt ở backend |
+| `AI_MAX_CONCURRENCY` | `1` | Số request tạo ảnh chạy song song mỗi tiến trình |
+| `AI_MAX_WAITING_REQUESTS` | `8` (Render đặt `4`) | Số request được xếp hàng; vượt thì trả 503 `ai_queue_busy` |
+| `AI_QUEUE_TIMEOUT_MS` | `30000` | Thời gian chờ tối đa trong hàng |
+| `AI_DAILY_REQUEST_LIMIT` | trống (tắt) | Trần tổng request AI (tách đồ + tạo ảnh) của cả hệ thống mỗi 24 giờ |
+| `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL`, `GEMINI_TIMEOUT_MS` | trống, `gemini-3.1-flash-image`, `120000` | Khi dùng Gemini |
+| `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock |
+| `MUAPI_API_KEY` | trống | Chưa dùng |
+
+### Giới hạn tốc độ
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `API_REQUESTS_PER_MINUTE`, `API_RATE_LIMIT_BURST` | `600`, `120` | Token bucket theo phiên (hoặc IP khi chưa đăng nhập) mỗi instance |
+| `API_IP_REQUESTS_PER_MINUTE`, `API_IP_RATE_LIMIT_BURST` | gấp 4 hai giá trị trên | Trần chung theo IP cho mọi phiên |
+| `AI_REQUESTS_PER_15_MIN` | `10` | Lượt AI (tạo ảnh, tách đồ) mỗi user |
+| `AUTH_LOGIN_ACCOUNT_PER_15_MIN`, `AUTH_LOGIN_IP_PER_15_MIN` | `10`, `60` | Thử đăng nhập |
+| `AUTH_REGISTER_IP_PER_HOUR` | `20` | Đăng ký từ một IP |
+| `AUTH_RESET_ACCOUNT_PER_15_MIN`, `AUTH_RESET_IP_PER_15_MIN` | `5`, `30` | Email khôi phục mật khẩu |
+
+### Thanh toán
+
+| Biến | Mặc định | Mô tả |
+| --- | --- | --- |
+| `PAYOS_CLIENT_ID`, `PAYOS_API_KEY`, `PAYOS_CHECKSUM_KEY` | trống | VietQR/payOS; bỏ trống thì ẩn nút |
+| `MOMO_ENVIRONMENT`, `MOMO_PARTNER_CODE`, `MOMO_ACCESS_KEY`, `MOMO_SECRET_KEY` | `sandbox`, trống | MoMo |
+| `MOMO_REQUEST_TYPE`, `MOMO_ENDPOINT` | `captureWallet`, theo môi trường | Ghi đè tuỳ chọn |
 
 Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó sẽ bị đóng gói vào frontend.
 
@@ -84,59 +118,60 @@ Không đặt API key trong biến có tiền tố `VITE_`, vì các biến đó
 1. Trong Supabase SQL Editor, chạy lần lượt [`001_initial_schema.sql`](supabase/migrations/001_initial_schema.sql), [`002_admin_access.sql`](supabase/migrations/002_admin_access.sql), [`003_rate_limits.sql`](supabase/migrations/003_rate_limits.sql), [`004_image_credits.sql`](supabase/migrations/004_image_credits.sql), [`005_subscription_plans.sql`](supabase/migrations/005_subscription_plans.sql), [`006_billing.sql`](supabase/migrations/006_billing.sql), [`007_credit_ledger_and_performance.sql`](supabase/migrations/007_credit_ledger_and_performance.sql), [`008_account_deletion_retention.sql`](supabase/migrations/008_account_deletion_retention.sql) và [`009_social_normalized.sql`](supabase/migrations/009_social_normalized.sql). **Chạy migration trước khi deploy code tương ứng**: code mới ghi vào `credit_ledger` và các bảng social mới. Các file tự tạo bảng, index, RLS và trigger; không tạo bảng thủ công.
 2. Trong Supabase **Connect**, lấy URI **Session pooler** (port `5432`) và dùng làm `DATABASE_URL`. Mật khẩu có ký tự đặc biệt phải được percent-encode. Trong **Database Settings → SSL Configuration**, tải certificate, chuyển file sang Base64 và đặt vào `DATABASE_CA_CERT_BASE64` để Render xác minh TLS đầy đủ.
 3. Tạo một bucket R2 **private**. Tạo API token giới hạn Object Read/Write chỉ cho bucket đó; không bật public development URL.
-4. Trên Render dùng build command `npm ci --include=dev && npm run build`, start command `npm start`, rồi đặt:
+4. Trên Render, `render.yaml` đã khai báo service: build `npm ci --include=dev && npm run build && npm prune --omit=dev`, start `npm start`, health check `/api/health`. Các biến cố định đã có trong file; điền các biến bí mật (`sync: false`) trong dashboard:
 
 ```env
-NODE_ENV=production
-HOST=0.0.0.0
-COOKIE_SECURE=true
-TRUST_PROXY_HOPS=1
-PERSISTENCE_BACKEND=postgres
-AUTH_BACKEND=supabase
-IMAGE_STORAGE=r2
 DATABASE_URL=postgresql://...
 DATABASE_CA_CERT_BASE64=...
 SUPABASE_URL=https://PROJECT_REF.supabase.co
 SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_SERVICE_ROLE_KEY=...
 R2_ACCOUNT_ID=...
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
 R2_BUCKET=fitting-room
-R2_PREFIX=production
+OPENROUTER_API_KEY=...
+ADMIN_EMAILS=owner@example.com
 ```
 
-Không đặt `PORT`; Render tự cấp. `APP_BASE_URL` cũng có thể bỏ qua trên Render vì backend dùng biến hệ thống `RENDER_EXTERNAL_URL`; chỉ đặt thủ công khi chạy ở nền tảng khác. Ảnh R2 không có URL public: frontend đọc qua `/uploads/:key`, backend kiểm tra phiên và quyền sở hữu trước khi tải object.
+Không đặt `PORT`; Render tự cấp. `APP_BASE_URL` có thể bỏ qua trên Render vì backend dùng `RENDER_EXTERNAL_URL`.
 
-Rate limiting dùng token bucket nhanh tại từng instance và PostgreSQL atomic cho auth/AI để scale nhiều replica. Cấu hình và hướng nâng lên Redis/Valkey nằm trong [`docs/rate-limiting.md`](docs/rate-limiting.md).
+Ảnh R2 không có URL public. Frontend luôn gọi `/uploads/:key`: backend kiểm tra phiên và quyền xem (ảnh của mình, hoặc ảnh được chia sẻ qua bạn bè/nhóm/bình chọn/bài đăng), rồi chuyển hướng 302 sang URL R2 ký ngắn hạn, nên byte ảnh không đi qua Render. `?proxy=1` stream ảnh qua backend cho các chỗ cần xử lý pixel cùng origin. Quyết định cho phép được cache 30 giây mỗi user.
+
+Rate limiting gồm token bucket trong RAM (trần theo IP + bucket theo phiên) và bộ đếm PostgreSQL atomic cho auth/AI dùng chung giữa nhiều instance. Chi tiết trong [`docs/rate-limiting.md`](docs/rate-limiting.md).
 
 Module social dùng các bảng quan hệ có index (migration 009): mỗi request chỉ đọc vùng dữ liệu của người dùng liên quan, mỗi thao tác ghi chỉ khoá theo user (`pg_advisory_xact_lock`), nên người dùng không xếp hàng chờ nhau. Migration 009 tự backfill từ `social_state` cũ và giữ nguyên bảng đó để rollback; xoá `social_state` sau khi xác nhận ổn định.
 
-Tác vụ nền chạy trong tiến trình web (an toàn khi nhiều instance vì dùng khoá hàng): gửi kết quả bình chọn hết hạn, dọn thông báo cũ, và hàng đợi `storage_cleanup_queue` xoá object R2 (ảnh tạm quá 24 giờ, ảnh của tài khoản đã xoá) có retry. Object còn được tham chiếu ở bất kỳ bảng nào sẽ không bị xoá.
+Tác vụ nền chạy trong tiến trình web, an toàn khi nhiều instance vì dùng khoá hàng: gửi kết quả bình chọn hết hạn, dọn thông báo cũ, và hàng đợi `storage_cleanup_queue` xoá object R2 (ảnh tạm quá 24 giờ, ảnh của tài khoản đã xoá) có retry. Object còn được tham chiếu ở bất kỳ bảng nào sẽ không bị xoá.
 
-Biến môi trường vận hành bổ sung: `AI_DAILY_REQUEST_LIMIT` (trần tổng request AI/24 giờ cho cả hệ thống), `API_IP_REQUESTS_PER_MINUTE` / `API_IP_RATE_LIMIT_BURST` (trần theo IP cho mọi phiên). Khi tăng số người dùng, nên dùng Supabase **transaction pooler** (port `6543`) và tăng `DATABASE_POOL_MAX`; các khoá trong code đều là khoá theo transaction nên tương thích.
+Khi tăng số người dùng, nên dùng Supabase **transaction pooler** (port `6543`) và tăng `DATABASE_POOL_MAX`; các khoá trong code đều là khoá theo transaction nên tương thích. Gói free của Render ngủ sau 15 phút không có request và chỉ có một instance.
 
-Supabase Auth mặc định có thể yêu cầu xác minh email. Nếu bật xác minh, sau đăng ký người dùng phải mở email rồi đăng nhập; nếu tắt trong giai đoạn thử nghiệm, đăng ký sẽ tạo phiên ngay. Không dùng `service_role` key cho luồng này.
+Supabase Auth có thể yêu cầu xác minh email. Nếu bật, sau đăng ký người dùng phải mở email rồi đăng nhập; nếu tắt, đăng ký tạo phiên ngay. `SUPABASE_SERVICE_ROLE_KEY` chỉ dùng cho xoá tài khoản, không dùng cho đăng ký/đăng nhập.
 
 Để tính năng **Quên mật khẩu** hoạt động, vào Supabase **Authentication → URL Configuration**:
 
 - đặt **Site URL** thành URL production, ví dụ `https://vn-vton.onrender.com`;
 - thêm chính xác `https://vn-vton.onrender.com/reset-password` vào **Redirect URLs**;
-- khi chạy local, có thể thêm `http://127.0.0.1:8787/reset-password`.
+- khi chạy local, có thể thêm `http://127.0.0.1:8787/reset-password`;
+- app mobile cần thêm `tryoh://auth-callback`.
 
-Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ phần URL fragment. API trả thông báo chung dù email có tồn tại hay không để tránh dò tài khoản. Dịch vụ email mặc định của Supabase chỉ phù hợp thử nghiệm và bị giới hạn; production nên cấu hình SMTP riêng.
+Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ phần URL fragment. API trả thông báo chung dù email có tồn tại hay không để tránh dò tài khoản. Email production gửi qua SMTP riêng (Brevo) cấu hình tại Supabase **Authentication → SMTP Settings**, không dùng dịch vụ email mặc định bị giới hạn của Supabase.
 
-## Đăng nhập và dữ liệu tài khoản
+## Đăng nhập, tài khoản và credit
 
-- Đăng ký bằng tên hiển thị, email và mật khẩu tối thiểu 8 ký tự.
-- Mật khẩu được băm bằng Node.js `scrypt` với salt riêng; không lưu mật khẩu gốc.
-- Phiên đăng nhập dùng token ngẫu nhiên, chỉ hash token được lưu trong SQLite. Cookie có `HttpOnly` và `SameSite=Lax`.
-- Tủ đồ, ảnh người, kết quả hiện tại và “Bộ đồ của tôi” đều được phân vùng theo `user_id`.
-- Dữ liệu local cũ **không** tự chuyển cho người đăng ký đầu tiên. Muốn claim, operator phải cấu hình `LEGACY_DATA_CLAIM_TOKEN` và gửi token qua header `X-Legacy-Data-Claim-Token` đúng một lần khi đăng ký account đầu tiên.
-- Chưa có xác minh email hoặc quên mật khẩu; hai luồng này cần tích hợp dịch vụ gửi email trước khi triển khai công khai.
+- Đăng ký bằng tên hiển thị, email và mật khẩu tối thiểu 8 ký tự. Lỗi đăng ký dùng thông báo chung để không lộ email đã tồn tại.
+- Production (`AUTH_BACKEND=supabase`): Supabase Auth quản lý mật khẩu và phiên; backend xác thực access token bằng `getClaims`. Role ứng dụng (`user`, `koc`, `moderator`, `admin`) và trạng thái khoá nằm trong bảng `profiles`.
+- Local (`AUTH_BACKEND=local`): mật khẩu băm `scrypt` với salt riêng, chỉ hash token phiên được lưu trong SQLite. Cookie `HttpOnly`, `SameSite=Lax`.
+- Tủ đồ, ảnh người, kết quả và “Bộ đồ của tôi” đều phân vùng theo `user_id`.
+- **Xoá tài khoản** (Cài đặt → Tài khoản, cả web và mobile): xoá tài khoản Supabase Auth; các bảng dữ liệu xoá theo `ON DELETE CASCADE`; ảnh trên R2 được đưa vào hàng đợi dọn dẹp có retry. Đơn thanh toán được giữ lại nhưng ẩn danh (migration 008).
+- **Credit**: tài khoản mới có 10 lượt tạo ảnh trọn đời (gói Free). Tạo ảnh và tách đồ bằng AI (mỗi món tách ra 1 lượt, tối đa 5 món một lần) đều trừ credit; request lỗi được hoàn. Admin không tiêu credit. Mọi thay đổi số dư (dùng, hoàn, mua gói, admin chỉnh, hết hạn gói) đều ghi vào sổ `credit_ledger`.
+- **Gói trả phí** (Plus/Pro/Max) cộng thêm credit vào số dư hiện có và gia hạn 30 ngày; hết hạn thì về Free và số dư về 0. Webhook payOS/MoMo gửi lặp không cộng hai lần.
+- Bản mobile phát hành qua cửa hàng gửi header `X-Client-Channel: store`; backend không trả cổng thanh toán ngoài cho bản này.
+- Dữ liệu local cũ **không** tự chuyển cho người đăng ký đầu tiên. Muốn claim, operator cấu hình `LEGACY_DATA_CLAIM_TOKEN` và gửi token qua header `X-Legacy-Data-Claim-Token` đúng một lần khi đăng ký account đầu tiên.
 
 ### Chạy với OpenRouter / FLUX 3 Image Klein
 
-Tạo key tại OpenRouter và đảm bảo tài khoản còn hạn mức. Ở Railway, đặt key trong mục Variables. Khi chạy local, ưu tiên biến môi trường của tiến trình thay vì ghi key vào file được chia sẻ:
+Tạo key tại OpenRouter và đảm bảo tài khoản còn hạn mức. Trên Render, đặt key trong mục Environment. Khi chạy local, ưu tiên biến môi trường của tiến trình thay vì ghi key vào file được chia sẻ:
 
 ```env
 IMAGE_PROVIDER=openrouter
@@ -161,24 +196,31 @@ GEMINI_IMAGE_MODEL=gemini-3.1-flash-image
 GEMINI_TIMEOUT_MS=120000
 ```
 
-Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage local, chuyển chúng thành inline image data rồi mới gọi Gemini; Google không cần truy cập URL localhost. Output Gemini được lưu lại qua `ImageStorage` và chỉ URL local được ghi vào SQLite.
+Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage local, chuyển chúng thành inline image data rồi mới gọi Gemini; Google không cần truy cập URL localhost. Output Gemini được lưu lại qua `ImageStorage` và chỉ key ảnh được ghi vào database.
 
 ## Cấu trúc
 
 ```text
 src/
-  components/       Giao diện tủ đồ, upload, kết quả và ảnh người dùng
-  hooks/            Hook quản lý object URL
-  services/         API client dùng chung, CSRF header và background removal
-  store/            Zustand store và unit test
-  types/            Domain types dùng ở frontend
+  components/       Giao diện: tủ đồ, phòng thử, bộ đồ, social, cài đặt, gói, KOC Studio, admin
+  garment_normalizer/  Chuẩn hoá ảnh món đồ chạy trong Web Worker
+  hooks/ store/     Hook React và Zustand store
+  services/         API client (thêm header chống CSRF), tách nền trên trình duyệt
 server/
-  config/           Đọc và chuẩn hoá cấu hình runtime, không chứa secret literal
-  domain/           Domain type của backend
-  http/             Security headers, rate limit và image-upload validation
-  providers/        Adapter Gemini/OpenRouter/mock; API key chỉ nhận từ backend env
-  routes/           Express routes
-  storage/          Interface repository/storage và implementation SQLite/local
+  admin/            Phân quyền, audit log, moderation báo cáo
+  auth/             Auth local (SQLite) và Supabase; route /api/auth, xoá tài khoản
+  billing/          payOS, MoMo, webhook, sổ giao dịch Excel
+  credits/ plans/   Credit, sổ credit_ledger, gói Free/Plus/Pro/Max
+  http/             Security headers/CSP, rate limit, kiểm tra ảnh upload, phân trang
+  prompts/          Prompt FLUX
+  providers/        Adapter OpenRouter/Gemini/mock; API key chỉ đọc từ env backend
+  routes/           Tủ đồ, AI Extract, tạo ảnh, dữ liệu người dùng
+  services/         Tách món đồ bằng AI, hàng đợi AI có giới hạn
+  social/           Bạn bè, nhóm, bình chọn, bài đăng (SQLite JSON cho local, bảng quan hệ cho PostgreSQL)
+  storage/          Repository SQLite/PostgreSQL, lưu ảnh local/R2, hàng đợi dọn R2
+  __tests__/        Helper PGlite cho test PostgreSQL
+supabase/migrations/  Migration 001–009, chạy theo thứ tự
+mobile/             App Expo/React Native dùng chung backend
 ```
 
 ## Đã hoàn thành ở Giai đoạn 1
@@ -219,9 +261,10 @@ server/
 
 ## Chưa làm
 
-- Provider MuAPI chưa cài vì phiên bản hiện tại chọn OpenRouter/FLUX làm provider thật.
-- Giai đoạn 4 còn lại: tải ZIP.
-- Giai đoạn 5 còn lại: quota/ngân sách **bền vững dùng chung giữa nhiều Railway replica**, cache và retention. Hiện đã có limiter in-memory theo account/IP để bảo vệ bản đơn instance, nhưng đây chưa phải bộ đếm thanh toán production.
+- Tải ZIP bộ đồ (phần còn lại của Giai đoạn 4).
+- Provider MuAPI.
+- Google Play Billing / App Store in-app purchase cho bản mobile trên cửa hàng.
+- Shop và gợi ý sản phẩm có link affiliate của KOL/KOC: kiến trúc và chi phí đã phân tích, chờ chốt nguồn affiliate (xem [`docs/tryoh-implementation-roadmap.md`](docs/tryoh-implementation-roadmap.md)).
 
 ## Chuẩn hoá trang phục (Module garment_normalizer)
 
@@ -240,7 +283,7 @@ Module độc lập tại [`src/garment_normalizer/`](src/garment_normalizer) nh
 
 ## Kiểm thử với mock provider
 
-`.env` local mặc định:
+Để kiểm thử không tốn phí, đặt trong `.env`:
 
 ```env
 IMAGE_PROVIDER=mock

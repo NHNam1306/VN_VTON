@@ -12,6 +12,11 @@ Tài liệu này chuyển đặc tả sản phẩm thành phạm vi kỹ thuật
 - Bình chọn outfit riêng tư, thông báo, phân quyền outfit và thu hồi quyền khi huỷ kết bạn.
 - Hồ sơ, chế độ tối, onboarding lần đầu và điều hướng dưới dành cho điện thoại.
 - Lưu trữ production qua PostgreSQL/Supabase Auth/R2 theo adapter đã cấu hình.
+- Bài đăng, bình chọn từ ảnh, theo dõi nhà sáng tạo (KOC) và KOC Studio.
+- Gói Free/Plus/Pro/Max, thanh toán payOS/MoMo, credit có sổ `credit_ledger`, trang quản trị và audit log.
+- Xoá tài khoản (Auth + database + hàng đợi dọn ảnh R2), giữ đơn thanh toán ẩn danh.
+- Moderation: báo cáo có trạng thái, ẩn bài, khoá tài khoản.
+- Hạn mức AI: rate limit theo user, hàng đợi có giới hạn, trần AI toàn hệ thống; social chuẩn hoá thành bảng quan hệ để chịu tải nhiều người dùng.
 
 ## Phạm vi năm 1 cần hoàn thiện tiếp
 
@@ -19,24 +24,24 @@ Tài liệu này chuyển đặc tả sản phẩm thành phạm vi kỹ thuật
 
 - Kiểm thử end-to-end trên điện thoại cho onboarding, upload, thử đồ, bình chọn và đặt lại mật khẩu.
 - Đồng bộ cài đặt theme/onboarding trên nhiều thiết bị nếu sản phẩm yêu cầu; hiện trạng thái giao diện được lưu trên thiết bị, còn hồ sơ và quyền riêng tư lưu ở máy chủ.
-- Xoá tài khoản và toàn bộ dữ liệu liên quan (PostgreSQL, Supabase Auth, R2).
-- Hạn mức upload/dung lượng, chống spam và hàng đợi tạo ảnh.
+- Chạy migration 007–009 trên Supabase trước khi deploy bản hiện tại.
+- Google Play Billing / App Store in-app purchase trước khi đưa app mobile lên cửa hàng.
 - Theo dõi lỗi không chứa ảnh, token hoặc thông tin nhạy cảm.
 
-### P1 — Shop
+### P1 — Shop và gợi ý sản phẩm (hướng ưu tiên)
 
-Chỉ triển khai khi có nguồn catalog hợp pháp. Cần chốt:
+Gợi ý sản phẩm trên Shopee, TikTok Shop và shop ngoài sàn mà KOL/KOC gắn link affiliate; gợi ý phối với tủ đồ là tính năng phụ. Kiến trúc và chi phí đã phân tích trong tài liệu [Tryoh — Gợi ý sản phẩm Shop & phối đồ](https://claude.ai/artifact/KZX9FqAMdgVHmFaZFeAXud). Tóm tắt:
 
-1. Nguồn sản phẩm/đối tác và điều khoản sử dụng ảnh.
-2. Schema sản phẩm, biến thể, giá, tồn kho và deep link.
-3. Chu kỳ đồng bộ và hành vi khi sản phẩm hết hàng.
-4. Quy tắc lưu sản phẩm vào tủ đồ và quyền sử dụng ảnh khi thử đồ.
+1. Catalog chung `products` + `product_links` theo KOC; nguồn ban đầu là link KOC dán trong KOC Studio, sau đó API affiliate (Shopee, TikTok Shop, AccessTrade) và feed shop ngoài sàn. Không scrape dữ liệu sàn.
+2. Embedding ảnh sản phẩm (OpenRouter trước, FashionCLIP sau) trong pgvector HNSW; tạo ứng viên từ vector gần nhất, KOC đang theo dõi, xu hướng và về sau collaborative filtering (`implicit`).
+3. Mọi lượt mua đi qua `/go/:productId` để đếm click và ghi công KOC; bảng `product_events` lưu xem/thử/click/đơn để học lại.
+4. Ghi nhãn “Liên kết tiếp thị”, làm mới giá và tồn kho hằng đêm, ẩn sản phẩm hết hàng.
 
-Sau khi có dữ liệu, triển khai các màn: danh sách, tìm kiếm/lọc, chi tiết, lưu vào tủ và mở link mua.
+Cần chốt trước khi code: tài khoản affiliate làm trước, có bắt đầu chỉ với link KOC dán tay không, Tryoh có thu hoa hồng không, nơi chạy embedding.
 
 ## Phạm vi năm 2 — Inspiration/KOC
 
-Chưa bật trên production cho tới khi chốt:
+Đã có: role KOC, KOC Studio, bài đăng và theo dõi nhà sáng tạo. Chưa bật kiếm tiền cho KOC cho tới khi chốt:
 
 - Điều kiện trở thành KOC, phí/gói dùng thử và giới hạn.
 - Cách ghi nhận affiliate, ngưỡng và lịch thanh toán.
