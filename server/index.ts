@@ -78,6 +78,17 @@ if (process.env.NODE_ENV === 'production' && !isDevelopment && process.env.ALLOW
   }
 }
 
+// The Google button simply disappears when it cannot work, which is hard to debug:
+// say why at startup instead of leaving the operator guessing.
+const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID?.trim() && process.env.GOOGLE_CLIENT_SECRET?.trim())
+if (!googleConfigured) {
+  console.info('[config] Chưa có GOOGLE_CLIENT_ID/GOOGLE_CLIENT_SECRET: nút "Tiếp tục với Google" sẽ không hiện.')
+} else if (authBackend !== 'supabase') {
+  console.warn(`[config] Đăng nhập bằng Google cần AUTH_BACKEND=supabase (đang là "${authBackend}"): nút sẽ không hiện.`)
+} else {
+  console.info(`[config] Đăng nhập bằng Google: Authorized redirect URI phải đúng là ${new URL('/api/auth/oauth/callback', appBaseUrl).toString()}`)
+}
+
 let postgresPool: PostgresPool | undefined
 let repository: GarmentRepository
 let userDataRepository: UserDataRepository
