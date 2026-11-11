@@ -60,9 +60,7 @@ const uploadDirectory = path.join(dataDirectory, 'uploads')
 const persistenceBackend = process.env.PERSISTENCE_BACKEND ?? 'sqlite'
 const imageStorageBackend = process.env.IMAGE_STORAGE ?? 'local'
 const authBackend = process.env.AUTH_BACKEND ?? 'local'
-const appBaseUrl = process.env.APP_BASE_URL
-  ?? process.env.RENDER_EXTERNAL_URL
-  ?? `http://127.0.0.1:${port}`
+const appBaseUrl = runtimeConfig.appBaseUrl
 
 // Local-only backends lose data on every deploy and cannot be shared between
 // instances. Refuse to start a production process on them by mistake.

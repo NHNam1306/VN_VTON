@@ -13,6 +13,7 @@ import { ImageProviderError } from './providers/image-provider-error.js'
 import type { AuthBackend } from './auth/auth-backend.js'
 import { AuthError } from './auth/auth-service.js'
 import { createAuthRouter, createRequireAuth, SESSION_COOKIE } from './auth/auth-http.js'
+import { createGoogleOAuth } from './auth/google-oauth.js'
 import { GarmentExtractorService } from './services/garment-extractor.js'
 import { AiQueueBusyError } from './services/ai-concurrency.js'
 import { ImmediateStorageCleanup, type StorageCleanup } from './storage/storage-cleanup.js'
@@ -164,7 +165,10 @@ export function createApp(
     // Durable in production: failed object deletions are retried in the background.
     await cleanup.enqueue(imageKeys, 'account_deleted')
   }
-  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits, deleteAccountData))
+  // Google sends people back to this server, not to Supabase, so its account chooser
+  // shows this site's domain. Absent credentials simply leave the button hidden.
+  const googleOAuth = createGoogleOAuth(new URL('/api/auth/oauth/callback', runtimeConfig.appBaseUrl).toString())
+  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits, deleteAccountData, googleOAuth))
   const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser)
 
   const getOwnImageKeys = (userId: string) => {

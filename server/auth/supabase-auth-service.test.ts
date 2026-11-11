@@ -39,7 +39,7 @@ const createService = () => {
     const call = { method: init?.method ?? 'GET', path: url.pathname + url.search, authorization: headers.get('authorization'), body }
     calls.push(call)
     const json = (status: number, value: unknown) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
-    if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') !== 'pkce') {
+    if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') !== 'id_token') {
       // Slow enough that two refreshes overlap.
       await new Promise(resolve => setTimeout(resolve, 40))
       return json(200, session(String(body?.refresh_token).replace('refresh-', '')))
@@ -50,8 +50,8 @@ const createService = () => {
     }
     if (url.pathname === '/auth/v1/user') return json(200, authUser('alice'))
     if (url.pathname === '/auth/v1/logout') return new Response(null, { status: 204 })
-    if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'pkce') {
-      if (body?.auth_code !== 'google-code' || body?.code_verifier !== 'the-verifier') return json(400, { error_code: 'bad_code_verifier' })
+    if (url.pathname === '/auth/v1/token' && url.searchParams.get('grant_type') === 'id_token') {
+      if (body?.id_token !== 'google-id-token') return json(400, { error_code: 'bad_id_token' })
       return json(200, { ...session('google'), user: { ...authUser('google'), user_metadata: { full_name: 'Lan Nguyễn', name: 'Lan Nguyễn' }, app_metadata: { provider: 'google', providers: ['google'] } } })
     }
     return json(404, { message: 'not found' })
@@ -108,26 +108,13 @@ describe('SupabaseAuthService', () => {
     expect(calls.filter(call => call.path === '/auth/v1/user' && call.method === 'GET')).toHaveLength(2)
   })
 
-  it('builds a PKCE Google authorize URL that returns to the server callback', async () => {
-    const { service } = createService()
-    const { url, codeVerifier } = service.createOAuthRequest('google')
-    const parsed = new URL(url)
-    expect(parsed.origin + parsed.pathname).toBe('https://project.supabase.co/auth/v1/authorize')
-    expect(parsed.searchParams.get('provider')).toBe('google')
-    expect(parsed.searchParams.get('redirect_to')).toBe('https://app.example.com/api/auth/oauth/callback')
-    expect(parsed.searchParams.get('code_challenge_method')).toBe('s256')
-    const { createHash } = await import('node:crypto')
-    expect(parsed.searchParams.get('code_challenge')).toBe(createHash('sha256').update(codeVerifier).digest('base64url'))
-    expect(codeVerifier.length).toBeGreaterThanOrEqual(43)
-    expect(service.createOAuthRequest('google').codeVerifier).not.toBe(codeVerifier)
-  })
-
-  it('exchanges the Google code and takes the name Google sends', async () => {
-    const { service } = createService()
-    const result = await service.exchangeOAuthCode('google-code', 'the-verifier')
+  it('turns a Google identity into a session and takes the name Google sends', async () => {
+    const { service, calls } = createService()
+    const result = await service.signInWithIdToken('google', 'google-id-token')
+    expect(calls.some(call => call.path === '/auth/v1/token?grant_type=id_token' && (call.body as { id_token?: string }).id_token === 'google-id-token')).toBe(true)
     expect(result.token).toBe('access-google')
     expect(result.refreshToken).toBe('next-refresh-google')
     expect(result.user).toMatchObject({ id: 'id-google', displayName: 'Lan Nguyễn', hasPassword: false })
-    await expect(service.exchangeOAuthCode('google-code', 'wrong-verifier')).rejects.toMatchObject({ statusCode: 400 })
+    await expect(service.signInWithIdToken('google', '')).rejects.toMatchObject({ statusCode: 400 })
   })
 })

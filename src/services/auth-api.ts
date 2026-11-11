@@ -11,7 +11,7 @@ const parseError = async (response: Response) => {
 }
 
 export const authApi = {
-  /** Sign-in methods the server has enabled (Google needs AUTH_GOOGLE_ENABLED=true). */
+  /** Sign-in methods the server has enabled (Google needs GOOGLE_CLIENT_ID/SECRET). */
   async providers(): Promise<{ google: boolean }> {
     try {
       const response = await fetch('/api/auth/providers')

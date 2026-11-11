@@ -74,7 +74,8 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `R2_PREFIX` | `uploads` | Tiền tố object để tách môi trường |
 | `R2_PUBLIC_URL` | trống | Tuỳ chọn: domain HTTPS riêng của bucket, được thêm vào CSP `img-src` |
 | `R2_SIGNED_READ_TTL_SECONDS` | `300` | Thời hạn URL ký ngắn hạn khi trình duyệt đọc ảnh R2 (60–3600) |
-| `AUTH_GOOGLE_ENABLED` | `false` | `true` để hiện nút "Tiếp tục với Google" trên web và mobile (cần bật Google provider trong Supabase trước) |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | OAuth client của Google; đặt cả hai thì nút "Tiếp tục với Google" mới hiện (web + mobile) |
+| `MOBILE_AUTH_REDIRECT_URLS` | `fitsy://auth-callback` | Danh sách deep link app mobile được phép nhận lại sau khi đăng nhập Google |
 
 ### AI
 
@@ -164,11 +165,14 @@ Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ
 
 - Đăng ký bằng tên hiển thị, email và mật khẩu tối thiểu 8 ký tự. Lỗi đăng ký dùng thông báo chung để không lộ email đã tồn tại.
 - Production (`AUTH_BACKEND=supabase`): Supabase Auth quản lý mật khẩu và phiên; backend xác thực access token bằng `getClaims`. Role ứng dụng (`user`, `koc`, `moderator`, `admin`) và trạng thái khoá nằm trong bảng `profiles`.
-- **Đăng nhập bằng Google** (chỉ khi `AUTH_BACKEND=supabase` và `AUTH_GOOGLE_ENABLED=true`):
-  - Web: `GET /api/auth/oauth/google?next=/…` chuyển sang Supabase/Google theo PKCE; verifier nằm trong cookie `HttpOnly` 10 phút; `GET /api/auth/oauth/callback` đổi mã lấy phiên rồi đặt cookie như đăng nhập thường. Lỗi quay về `/?auth_error=…`. `next` chỉ nhận đường dẫn nội bộ.
-  - Mobile: `supabase.auth.signInWithOAuth` + `WebBrowser.openAuthSessionAsync`, quay về `fitsy://auth-callback`.
-  - Tài khoản Google trùng email đã xác minh được Supabase gộp vào tài khoản cũ. Tài khoản chỉ có Google không có mật khẩu nên phần đổi email/mật khẩu được ẩn.
-  - Cấu hình: Google Cloud Console tạo OAuth client (Web application) với Authorized redirect URI `https://<project>.supabase.co/auth/v1/callback`; Supabase → Authentication → Sign In / Providers → Google: dán Client ID/Secret; Supabase → URL Configuration → Redirect URLs thêm `<APP_BASE_URL>/api/auth/oauth/callback`, `fitsy://auth-callback` (và `exp://**` khi thử bằng Expo Go). Chạy migration 010 để tên Google vào `profiles`.
+- **Đăng nhập bằng Google** (`AUTH_BACKEND=supabase` + `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`). Backend tự chạy OAuth với Google thay vì để Supabase chạy, nên màn chọn tài khoản của Google hiện tên miền Fitsy chứ không phải `<project>.supabase.co`:
+  1. `GET /api/auth/oauth/google?next=/…` (web) hoặc `?client=mobile&redirect=fitsy://auth-callback` → tạo PKCE verifier + `state` lưu trong bộ nhớ máy chủ (10 phút, dùng một lần); web nhận thêm cookie `HttpOnly` `fitting_room_oauth` để ràng buộc đúng trình duyệt → chuyển sang `accounts.google.com`.
+  2. `GET /api/auth/oauth/callback` đổi mã với Google (client secret + verifier, back channel) lấy `id_token` → `POST /auth/v1/token?grant_type=id_token` của Supabase lấy phiên.
+  3. Web: đặt cookie phiên rồi quay về `next` (chỉ nhận đường dẫn nội bộ). Mobile: redirect về deep link kèm mã dùng một lần, app đổi mã tại `POST /api/auth/oauth/session` (2 phút, dùng một lần) rồi `setSession`.
+  - Lỗi quay về `/?auth_error=…` (web) hoặc `…?auth_error=…` (mobile): `google_cancelled`, `google_expired`, `google_failed`, `google_unavailable`.
+  - `state`, mã hand-off và PKCE verifier nằm trong bộ nhớ tiến trình: nhiều instance cần sticky routing, restart giữa chừng thì người dùng đăng nhập lại.
+  - Tài khoản Google trùng email đã xác minh được Supabase gộp vào tài khoản cũ. Tài khoản chỉ có Google không có mật khẩu (`hasPassword=false`) nên phần đổi email/mật khẩu được ẩn.
+  - Cấu hình: Google Cloud Console → OAuth client (Web application), Authorized redirect URI là **`<APP_BASE_URL>/api/auth/oauth/callback`** (không phải domain Supabase); Supabase → Authentication → Providers → Google: bật và dán **cùng** Client ID/Secret để Supabase chấp nhận `id_token`. Không cần thêm Redirect URL nào trong Supabase cho luồng này. Chạy migration 010 để tên Google vào `profiles`.
 - Local (`AUTH_BACKEND=local`): mật khẩu băm `scrypt` với salt riêng, chỉ hash token phiên được lưu trong SQLite. Cookie `HttpOnly`, `SameSite=Lax`.
 - Tủ đồ, ảnh người, kết quả và “Bộ đồ của tôi” đều phân vùng theo `user_id`.
 - **Xoá tài khoản** (Cài đặt → Tài khoản, cả web và mobile): xoá tài khoản Supabase Auth; các bảng dữ liệu xoá theo `ON DELETE CASCADE`; ảnh trên R2 được đưa vào hàng đợi dọn dẹp có retry. Đơn thanh toán được giữ lại nhưng ẩn danh (migration 008).

@@ -4,6 +4,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { createContext, type PropsWithChildren, use, useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
+import { apiBaseUrl } from '@/services/api-client';
 import { authConfigurationError, getSessionWithTimeout, supabase } from '@/services/supabase';
 
 type AuthContextValue = {
@@ -26,11 +27,30 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Mã PKCE đã/đang được đổi lấy phiên. Sau khi đăng nhập Google, cùng một mã có thể về
- * hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
+ * Mã dùng một lần đã/đang được đổi lấy phiên. Sau khi đăng nhập Google, cùng một mã có
+ * thể về hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
  */
 const consumedCodes = new Set<string>();
 const googleFailure = 'Không thể đăng nhập bằng Google. Vui lòng thử lại.';
+/** Địa chỉ app nhận lại sau khi đăng nhập; máy chủ chỉ chấp nhận địa chỉ trong danh sách của nó. */
+const googleRedirect = 'fitsy://auth-callback';
+
+type HandoffSession = { accessToken: string; refreshToken: string };
+
+/** Đổi mã dùng một lần của máy chủ lấy phiên Supabase rồi lưu phiên đó. */
+const claimGoogleSession = async (code: string) => {
+  if (consumedCodes.has(code)) return;
+  consumedCodes.add(code);
+  const response = await fetch(apiBaseUrl + '/api/auth/oauth/session', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Fitting-Room-Request': '1' },
+    body: JSON.stringify({ code }),
+  });
+  if (!response.ok) throw new Error(googleFailure);
+  const session = await response.json() as HandoffSession;
+  const { error } = await supabase.auth.setSession({ access_token: session.accessToken, refresh_token: session.refreshToken });
+  if (error) throw new Error(googleFailure);
+};
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(Boolean(authConfigurationError));
@@ -76,6 +96,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
       const isRecovery = path === 'reset-password' || type === 'recovery';
       if (isRecovery) setRecoveryMode(true);
       setLinkError(null);
+
+      // Quay về từ đăng nhập Google (máy chủ Fitsy gửi kèm mã dùng một lần).
+      const handoff = parsed.queryParams?.fitsy_code;
+      if (typeof handoff === 'string') {
+        try {
+          await claimGoogleSession(handoff);
+        } catch {
+          setLinkError(googleFailure);
+        }
+        return;
+      }
+      if (parsed.queryParams?.auth_error) {
+        setLinkError(parsed.queryParams.auth_error === 'google_cancelled' ? null : googleFailure);
+        return;
+      }
 
       const code = parsed.queryParams?.code;
       if (typeof code === 'string') {
@@ -155,24 +190,17 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return data.session ? 'signed-in' : 'confirmation-required';
     },
     signInWithGoogle: async () => {
-      const redirectTo = Linking.createURL('auth-callback');
-      const { data, error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
-      });
-      if (error || !data.url) throw new Error('Chưa thể mở trang đăng nhập Google. Vui lòng thử lại sau.');
-      // Phiên trình duyệt trong app: đóng lại khi Google/Supabase chuyển về `fitsy://auth-callback`.
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // Mở trang đăng nhập của chính máy chủ Fitsy: Google hiện tên miền Fitsy,
+      // không phải địa chỉ project Supabase.
+      const startUrl = apiBaseUrl + '/api/auth/oauth/google?client=mobile&redirect=' + encodeURIComponent(googleRedirect);
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, googleRedirect);
       if (result.type !== 'success') return 'cancelled';
       const params = Linking.parse(result.url).queryParams ?? {};
-      if (params.error === 'access_denied') return 'cancelled';
-      if (params.error) throw new Error(googleFailure);
-      const code = params.code;
-      if (typeof code !== 'string') throw new Error(googleFailure);
-      if (consumedCodes.has(code)) return 'signed-in';
-      consumedCodes.add(code);
-      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-      if (exchangeError) throw new Error(googleFailure);
+      if (params.auth_error === 'google_cancelled') return 'cancelled';
+      if (params.auth_error) throw new Error(googleFailure);
+      const handoff = params.fitsy_code;
+      if (typeof handoff !== 'string') throw new Error(googleFailure);
+      await claimGoogleSession(handoff);
       return 'signed-in';
     },
     resendConfirmation: async (email) => {

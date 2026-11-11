@@ -9,7 +9,15 @@ const optionalPositiveInteger = (value: string | undefined): number | undefined 
   return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
+/** Public origin of this deployment; Google and Supabase redirect back here. */
+const appBaseUrl = (
+  process.env.APP_BASE_URL
+  ?? process.env.RENDER_EXTERNAL_URL
+  ?? `http://127.0.0.1:${positiveInteger(process.env.PORT, 8787)}`
+).replace(/\/+$/, '')
+
 export const runtimeConfig = {
+  appBaseUrl,
   authSessionDays: positiveInteger(process.env.AUTH_SESSION_DAYS, 30),
   secureCookies: process.env.COOKIE_SECURE === undefined
     ? process.env.NODE_ENV === 'production'
@@ -36,7 +44,9 @@ export const runtimeConfig = {
   passwordResetAccountPerWindow: positiveInteger(process.env.AUTH_RESET_ACCOUNT_PER_15_MIN, 5),
   passwordResetIpPerWindow: positiveInteger(process.env.AUTH_RESET_IP_PER_15_MIN, 30),
   legacyDataClaimToken: process.env.LEGACY_DATA_CLAIM_TOKEN?.trim() || undefined,
-  // Show "Continue with Google" only after the Google provider is enabled in Supabase Auth.
-  googleAuthEnabled: process.env.AUTH_GOOGLE_ENABLED === 'true',
+  // Deep links the mobile app may be sent back to after a Google sign-in. Anything
+  // not listed here is refused, so a crafted link cannot carry a session elsewhere.
+  mobileAuthRedirects: (process.env.MOBILE_AUTH_REDIRECT_URLS ?? 'fitsy://auth-callback')
+    .split(',').map(value => value.trim()).filter(Boolean),
   adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean),
 }

@@ -30,9 +30,8 @@ export interface AuthBackend {
   changeEmail?(userId: string, input: { newEmail: string; password: string }, token?: string | null): Promise<PublicUser>
   changePassword?(userId: string, input: { currentPassword: string; newPassword: string }, token?: string | null): Promise<void>
   deleteAccount?(userId: string, token?: string | null): Promise<void>
-  /** Starts an OAuth sign-in (PKCE). The verifier must stay server-side until the callback. */
-  createOAuthRequest?(provider: OAuthProvider): { url: string; codeVerifier: string }
-  exchangeOAuthCode?(code: string, codeVerifier: string): Promise<AuthResult>
+  /** Trades a provider's ID token (obtained by this server) for an application session. */
+  signInWithIdToken?(provider: OAuthProvider, idToken: string): Promise<AuthResult>
 }
 
 export type OAuthProvider = 'google'

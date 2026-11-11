@@ -1,6 +1,8 @@
 import type { NextFunction, Request, Response } from 'express'
 import { Router } from 'express'
 import type { AuthBackend, AuthResult } from './auth-backend.js'
+import type { GoogleOAuth } from './google-oauth.js'
+import { newBrowserSecret, OAuthStore } from './oauth-store.js'
 import { AuthError } from './auth-service.js'
 import type { PublicUser } from './auth-store.js'
 import type { MaybePromise } from '../storage/maybe-promise.js'
@@ -15,7 +17,7 @@ import {
 
 export const SESSION_COOKIE = 'fitting_room_session'
 export const REFRESH_COOKIE = 'fitting_room_refresh'
-/** Holds the PKCE verifier and post-login path between leaving for Google and the callback. */
+/** Ties the browser that started a Google sign-in to the callback that finishes it. */
 export const OAUTH_COOKIE = 'fitting_room_oauth'
 const OAUTH_COOKIE_PATH = '/api/auth/oauth'
 const OAUTH_COOKIE_MAX_AGE_MS = 10 * 60 * 1000
@@ -25,6 +27,15 @@ const safeNextPath = (value: unknown): string => {
   if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\') || value.startsWith('/api/')) return '/'
   return value.slice(0, 200)
 }
+
+/** The app's own deep link, and only one this operator listed: never an arbitrary URL. */
+const allowedMobileRedirect = (value: unknown): string | null => {
+  const requested = typeof value === 'string' && value ? value : (runtimeConfig.mobileAuthRedirects[0] ?? '')
+  return requested && runtimeConfig.mobileAuthRedirects.includes(requested) ? requested : null
+}
+
+const withParam = (url: string, name: string, value: string) =>
+  url + (url.includes('?') ? '&' : '?') + name + '=' + encodeURIComponent(value)
 
 const readCookie = (request: Request, cookieName: string): string | null => {
   const cookieHeader = request.headers.cookie
@@ -107,6 +118,7 @@ export function createAuthRouter(
   decorate?: UserDecorator,
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
   deleteAccountData?: (user: PublicUser, token: string | null) => Promise<void>,
+  google?: GoogleOAuth | null,
 ) {
   const router = Router()
   const cookieOptions = { secure: secureCookies, sessionDays }
@@ -143,58 +155,95 @@ export function createAuthRouter(
     message: 'Bạn vừa yêu cầu gửi email. Vui lòng đợi khoảng một phút rồi thử lại.',
   })
 
+  const googleEnabled = Boolean(google && auth.signInWithIdToken)
+  const oauthStore = new OAuthStore()
+  const oauthCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: OAUTH_COOKIE_PATH }
+
   router.get('/providers', (_request, response) => {
-    response.json({ google: Boolean(runtimeConfig.googleAuthEnabled && auth.createOAuthRequest && auth.exchangeOAuthCode) })
+    response.json({ google: googleEnabled })
   })
 
-  const oauthCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: OAUTH_COOKIE_PATH }
-  const oauthFailure = (response: Response, reason: string) => {
-    response.clearCookie(OAUTH_COOKIE, oauthCookieOptions)
-    response.redirect(303, '/?auth_error=' + encodeURIComponent(reason))
-  }
+  /**
+   * Google sign-in runs against Google directly from this server, so the account
+   * chooser names this site instead of the Supabase project host. The authorization
+   * code is redeemed server-side (PKCE + client secret) and the resulting ID token is
+   * traded for an application session.
+   */
+  router.get('/oauth/google', loginIpLimit, (request, response) => {
+    if (!googleEnabled || !google) {
+      response.redirect(303, '/?auth_error=google_unavailable')
+      return
+    }
+    const mobile = request.query.client === 'mobile'
+    const redirectTo = mobile ? allowedMobileRedirect(request.query.redirect) : safeNextPath(request.query.next)
+    if (!redirectTo) {
+      response.status(400).json({ message: 'Địa chỉ quay lại không hợp lệ.', code: 'invalid_redirect' })
+      return
+    }
+    const browserSecret = mobile ? undefined : newBrowserSecret()
+    const codeVerifier = google.createVerifier()
+    const state = oauthStore.start({ codeVerifier, browserSecret, redirectTo, client: mobile ? 'mobile' : 'web' })
+    if (browserSecret) {
+      response.cookie(OAUTH_COOKIE, browserSecret, { ...oauthCookieOptions, maxAge: OAUTH_COOKIE_MAX_AGE_MS })
+    }
+    response.redirect(302, google.authorizationUrl(state, codeVerifier))
+  })
 
-  // Registered before '/oauth/:provider' so "callback" is never read as a provider name.
   router.get('/oauth/callback', async (request, response, next) => {
+    const pending = oauthStore.finish(typeof request.query.state === 'string' ? request.query.state : null)
+    const fail = (reason: string) => {
+      response.clearCookie(OAUTH_COOKIE, oauthCookieOptions)
+      if (pending?.client === 'mobile') response.redirect(303, withParam(pending.redirectTo, 'auth_error', reason))
+      else response.redirect(303, '/?auth_error=' + encodeURIComponent(reason))
+    }
     try {
-      let saved: { verifier?: unknown; next?: unknown } = {}
-      try { saved = JSON.parse(readCookie(request, OAUTH_COOKIE) ?? '{}') as typeof saved } catch { saved = {} }
       if (typeof request.query.error === 'string') {
-        oauthFailure(response, request.query.error === 'access_denied' ? 'google_cancelled' : 'google_failed')
+        fail(request.query.error === 'access_denied' ? 'google_cancelled' : 'google_failed')
         return
       }
       const code = typeof request.query.code === 'string' ? request.query.code : ''
-      const verifier = typeof saved.verifier === 'string' ? saved.verifier : ''
-      if (!code || !verifier || !auth.exchangeOAuthCode) {
-        oauthFailure(response, 'google_expired')
+      // A callback that did not start in this browser (or started too long ago) is dropped:
+      // the state is single-use and the web flow also has to present the matching cookie.
+      const sameBrowser = pending?.client === 'mobile' || (pending?.browserSecret && pending.browserSecret === readCookie(request, OAUTH_COOKIE))
+      if (!code || !pending || !sameBrowser || !google || !auth.signInWithIdToken) {
+        fail('google_expired')
         return
       }
       let result: AuthResult
       try {
-        result = await auth.exchangeOAuthCode(code, verifier)
+        const idToken = await google.exchangeCode(code, pending.codeVerifier)
+        result = await auth.signInWithIdToken('google', idToken)
       } catch (error) {
-        console.warn('[auth.oauth] code exchange failed', error instanceof Error ? error.message : error)
-        oauthFailure(response, 'google_failed')
+        console.warn('[auth.google] sign-in failed', error instanceof Error ? error.message : error)
+        fail('google_failed')
         return
       }
       response.clearCookie(OAUTH_COOKIE, oauthCookieOptions)
+      if (pending.client === 'mobile') {
+        // The app collects the session once, over HTTPS, instead of reading it off the URL.
+        const handoff = oauthStore.holdSession({
+          accessToken: result.token,
+          refreshToken: result.refreshToken ?? '',
+          expiresAt: result.expiresAt.getTime(),
+        })
+        response.redirect(303, withParam(pending.redirectTo, 'fitsy_code', handoff))
+        return
+      }
       setSessionCookies(response, result, cookieOptions)
-      response.redirect(303, safeNextPath(saved.next))
+      response.redirect(303, pending.redirectTo)
     } catch (error) {
       next(error)
     }
   })
 
-  router.get('/oauth/:provider', loginIpLimit, (request, response) => {
-    if (request.params.provider !== 'google' || !runtimeConfig.googleAuthEnabled || !auth.createOAuthRequest) {
-      oauthFailure(response, 'google_unavailable')
+  /** Mobile only: trades the one-time hand-off code for the session it belongs to. */
+  router.post('/oauth/session', (request, response) => {
+    const session = oauthStore.claimSession(typeof request.body?.code === 'string' ? request.body.code : null)
+    if (!session) {
+      response.status(400).json({ message: 'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.', code: 'oauth_code_expired' })
       return
     }
-    const { url, codeVerifier } = auth.createOAuthRequest('google')
-    response.cookie(OAUTH_COOKIE, JSON.stringify({ verifier: codeVerifier, next: safeNextPath(request.query.next) }), {
-      ...oauthCookieOptions,
-      maxAge: OAUTH_COOKIE_MAX_AGE_MS,
-    })
-    response.redirect(302, url)
+    response.json(session)
   })
 
   router.post('/register', registerLimit, async (request, response, next) => {

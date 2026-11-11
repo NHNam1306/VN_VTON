@@ -1,4 +1,3 @@
-import { createHash, randomBytes } from 'node:crypto'
 import { createClient, type User } from '@supabase/supabase-js'
 import type { AuthBackend, AuthResult, OAuthProvider } from './auth-backend.js'
 import { AuthError } from './auth-service.js'
@@ -364,37 +363,34 @@ export class SupabaseAuthService implements AuthBackend {
     for (const [cachedToken, entry] of this.verifiedTokens) if (entry.user.id === userId) this.verifiedTokens.delete(cachedToken)
   }
 
-  createOAuthRequest(provider: OAuthProvider): { url: string; codeVerifier: string } {
-    // PKCE: Supabase only exchanges the returned code together with this verifier, so a
-    // code injected into someone else's callback (login CSRF) cannot be redeemed.
-    const codeVerifier = randomBytes(48).toString('base64url')
-    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
-    const url = new URL(`${this.url.replace(/\/+$/, '')}/auth/v1/authorize`)
-    url.searchParams.set('provider', provider)
-    url.searchParams.set('redirect_to', new URL('/api/auth/oauth/callback', this.appBaseUrl).toString())
-    url.searchParams.set('code_challenge', codeChallenge)
-    url.searchParams.set('code_challenge_method', 's256')
-    // Let people pick which Google account to use instead of silently reusing the last one.
-    if (provider === 'google') url.searchParams.set('prompt', 'select_account')
-    return { url: url.toString(), codeVerifier }
-  }
-
-  async exchangeOAuthCode(code: string, codeVerifier: string): Promise<AuthResult> {
-    if (!code || !codeVerifier) throw new AuthError(400, 'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.')
+  /**
+   * Exchanges a Google ID token for a Supabase session. The sign-in itself happened
+   * against Google on our own domain (see `GoogleOAuth`), so the user never sees the
+   * Supabase project host. Supabase validates the token's signature and audience
+   * against the Google client configured on the project.
+   */
+  async signInWithIdToken(provider: OAuthProvider, idToken: string): Promise<AuthResult> {
+    if (!idToken) throw new AuthError(400, 'Không thể đăng nhập bằng Google. Vui lòng thử lại.')
     let response: Response
     try {
-      response = await this.fetch(`${this.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=pkce`, {
+      response = await this.fetch(`${this.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=id_token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', apikey: this.publishableKey },
-        body: JSON.stringify({ auth_code: code, code_verifier: codeVerifier }),
+        body: JSON.stringify({ provider, id_token: idToken }),
       })
     } catch {
       throw new AuthError(502, 'Dịch vụ tài khoản đang gặp sự cố. Vui lòng thử lại sau.')
     }
     const body = await response.json().catch(() => null) as {
       access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number; user?: User
+      error_code?: string; msg?: string; error_description?: string
     } | null
     if (!response.ok || !body?.access_token || !body.refresh_token || !body.user?.id) {
+      console.error('[auth.id-token] Supabase rejected the Google identity', {
+        status: response.status,
+        code: body?.error_code,
+        message: body?.msg ?? body?.error_description,
+      })
       throw new AuthError(400, 'Không thể đăng nhập bằng Google. Vui lòng thử lại.')
     }
     const expiresAt = body.expires_at ?? (body.expires_in ? Math.floor(Date.now() / 1000) + body.expires_in : undefined)

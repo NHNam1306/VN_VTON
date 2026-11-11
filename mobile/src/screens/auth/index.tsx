@@ -55,7 +55,7 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [googleBusy, setGoogleBusy] = useState(false);
-  // Máy chủ bật/tắt nút Google (AUTH_GOOGLE_ENABLED) để không hiện nút khi Supabase chưa cấu hình.
+  // Máy chủ quyết định có nút Google hay không (cần GOOGLE_CLIENT_ID/SECRET).
   const providers = useQuery({
     queryKey: ['auth-providers'],
     queryFn: () => apiRequest<{ google: boolean }>('/api/auth/providers'),
