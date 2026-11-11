@@ -34,7 +34,11 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
   const auth = useAuth();
   const brand = useBrandColors();
   const queryClient = useQueryClient();
-  const [displayName, setDisplayName] = useState(String(auth.user?.user_metadata.display_name ?? ''));
+  const metadata = auth.user?.user_metadata ?? {};
+  const [displayName, setDisplayName] = useState(String(metadata.display_name ?? metadata.full_name ?? metadata.name ?? snapshot.me.name ?? ''));
+  // Tài khoản chỉ đăng nhập bằng Google chưa có mật khẩu, nên không đổi email/mật khẩu bằng "mật khẩu hiện tại" được.
+  const providers: unknown = auth.user?.app_metadata.providers ?? [auth.user?.app_metadata.provider];
+  const hasPassword = Array.isArray(providers) && providers.includes('email');
   const [username, setUsername] = useState(snapshot.me.username);
   const [birthDate, setBirthDate] = useState(snapshot.me.birthDate ?? '');
   const [invitePolicy, setInvitePolicy] = useState<InvitePolicy>(snapshot.me.invitePolicy);
@@ -193,7 +197,11 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
         <Message feedback={accountFeedback} onDismiss={() => setAccountFeedback(null)}/>
       </SettingsCard>
 
-      <SettingsCard title="Địa chỉ email">
+      {!hasPassword && <SettingsCard title="Đăng nhập bằng Google">
+        <AppText variant="subhead">Tài khoản {auth.user?.email} đăng nhập bằng Google nên không có mật khẩu Fitsy. Email và mật khẩu được quản lý trong tài khoản Google của bạn.</AppText>
+      </SettingsCard>}
+
+      {hasPassword && <SettingsCard title="Địa chỉ email">
         <AppText variant="subhead">{auth.user?.email}</AppText>
         <TextField label="Email mới" value={newEmail} onChangeText={setNewEmail} maxLength={254} keyboardType="email-address" autoCapitalize="none" autoCorrect={false}/>
         <TextField label="Mật khẩu hiện tại" value={emailPassword} onChangeText={setEmailPassword} maxLength={128} secureTextEntry autoCapitalize="none" autoComplete="current-password"/>
@@ -202,9 +210,9 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
           changeEmail.mutate();
         }}/>
         <Message feedback={emailFeedback} onDismiss={() => setEmailFeedback(null)}/>
-      </SettingsCard>
+      </SettingsCard>}
 
-      <SettingsCard title="Mật khẩu">
+      {hasPassword && <SettingsCard title="Mật khẩu">
         <TextField label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} maxLength={128} passwordVisible={showPasswords} onTogglePasswordVisible={() => setShowPasswords((value) => !value)} autoCapitalize="none" autoComplete="current-password"/>
         <TextField label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} maxLength={128} passwordVisible={showPasswords} autoCapitalize="none" autoComplete="new-password" placeholder="Tối thiểu 8 ký tự"/>
         <TextField label="Nhập lại mật khẩu" value={confirmPassword} onChangeText={setConfirmPassword} maxLength={128} passwordVisible={showPasswords} autoCapitalize="none" autoComplete="new-password" error={confirmPassword.length > 0 && confirmPassword !== newPassword}/>
@@ -214,7 +222,7 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
           changePassword.mutate();
         }}/>
         <Message feedback={passwordFeedback} onDismiss={() => setPasswordFeedback(null)}/>
-      </SettingsCard>
+      </SettingsCard>}
 
       <SettingsCard title="Quyền riêng tư">
         <AppText variant="caption" style={{ color: colors.label, fontWeight: '700' }}>Ai được gửi lời mời?</AppText>

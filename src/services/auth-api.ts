@@ -11,6 +11,22 @@ const parseError = async (response: Response) => {
 }
 
 export const authApi = {
+  /** Sign-in methods the server has enabled (Google needs AUTH_GOOGLE_ENABLED=true). */
+  async providers(): Promise<{ google: boolean }> {
+    try {
+      const response = await fetch('/api/auth/providers')
+      if (!response.ok) return { google: false }
+      return await response.json() as { google: boolean }
+    } catch {
+      return { google: false }
+    }
+  },
+
+  /** Full-page redirect to Google; the server sets the session cookies on the way back. */
+  startGoogleSignIn(nextPath = '/') {
+    window.location.assign('/api/auth/oauth/google?next=' + encodeURIComponent(nextPath))
+  },
+
   async me(): Promise<AuthUser | null> {
     const response = await fetch('/api/auth/me')
     if (response.status === 401) return null

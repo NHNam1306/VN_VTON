@@ -8,7 +8,7 @@ import {
   ShieldCheck,
   UserRound,
 } from 'lucide-react'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { authApi } from '../services/auth-api'
 import type { AuthUser } from '../types/auth'
 import { BrandLogo } from './brand/BrandMark'
@@ -49,6 +49,24 @@ const readRecoveryState = (): RecoveryState => {
   }
 }
 
+const oauthErrorMessages: Record<string, string> = {
+  google_cancelled: 'Bạn đã huỷ đăng nhập bằng Google.',
+  google_expired: 'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.',
+  google_unavailable: 'Đăng nhập bằng Google hiện chưa được bật.',
+  google_failed: 'Không thể đăng nhập bằng Google. Vui lòng thử lại.',
+}
+
+/** Lỗi máy chủ gửi kèm khi quay về từ Google (`/?auth_error=…`); đọc một lần rồi xoá khỏi URL. */
+const readOAuthError = (): string | null => {
+  const params = new URLSearchParams(window.location.search)
+  const code = params.get('auth_error')
+  if (!code) return null
+  params.delete('auth_error')
+  const query = params.toString()
+  window.history.replaceState(null, '', window.location.pathname + (query ? '?' + query : '') + window.location.hash)
+  return oauthErrorMessages[code] ?? oauthErrorMessages.google_failed
+}
+
 const contentByMode: Record<AuthMode, { eyebrow: string; title?: string; description?: string }> = {
   login: {
     eyebrow: 'Chào mừng trở lại',
@@ -80,7 +98,24 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isResendingConfirmation, setIsResendingConfirmation] = useState(false)
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
-  const [error, setError] = useState<string | null>(recovery.error)
+  const [error, setError] = useState<string | null>(() => recovery.error ?? readOAuthError())
+  const [googleEnabled, setGoogleEnabled] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    void authApi.providers().then((providers) => { if (active) setGoogleEnabled(providers.google) })
+    // Bấm Back từ trang Google: trình duyệt khôi phục trang cũ, nút không được kẹt ở trạng thái đang chuyển.
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) setIsRedirecting(false) }
+    window.addEventListener('pageshow', onPageShow)
+    return () => { active = false; window.removeEventListener('pageshow', onPageShow) }
+  }, [])
+
+  const continueWithGoogle = () => {
+    setError(null)
+    setIsRedirecting(true)
+    authApi.startGoogleSignIn(portal === 'creator' ? '/koc' : '/')
+  }
   const [success, setSuccess] = useState<string | null>(null)
 
   const changeMode = (nextMode: AuthMode) => {
@@ -247,6 +282,16 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
                 {isResendingConfirmation ? 'Đang gửi lại…' : 'Gửi lại email xác minh'}
               </button>
             )}
+
+            {googleEnabled && (mode === 'login' || mode === 'register') && <>
+              <div className="flex items-center gap-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/30" aria-hidden="true">
+                <span className="h-px flex-1 bg-black/[0.08]" />hoặc<span className="h-px flex-1 bg-black/[0.08]" />
+              </div>
+              <button type="button" onClick={continueWithGoogle} disabled={isRedirecting || isSubmitting} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-5 py-3.5 text-sm font-bold text-ink transition hover:border-black/20 hover:bg-black/[0.02] disabled:cursor-wait disabled:opacity-60">
+                {isRedirecting && <LoaderCircle size={17} className="animate-spin" />}
+                {isRedirecting ? 'Đang chuyển tới Google…' : 'Tiếp tục với Google'}
+              </button>
+            </>}
 
             {mode === 'reset' && !recovery.credentials && (
               <button type="button" onClick={() => changeMode('forgot')} className="w-full text-center text-xs font-bold text-sage-700 hover:underline">Yêu cầu liên kết mới</button>

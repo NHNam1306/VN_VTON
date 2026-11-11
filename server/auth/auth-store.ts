@@ -12,7 +12,10 @@ export type AuthUser = {
   status: UserStatus
 }
 
-export type PublicUser = Pick<AuthUser, 'id' | 'email' | 'displayName' | 'createdAt' | 'role' | 'status'>
+export type PublicUser = Pick<AuthUser, 'id' | 'email' | 'displayName' | 'createdAt' | 'role' | 'status'> & {
+  /** False for accounts that only sign in through a social provider (no password to confirm with). */
+  hasPassword?: boolean
+}
 export type CreateAuthUser = Omit<AuthUser, 'role' | 'status'> & Partial<Pick<AuthUser, 'role' | 'status'>>
 
 export class AuthStore {

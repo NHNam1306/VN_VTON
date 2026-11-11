@@ -44,3 +44,4 @@ Desktop.ini
 .gradle/
 .idea/
 settings.gradle.kts
+build/

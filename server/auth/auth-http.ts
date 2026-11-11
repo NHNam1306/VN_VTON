@@ -15,6 +15,16 @@ import {
 
 export const SESSION_COOKIE = 'fitting_room_session'
 export const REFRESH_COOKIE = 'fitting_room_refresh'
+/** Holds the PKCE verifier and post-login path between leaving for Google and the callback. */
+export const OAUTH_COOKIE = 'fitting_room_oauth'
+const OAUTH_COOKIE_PATH = '/api/auth/oauth'
+const OAUTH_COOKIE_MAX_AGE_MS = 10 * 60 * 1000
+
+/** Only same-site paths are allowed after sign-in, never `//host` or absolute URLs (open redirect). */
+const safeNextPath = (value: unknown): string => {
+  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//') || value.startsWith('/\\') || value.startsWith('/api/')) return '/'
+  return value.slice(0, 200)
+}
 
 const readCookie = (request: Request, cookieName: string): string | null => {
   const cookieHeader = request.headers.cookie
@@ -131,6 +141,60 @@ export function createAuthRouter(
     namespace: 'auth.confirmation.account', store: rateLimits, max: 1,
     windowMs: CONFIRMATION_RESEND_WINDOW_MS, key: accountKey,
     message: 'Bạn vừa yêu cầu gửi email. Vui lòng đợi khoảng một phút rồi thử lại.',
+  })
+
+  router.get('/providers', (_request, response) => {
+    response.json({ google: Boolean(runtimeConfig.googleAuthEnabled && auth.createOAuthRequest && auth.exchangeOAuthCode) })
+  })
+
+  const oauthCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: OAUTH_COOKIE_PATH }
+  const oauthFailure = (response: Response, reason: string) => {
+    response.clearCookie(OAUTH_COOKIE, oauthCookieOptions)
+    response.redirect(303, '/?auth_error=' + encodeURIComponent(reason))
+  }
+
+  // Registered before '/oauth/:provider' so "callback" is never read as a provider name.
+  router.get('/oauth/callback', async (request, response, next) => {
+    try {
+      let saved: { verifier?: unknown; next?: unknown } = {}
+      try { saved = JSON.parse(readCookie(request, OAUTH_COOKIE) ?? '{}') as typeof saved } catch { saved = {} }
+      if (typeof request.query.error === 'string') {
+        oauthFailure(response, request.query.error === 'access_denied' ? 'google_cancelled' : 'google_failed')
+        return
+      }
+      const code = typeof request.query.code === 'string' ? request.query.code : ''
+      const verifier = typeof saved.verifier === 'string' ? saved.verifier : ''
+      if (!code || !verifier || !auth.exchangeOAuthCode) {
+        oauthFailure(response, 'google_expired')
+        return
+      }
+      let result: AuthResult
+      try {
+        result = await auth.exchangeOAuthCode(code, verifier)
+      } catch (error) {
+        console.warn('[auth.oauth] code exchange failed', error instanceof Error ? error.message : error)
+        oauthFailure(response, 'google_failed')
+        return
+      }
+      response.clearCookie(OAUTH_COOKIE, oauthCookieOptions)
+      setSessionCookies(response, result, cookieOptions)
+      response.redirect(303, safeNextPath(saved.next))
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  router.get('/oauth/:provider', loginIpLimit, (request, response) => {
+    if (request.params.provider !== 'google' || !runtimeConfig.googleAuthEnabled || !auth.createOAuthRequest) {
+      oauthFailure(response, 'google_unavailable')
+      return
+    }
+    const { url, codeVerifier } = auth.createOAuthRequest('google')
+    response.cookie(OAUTH_COOKIE, JSON.stringify({ verifier: codeVerifier, next: safeNextPath(request.query.next) }), {
+      ...oauthCookieOptions,
+      maxAge: OAUTH_COOKIE_MAX_AGE_MS,
+    })
+    response.redirect(302, url)
   })
 
   router.post('/register', registerLimit, async (request, response, next) => {

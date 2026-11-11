@@ -18,6 +18,8 @@ Người dùng xoá tài khoản trong **Cài đặt → Xóa tài khoản**; ap
 
 Trong Supabase Authentication, thêm `fitsy://auth-callback` và `fitsy://reset-password` vào Redirect URLs để liên kết xác minh email và đặt lại mật khẩu mở lại ứng dụng.
 
+Nút **Tiếp tục với Google** chỉ hiện khi backend bật `AUTH_GOOGLE_ENABLED=true` (xem README gốc). Khi chạy bằng Expo Go, địa chỉ quay về có dạng `exp://…/--/auth-callback`; thêm `exp://**` vào Redirect URLs của Supabase trong lúc phát triển.
+
 ## Kiểm tra
 
 ```bash

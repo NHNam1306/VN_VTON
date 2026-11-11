@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { Redirect } from 'expo-router';
 import { type ComponentRef, useRef, useState } from 'react';
 import {
@@ -16,6 +17,7 @@ import { Notice } from '@/components/notice';
 import { SegmentedControl } from '@/components/segmented-control';
 import { TextField } from '@/components/text-field';
 import { useAuth } from '@/providers/auth-provider';
+import { apiRequest } from '@/services/api-client';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
@@ -52,6 +54,14 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  // Máy chủ bật/tắt nút Google (AUTH_GOOGLE_ENABLED) để không hiện nút khi Supabase chưa cấu hình.
+  const providers = useQuery({
+    queryKey: ['auth-providers'],
+    queryFn: () => apiRequest<{ google: boolean }>('/api/auth/providers'),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
   const [resending, setResending] = useState(false);
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false);
   const [error, setError] = useState<string | null>(auth.configurationError);
@@ -146,6 +156,20 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
       }
     } finally {
       setBusy(false);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    if (googleBusy || busy) return;
+    setGoogleBusy(true);
+    setError(null);
+    setNotice(null);
+    try {
+      await auth.signInWithGoogle();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Không thể đăng nhập bằng Google.');
+    } finally {
+      setGoogleBusy(false);
     }
   };
 
@@ -334,6 +358,22 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
               disabled={Boolean(auth.configurationError)}
               onPress={() => void submit()}
             />
+
+            {providers.data?.google && (mode === 'login' || mode === 'register') && <>
+              <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.separator }}/>
+                <AppText variant="caption">hoặc</AppText>
+                <View style={{ flex: 1, height: 1, backgroundColor: colors.separator }}/>
+              </View>
+              <AppButton
+                title="Tiếp tục với Google"
+                variant="secondary"
+                loading={googleBusy}
+                loadingTitle="Đang mở Google…"
+                disabled={busy || Boolean(auth.configurationError)}
+                onPress={() => void continueWithGoogle()}
+              />
+            </>}
 
             {awaitingConfirmation && (
               <AppButton

@@ -281,6 +281,11 @@ export function SettingsPage({
                 )}
               </SettingsCard>
 
+              {user.hasPassword === false ? (
+                <SettingsCard icon={KeyRound} title="Đăng nhập bằng Google" className="lg:col-span-2">
+                  <p className="text-sm leading-6 text-ink/60">Tài khoản <span className="font-semibold text-ink">{user.email}</span> đăng nhập bằng Google nên không có mật khẩu Fitsy. Email và mật khẩu được quản lý trong tài khoản Google của bạn.</p>
+                </SettingsCard>
+              ) : <>
               <SettingsCard icon={Mail} title="Địa chỉ email">
                 <p className="mb-4 truncate text-sm font-semibold text-ink/60">{user.email}</p>
                 <form onSubmit={(event) => void saveEmail(event)}>
@@ -309,6 +314,7 @@ export function SettingsPage({
                   <button type="submit" disabled={savingPassword || !currentPassword || !newPassword || !confirmPassword} className={`${buttonClass} mt-4`}>{savingPassword && <Loader2 size={13} className="animate-spin" />} Lưu mật khẩu</button>
                 </form>
               </SettingsCard>
+              </>}
 
               <section className="flex flex-col gap-4 rounded-[26px] border border-red-100 bg-red-50/70 p-5 sm:flex-row sm:items-center sm:justify-between lg:col-span-2">
                 <div>

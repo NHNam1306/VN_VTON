@@ -74,6 +74,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `R2_PREFIX` | `uploads` | Tiền tố object để tách môi trường |
 | `R2_PUBLIC_URL` | trống | Tuỳ chọn: domain HTTPS riêng của bucket, được thêm vào CSP `img-src` |
 | `R2_SIGNED_READ_TTL_SECONDS` | `300` | Thời hạn URL ký ngắn hạn khi trình duyệt đọc ảnh R2 (60–3600) |
+| `AUTH_GOOGLE_ENABLED` | `false` | `true` để hiện nút "Tiếp tục với Google" trên web và mobile (cần bật Google provider trong Supabase trước) |
 
 ### AI
 
@@ -163,6 +164,11 @@ Backend gọi Supabase gửi email và frontend chỉ nhận recovery token từ
 
 - Đăng ký bằng tên hiển thị, email và mật khẩu tối thiểu 8 ký tự. Lỗi đăng ký dùng thông báo chung để không lộ email đã tồn tại.
 - Production (`AUTH_BACKEND=supabase`): Supabase Auth quản lý mật khẩu và phiên; backend xác thực access token bằng `getClaims`. Role ứng dụng (`user`, `koc`, `moderator`, `admin`) và trạng thái khoá nằm trong bảng `profiles`.
+- **Đăng nhập bằng Google** (chỉ khi `AUTH_BACKEND=supabase` và `AUTH_GOOGLE_ENABLED=true`):
+  - Web: `GET /api/auth/oauth/google?next=/…` chuyển sang Supabase/Google theo PKCE; verifier nằm trong cookie `HttpOnly` 10 phút; `GET /api/auth/oauth/callback` đổi mã lấy phiên rồi đặt cookie như đăng nhập thường. Lỗi quay về `/?auth_error=…`. `next` chỉ nhận đường dẫn nội bộ.
+  - Mobile: `supabase.auth.signInWithOAuth` + `WebBrowser.openAuthSessionAsync`, quay về `fitsy://auth-callback`.
+  - Tài khoản Google trùng email đã xác minh được Supabase gộp vào tài khoản cũ. Tài khoản chỉ có Google không có mật khẩu nên phần đổi email/mật khẩu được ẩn.
+  - Cấu hình: Google Cloud Console tạo OAuth client (Web application) với Authorized redirect URI `https://<project>.supabase.co/auth/v1/callback`; Supabase → Authentication → Sign In / Providers → Google: dán Client ID/Secret; Supabase → URL Configuration → Redirect URLs thêm `<APP_BASE_URL>/api/auth/oauth/callback`, `fitsy://auth-callback` (và `exp://**` khi thử bằng Expo Go). Chạy migration 010 để tên Google vào `profiles`.
 - Local (`AUTH_BACKEND=local`): mật khẩu băm `scrypt` với salt riêng, chỉ hash token phiên được lưu trong SQLite. Cookie `HttpOnly`, `SameSite=Lax`.
 - Tủ đồ, ảnh người, kết quả và “Bộ đồ của tôi” đều phân vùng theo `user_id`.
 - **Xoá tài khoản** (Cài đặt → Tài khoản, cả web và mobile): xoá tài khoản Supabase Auth; các bảng dữ liệu xoá theo `ON DELETE CASCADE`; ảnh trên R2 được đưa vào hàng đợi dọn dẹp có retry. Đơn thanh toán được giữ lại nhưng ẩn danh (migration 008).

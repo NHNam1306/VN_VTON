@@ -36,5 +36,7 @@ export const runtimeConfig = {
   passwordResetAccountPerWindow: positiveInteger(process.env.AUTH_RESET_ACCOUNT_PER_15_MIN, 5),
   passwordResetIpPerWindow: positiveInteger(process.env.AUTH_RESET_IP_PER_15_MIN, 30),
   legacyDataClaimToken: process.env.LEGACY_DATA_CLAIM_TOKEN?.trim() || undefined,
+  // Show "Continue with Google" only after the Google provider is enabled in Supabase Auth.
+  googleAuthEnabled: process.env.AUTH_GOOGLE_ENABLED === 'true',
   adminEmails: (process.env.ADMIN_EMAILS ?? '').split(',').map(value => value.trim().toLowerCase()).filter(Boolean),
 }

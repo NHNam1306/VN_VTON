@@ -1,5 +1,6 @@
 import type { Session, User } from '@supabase/supabase-js';
 import * as Linking from 'expo-linking';
+import * as WebBrowser from 'expo-web-browser';
 import { createContext, type PropsWithChildren, use, useEffect, useMemo, useState } from 'react';
 import { AppState } from 'react-native';
 
@@ -14,6 +15,7 @@ type AuthContextValue = {
   configurationError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<'signed-in' | 'confirmation-required'>;
+  signInWithGoogle: () => Promise<'signed-in' | 'cancelled'>;
   resendConfirmation: (email: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (password: string) => Promise<void>;
@@ -22,6 +24,13 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/**
+ * Mã PKCE đã/đang được đổi lấy phiên. Sau khi đăng nhập Google, cùng một mã có thể về
+ * hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
+ */
+const consumedCodes = new Set<string>();
+const googleFailure = 'Không thể đăng nhập bằng Google. Vui lòng thử lại.';
 
 export function AuthProvider({ children }: PropsWithChildren) {
   const [ready, setReady] = useState(Boolean(authConfigurationError));
@@ -70,6 +79,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
 
       const code = parsed.queryParams?.code;
       if (typeof code === 'string') {
+        if (consumedCodes.has(code)) return;
+        consumedCodes.add(code);
         const { error } = await supabase.auth.exchangeCodeForSession(code);
         if (error) setLinkError('Liên kết xác thực không hợp lệ hoặc đã hết hạn.');
         return;
@@ -142,6 +153,27 @@ export function AuthProvider({ children }: PropsWithChildren) {
         throw new Error('Chưa thể tạo tài khoản. Hãy kiểm tra thông tin hoặc đăng nhập nếu bạn đã có tài khoản.');
       }
       return data.session ? 'signed-in' : 'confirmation-required';
+    },
+    signInWithGoogle: async () => {
+      const redirectTo = Linking.createURL('auth-callback');
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } },
+      });
+      if (error || !data.url) throw new Error('Chưa thể mở trang đăng nhập Google. Vui lòng thử lại sau.');
+      // Phiên trình duyệt trong app: đóng lại khi Google/Supabase chuyển về `fitsy://auth-callback`.
+      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      if (result.type !== 'success') return 'cancelled';
+      const params = Linking.parse(result.url).queryParams ?? {};
+      if (params.error === 'access_denied') return 'cancelled';
+      if (params.error) throw new Error(googleFailure);
+      const code = params.code;
+      if (typeof code !== 'string') throw new Error(googleFailure);
+      if (consumedCodes.has(code)) return 'signed-in';
+      consumedCodes.add(code);
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+      if (exchangeError) throw new Error(googleFailure);
+      return 'signed-in';
     },
     resendConfirmation: async (email) => {
       const { error } = await supabase.auth.resend({

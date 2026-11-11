@@ -22,7 +22,7 @@ export class AdminService{
     this.bootstrapAdmins=new Set(adminEmails.map(email=>email.trim().toLowerCase()).filter(Boolean))
   }
   async resolveAuthenticatedUser(user:PublicUser):Promise<PublicUser>{
-    const fingerprint=`${user.email}|${user.displayName}|${user.role}`
+    const fingerprint=`${user.email}|${user.displayName}|${user.role}|${user.hasPassword ?? ''}`
     const cached=this.cache.get(user.id)
     if(cached&&cached.fingerprint===fingerprint&&cached.expiresAt>Date.now()){
       if(cached.user.status==='suspended')throw new AuthError(403,'Tài khoản đã bị tạm khoá. Vui lòng liên hệ quản trị viên.')
@@ -32,7 +32,7 @@ export class AdminService{
     // elevate a newly registered account, especially when email confirmation is disabled.
     const trustedBootstrap=user.role==='admin'&&this.bootstrapAdmins.has(user.email.toLowerCase())
     const resolved=await this.repository.syncUser(user,trustedBootstrap)
-    const result:PublicUser={id:resolved.id,email:resolved.email,displayName:resolved.displayName,createdAt:resolved.createdAt,role:resolved.role,status:resolved.status}
+    const result:PublicUser={id:resolved.id,email:resolved.email,displayName:resolved.displayName,createdAt:resolved.createdAt,role:resolved.role,status:resolved.status,...(user.hasPassword===undefined?{}:{hasPassword:user.hasPassword})}
     if(this.cacheTtlMs>0){
       if(this.cache.size>=20_000)this.cache.delete(this.cache.keys().next().value as string)
       this.cache.delete(user.id)

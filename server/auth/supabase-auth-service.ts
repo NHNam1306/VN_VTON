@@ -1,20 +1,40 @@
+import { createHash, randomBytes } from 'node:crypto'
 import { createClient, type User } from '@supabase/supabase-js'
-import type { AuthBackend, AuthResult } from './auth-backend.js'
+import type { AuthBackend, AuthResult, OAuthProvider } from './auth-backend.js'
 import { AuthError } from './auth-service.js'
 import type { PublicUser } from './auth-store.js'
 import type { UserRole } from '../admin/types.js'
 
+/**
+ * Display name from Auth metadata: our own `display_name` first, then the name a social
+ * provider sends (Google: `full_name` / `name`), then the email's local part. Matches
+ * `handle_new_auth_user()` (migration 010) so the API and `profiles` agree.
+ */
+export const displayNameFromMetadata = (metadata: Record<string, unknown> | undefined, email: string): string => {
+  for (const key of ['display_name', 'full_name', 'name']) {
+    const value = metadata?.[key]
+    if (typeof value === 'string' && value.trim().length >= 2) return value.trim().slice(0, 50)
+  }
+  const local = (email.split('@')[0] ?? '').trim().slice(0, 50)
+  return local.length >= 2 ? local : 'Người dùng'
+}
+
+/** Accounts created through Google have no password until they set one. */
+const hasPasswordFrom = (appMetadata: Record<string, unknown> | undefined): boolean | undefined => {
+  const providers = Array.isArray(appMetadata?.providers) ? appMetadata.providers : appMetadata?.provider ? [appMetadata.provider] : null
+  return providers ? providers.includes('email') : undefined
+}
+
 const toPublicUser = (user: User): PublicUser => ({
   id: user.id,
   email: user.email ?? '',
-  displayName: typeof user.user_metadata.display_name === 'string'
-    ? user.user_metadata.display_name
-    : (user.email?.split('@')[0] ?? 'Người dùng'),
+  displayName: displayNameFromMetadata(user.user_metadata, user.email ?? ''),
   createdAt: user.created_at,
   role: (['user', 'koc', 'moderator', 'admin'].includes(String(user.app_metadata.role))
     ? user.app_metadata.role
     : 'user') as UserRole,
   status: 'active',
+  hasPassword: hasPasswordFrom(user.app_metadata),
 })
 
 const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | null => {
@@ -27,9 +47,7 @@ const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | n
   const appMetadata = claims.app_metadata && typeof claims.app_metadata === 'object'
     ? claims.app_metadata as Record<string, unknown>
     : {}
-  const displayName = typeof userMetadata.display_name === 'string' && userMetadata.display_name.trim()
-    ? userMetadata.display_name.trim()
-    : email.split('@')[0] ?? 'Người dùng'
+  const displayName = displayNameFromMetadata(userMetadata, email)
   const roleValue = String(appMetadata.role ?? 'user')
   return {
     id,
@@ -38,6 +56,7 @@ const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | n
     createdAt: new Date((typeof claims.iat === 'number' ? claims.iat : Math.floor(Date.now() / 1000)) * 1000).toISOString(),
     role: (['user', 'koc', 'moderator', 'admin'].includes(roleValue) ? roleValue : 'user') as UserRole,
     status: 'active',
+    hasPassword: hasPasswordFrom(appMetadata),
   }
 }
 
@@ -343,6 +362,43 @@ export class SupabaseAuthService implements AuthBackend {
     const { error } = await this.adminClient.auth.admin.deleteUser(userId)
     if (error) throw new AuthError(502, 'Chưa thể xóa tài khoản. Vui lòng thử lại sau.')
     for (const [cachedToken, entry] of this.verifiedTokens) if (entry.user.id === userId) this.verifiedTokens.delete(cachedToken)
+  }
+
+  createOAuthRequest(provider: OAuthProvider): { url: string; codeVerifier: string } {
+    // PKCE: Supabase only exchanges the returned code together with this verifier, so a
+    // code injected into someone else's callback (login CSRF) cannot be redeemed.
+    const codeVerifier = randomBytes(48).toString('base64url')
+    const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url')
+    const url = new URL(`${this.url.replace(/\/+$/, '')}/auth/v1/authorize`)
+    url.searchParams.set('provider', provider)
+    url.searchParams.set('redirect_to', new URL('/api/auth/oauth/callback', this.appBaseUrl).toString())
+    url.searchParams.set('code_challenge', codeChallenge)
+    url.searchParams.set('code_challenge_method', 's256')
+    // Let people pick which Google account to use instead of silently reusing the last one.
+    if (provider === 'google') url.searchParams.set('prompt', 'select_account')
+    return { url: url.toString(), codeVerifier }
+  }
+
+  async exchangeOAuthCode(code: string, codeVerifier: string): Promise<AuthResult> {
+    if (!code || !codeVerifier) throw new AuthError(400, 'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.')
+    let response: Response
+    try {
+      response = await this.fetch(`${this.url.replace(/\/+$/, '')}/auth/v1/token?grant_type=pkce`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', apikey: this.publishableKey },
+        body: JSON.stringify({ auth_code: code, code_verifier: codeVerifier }),
+      })
+    } catch {
+      throw new AuthError(502, 'Dịch vụ tài khoản đang gặp sự cố. Vui lòng thử lại sau.')
+    }
+    const body = await response.json().catch(() => null) as {
+      access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number; user?: User
+    } | null
+    if (!response.ok || !body?.access_token || !body.refresh_token || !body.user?.id) {
+      throw new AuthError(400, 'Không thể đăng nhập bằng Google. Vui lòng thử lại.')
+    }
+    const expiresAt = body.expires_at ?? (body.expires_in ? Math.floor(Date.now() / 1000) + body.expires_in : undefined)
+    return this.fromSession(body.user, body.access_token, body.refresh_token, expiresAt)
   }
 
   private fromSession(
