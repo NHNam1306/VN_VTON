@@ -794,6 +794,18 @@ export class PostgresSocialStore implements SocialService {
         [outfitId, policy.ownerId, policy.visibility, policy.groupIds, policy.official])
     }
 
+    // Images of deleted posts and image polls go to the durable cleanup queue in the
+    // same transaction. The queue skips anything still referenced elsewhere.
+    const orphanedKeys = uniq([
+      ...posts.removed.flatMap(post => post.imageUrls),
+      ...before.polls.filter(poll => !newPolls.has(poll.id)).flatMap(poll => (poll.imageOptions ?? []).map(option => option.imageUrl)),
+    ].map(imageKeyFromUrl).filter((key): key is string => Boolean(key)))
+    if (orphanedKeys.length) {
+      await client.query(
+        `INSERT INTO storage_cleanup_queue(image_key, reason) SELECT unnest($1::text[]), 'social_content_deleted'
+         ON CONFLICT (image_key) DO NOTHING`, [orphanedKeys])
+    }
+
     for (const report of diffKeys(before.reports, after.reports, report => report.id).added) {
       await client.query('INSERT INTO user_reports(id, reporter_id, target_id, reason, created_at) VALUES($1,$2,$3,$4,$5)', [report.id, report.from, report.target, report.reason, ts(report.createdAt)])
     }

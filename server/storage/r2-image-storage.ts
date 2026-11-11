@@ -34,6 +34,10 @@ export class R2ImageStorage implements ImageStorage {
       region: 'auto',
       endpoint: `https://${options.accountId}.r2.cloudflarestorage.com`,
       credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
+      // Fail (and let the SDK retry) instead of leaving an upload or delete hanging
+      // on a stalled connection.
+      maxAttempts: 3,
+      requestHandler: { connectionTimeout: 5_000, requestTimeout: 30_000 },
     })
   }
 

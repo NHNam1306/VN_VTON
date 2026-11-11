@@ -11,14 +11,14 @@ export class PostgresAdminRepository implements AdminRepository{
   async syncUser(user:PublicUser,bootstrapAdmin:boolean):Promise<AdminUser>{const result=await this.pool.query<UserRow>(`WITH synced AS (
     INSERT INTO profiles(id,email,display_name,created_at,role,status,last_seen_at)
     VALUES($1,$2,$3,$4,$5,'active',now())
+    -- email and display_name of an existing profile are kept in sync by the
+    -- auth.users trigger (migration 001). They are not copied from the access
+    -- token here: a token issued before a rename still carries the old name for
+    -- up to an hour and would keep writing it back over the new one.
     ON CONFLICT(id) DO UPDATE SET
-      email=EXCLUDED.email,
-      display_name=EXCLUDED.display_name,
       last_seen_at=CASE WHEN profiles.last_seen_at IS NULL OR profiles.last_seen_at < now()-interval '10 minutes' THEN now() ELSE profiles.last_seen_at END,
       role=CASE WHEN $6 THEN 'admin' ELSE profiles.role END
-    WHERE profiles.email IS DISTINCT FROM EXCLUDED.email
-       OR profiles.display_name IS DISTINCT FROM EXCLUDED.display_name
-       OR profiles.last_seen_at IS NULL
+    WHERE profiles.last_seen_at IS NULL
        OR profiles.last_seen_at < now()-interval '10 minutes'
        OR ($6 AND profiles.role <> 'admin')
     RETURNING id,email,display_name,role,status,credit_balance,subscription_plan,created_at,last_seen_at

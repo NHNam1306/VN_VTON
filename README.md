@@ -57,6 +57,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `TRUST_PROXY_HOPS` | trống | Số proxy tin cậy; Render đặt `1` |
 | `ADMIN_EMAILS` | trống | Email được phép bootstrap admin; tài khoản còn phải có `app_metadata.role = admin` trên Supabase |
 | `LEGACY_DATA_CLAIM_TOKEN` | trống | Token một lần để account đầu tiên claim dữ liệu bản cũ; xoá sau migration |
+| `ALLOW_LOCAL_BACKENDS` | trống | Khi `NODE_ENV=production`, server từ chối khởi động với `sqlite`/`local` (dữ liệu mất sau mỗi lần deploy). Đặt `true` chỉ khi cố ý chạy thử như vậy |
 
 ### Supabase và R2 (production)
 
@@ -64,6 +65,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | --- | --- | --- |
 | `DATABASE_URL` | trống | URI pooler của Supabase, thêm `sslmode=require` |
 | `DATABASE_POOL_MAX` | `5` | Số kết nối tối đa mỗi tiến trình (1–20) |
+| `DATABASE_QUERY_TIMEOUT_MS` | `20000` | Thời hạn mỗi query; query treo báo lỗi thay vì giữ kết nối |
 | `DATABASE_CA_CERT_BASE64` | trống | Base64 của Supabase database CA để xác minh TLS |
 | `SUPABASE_URL` | trống | Project URL |
 | `SUPABASE_PUBLISHABLE_KEY` | trống | Publishable key cho Supabase Auth phía backend (`SUPABASE_ANON_KEY` cũng được nhận) |
@@ -84,9 +86,9 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `OPENROUTER_IMAGE_RESOLUTION` | `768` | Độ phân giải output |
 | `OPENROUTER_IMAGE_ASPECT_RATIO` | `4:5` | Tỷ lệ ảnh toàn thân |
 | `OPENROUTER_TIMEOUT_MS` | `120000` | Timeout mỗi request OpenRouter |
-| `AI_MAX_CONCURRENCY` | `1` | Số request tạo ảnh chạy song song mỗi tiến trình |
-| `AI_MAX_WAITING_REQUESTS` | `8` (Render đặt `4`) | Số request được xếp hàng; vượt thì trả 503 `ai_queue_busy` |
-| `AI_QUEUE_TIMEOUT_MS` | `30000` | Thời gian chờ tối đa trong hàng |
+| `AI_MAX_CONCURRENCY` | `1` (Render đặt `3`) | Số request tạo ảnh chạy song song mỗi tiến trình |
+| `AI_MAX_WAITING_REQUESTS` | `8` (Render đặt `12`) | Số request được xếp hàng; vượt thì trả 503 `ai_queue_busy` |
+| `AI_QUEUE_TIMEOUT_MS` | `30000` (Render đặt `60000`) | Thời gian chờ tối đa trong hàng |
 | `AI_DAILY_REQUEST_LIMIT` | trống (tắt) | Trần tổng request AI (tách đồ + tạo ảnh) của cả hệ thống mỗi 24 giờ |
 | `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL`, `GEMINI_TIMEOUT_MS` | trống, `gemini-3.1-flash-image`, `120000` | Khi dùng Gemini |
 | `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock |

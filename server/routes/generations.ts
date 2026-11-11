@@ -9,6 +9,7 @@ import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore }
 import type { CreditService } from '../credits/credit-service.js'
 import type { PlanService } from '../plans/plan-service.js'
 import { pageMetadata, parsePagination } from '../http/pagination.js'
+import { discardImages, ImmediateStorageCleanup, type StorageCleanup } from '../storage/storage-cleanup.js'
 
 export const MAX_GARMENTS_PER_GENERATION = 8
 export const MAX_SAVED_OUTFITS_PER_USER = 10
@@ -21,6 +22,7 @@ export function createGenerationRouter(
   credits: CreditService,
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
   plans?: PlanService,
+  cleanup: StorageCleanup = new ImmediateStorageCleanup(images),
 ) {
   const router = Router()
   const aiRateLimit = createFixedWindowRateLimit({
@@ -96,7 +98,7 @@ export function createGenerationRouter(
         .filter((key) => !currentKeys.has(key))
       const savedChecks = await Promise.all(candidateKeys.map((key) => userData.isImageKeySaved(userId, key)))
       const unusedKeys = candidateKeys.filter((_key, index) => !savedChecks[index])
-      await Promise.all(unusedKeys.map((key) => images.delete(key)))
+      await discardImages(cleanup, unusedKeys, 'outfit_deleted')
       response.json({ deleted: true })
     } catch (error) {
       next(error)
@@ -202,15 +204,28 @@ export function createGenerationRouter(
         createdAt: new Date().toISOString(),
       }
       const previousImageKey = previousResults.find((item) => item.angle === angle)?.imageKey
-      await userData.upsertTryOnResult(userId, result)
+      try {
+        await userData.upsertTryOnResult(userId, result)
+      } catch (storeError) {
+        // The image was generated but could not be recorded, so the user never
+        // receives it: give the credit back and drop the orphaned file.
+        await discardImages(cleanup, [result.imageKey], 'generation_not_recorded')
+        try {
+          await credits.refund(request.authUser, reservation)
+        } catch (refundError) {
+          console.error('Không thể hoàn credit sau khi lưu kết quả thất bại:', refundError)
+        }
+        throw storeError
+      }
       if (previousImageKey && previousImageKey !== result.imageKey && !(await userData.isImageKeySaved(userId, previousImageKey))) {
-        await images.delete(previousImageKey)
+        await discardImages(cleanup, [previousImageKey], 'try_on_replaced')
       }
 
+      let outfitSaved = true
       if (angle === 'front') {
         const staleBackImageKey = await userData.deleteTryOnResult(userId, 'back')
         if (staleBackImageKey && !(await userData.isImageKeySaved(userId, staleBackImageKey))) {
-          await images.delete(staleBackImageKey)
+          await discardImages(cleanup, [staleBackImageKey], 'try_on_replaced')
         }
         const saved = await userData.saveOutfitIfBelowLimit(userId, {
           id: randomUUID(),
@@ -221,10 +236,9 @@ export function createGenerationRouter(
           garmentIds,
           createdAt: result.createdAt,
         }, maxOutfits)
-        if (!saved) {
-          response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxOutfits} outfit.` })
-          return
-        }
+        // The image is already the current result and the credit is spent, so it is
+        // still returned; only the copy in "Bộ đồ của tôi" is skipped when the plan is full.
+        if (!saved) outfitSaved = false
       } else {
         const front = (await userData.listTryOnResults(userId)).find((item) => item.angle === 'front')
         if (front) {
@@ -238,14 +252,12 @@ export function createGenerationRouter(
             garmentIds,
             createdAt: result.createdAt,
           }, maxOutfits)
-          if (!saved) {
-            response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxOutfits} outfit.` })
-            return
-          }
+          if (!saved) outfitSaved = false
         }
       }
       response.json({
         ...toResponse(result),
+        outfitSaved,
         credits: await credits.status(request.authUser),
       })
     } catch (error) {

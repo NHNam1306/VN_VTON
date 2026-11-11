@@ -4,7 +4,7 @@
 
 1. **Trần theo IP** (RAM): mọi `/api/*` trừ health check đi qua token bucket theo IP, mặc định gấp 4 giới hạn của một phiên. Tầng này luôn áp dụng, nên gửi token giả đổi liên tục không tạo được bucket mới để vượt giới hạn.
 2. **Bucket theo phiên** (RAM): request có Bearer token hoặc cookie phiên được tính theo phiên đó; chưa đăng nhập thì theo IP. Nhờ vậy nhiều người dùng thật chung một IP nhà mạng (CGNAT) không chặn lẫn nhau. Hai tầng RAM rất nhanh, không ghi database, giới hạn theo từng instance.
-3. **Fixed window trong PostgreSQL**: đăng ký, đăng nhập, quên mật khẩu, tạo ảnh (`ai.generate.user`, theo user) và tách đồ bằng AI (`ai.extract.user`, theo user + IP). Câu lệnh upsert atomic nên nhiều Render instance dùng chung quota. Admin không bị giới hạn tạo ảnh.
+3. **Fixed window trong PostgreSQL**: đăng ký, đăng nhập, quên mật khẩu, tạo đơn thanh toán (10 đơn/giờ mỗi tài khoản), tạo ảnh (`ai.generate.user`, theo user) và tách đồ bằng AI (`ai.extract.user`, theo user + IP). Câu lệnh upsert atomic nên nhiều Render instance dùng chung quota. Admin không bị giới hạn tạo ảnh.
 4. **Trần AI toàn hệ thống** (tuỳ chọn): `AI_DAILY_REQUEST_LIMIT` đếm tổng request tạo ảnh + tách đồ của mọi người dùng trong 24 giờ, dùng chung bộ đếm PostgreSQL. Bỏ trống thì tắt.
 5. **Hàng đợi AI**: mỗi tiến trình chạy tối đa `AI_MAX_CONCURRENCY` request tới provider, xếp hàng tối đa `AI_MAX_WAITING_REQUESTS`, chờ tối đa `AI_QUEUE_TIMEOUT_MS`. Đầy hoặc quá hạn thì trả HTTP 503 mã `ai_queue_busy` và hoàn credit.
 
@@ -29,9 +29,9 @@ Các biến có thể tinh chỉnh:
 | `AUTH_RESET_IP_PER_15_MIN` | 30 | Email/reset từ một IP |
 | `AI_REQUESTS_PER_15_MIN` | 10 | Lượt tạo ảnh, và riêng lượt tách đồ, cho một user |
 | `AI_DAILY_REQUEST_LIMIT` | trống (tắt) | Tổng request AI của cả hệ thống mỗi 24 giờ |
-| `AI_MAX_CONCURRENCY` | 1 | Request AI chạy song song mỗi tiến trình |
-| `AI_MAX_WAITING_REQUESTS` | 8 (Render đặt 4) | Request AI được xếp hàng mỗi tiến trình |
-| `AI_QUEUE_TIMEOUT_MS` | 30000 | Thời gian chờ tối đa trong hàng |
+| `AI_MAX_CONCURRENCY` | 1 (Render đặt 3) | Request AI chạy song song mỗi tiến trình |
+| `AI_MAX_WAITING_REQUESTS` | 8 (Render đặt 12) | Request AI được xếp hàng mỗi tiến trình |
+| `AI_QUEUE_TIMEOUT_MS` | 30000 (Render đặt 60000) | Thời gian chờ tối đa trong hàng |
 
 Phản hồi bị chặn bởi rate limit có HTTP 429, `Retry-After`, `RateLimit-*`, `X-RateLimit-*` và mã `rate_limit_exceeded`.
 

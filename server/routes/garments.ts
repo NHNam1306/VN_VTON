@@ -14,6 +14,7 @@ import { pageMetadata, parsePagination } from '../http/pagination.js'
 import type { CreditService } from '../credits/credit-service.js'
 import type { CreditReservation } from '../credits/types.js'
 import { AuthError } from '../auth/auth-service.js'
+import { discardImages, ImmediateStorageCleanup, type StorageCleanup } from '../storage/storage-cleanup.js'
 
 const upload = createImageUpload(4)
 export const MAX_GARMENTS_PER_USER = 20
@@ -46,6 +47,7 @@ export function createGarmentRouter(
   plans?: PlanService,
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
   credits?: CreditService,
+  cleanup: StorageCleanup = new ImmediateStorageCleanup(images),
 ) {
   const router = Router()
   const singleUpload = upload.single('file')
@@ -163,7 +165,7 @@ export function createGarmentRouter(
           }
           const created = await repository.createIfBelowLimit(record, maxItems)
           if (!created) {
-            await images.delete(key)
+            await discardImages(cleanup, [key], 'wardrobe_limit_reached')
             continue
           }
           garments.push(toResponse(created, images))
@@ -230,34 +232,44 @@ export function createGarmentRouter(
           .map((file) => validateImageContent(file)),
       )
 
-      const save = async (file: Express.Multer.File) => {
+      const save = async (file: Express.Multer.File | undefined) => {
+        if (!file) return null
         const key = await images.save(file.buffer, file.mimetype)
         savedKeys.push(key)
         return key
       }
+
+      // Encode and upload the (up to four) images together instead of one after another.
+      const uploads = await Promise.allSettled([save(frontOriginal), save(frontProcessed), save(backOriginal), save(backProcessed)])
+      const failedUpload = uploads.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+      if (failedUpload) throw failedUpload.reason
+      const [frontOriginalKey, frontProcessedKey, backOriginalKey, backProcessedKey] = uploads
+        .map((result) => (result as PromiseFulfilledResult<string | null>).value)
 
       const record: GarmentRecord = {
         id: randomUUID(),
         userId: request.authUser.id,
         name,
         category,
-        frontOriginalKey: await save(frontOriginal),
-        frontProcessedKey: await save(frontProcessed),
-        backOriginalKey: backOriginal ? await save(backOriginal) : null,
-        backProcessedKey: backProcessed ? await save(backProcessed) : null,
+        frontOriginalKey: frontOriginalKey!,
+        frontProcessedKey: frontProcessedKey!,
+        backOriginalKey: backOriginalKey ?? null,
+        backProcessedKey: backProcessedKey ?? null,
         createdAt: new Date().toISOString(),
       }
 
       const created = await repository.createIfBelowLimit(record, maxItems)
       if (!created) {
-        await Promise.all(savedKeys.map((key) => images.delete(key)))
+        await discardImages(cleanup, savedKeys, 'wardrobe_limit_reached')
         savedKeys.length = 0
         response.status(409).json({ message: `Gói hiện tại lưu tối đa ${maxItems} món trong tủ đồ.` })
         return
       }
+      // The garment row now references these images; a later failure must not remove them.
+      savedKeys.length = 0
       response.status(201).json(toResponse(record, images))
     } catch (error) {
-      await Promise.all(savedKeys.map((key) => images.delete(key)))
+      await discardImages(cleanup, savedKeys, 'garment_upload_failed')
       next(error)
     }
   })
@@ -306,7 +318,7 @@ export function createGarmentRouter(
         garment.backOriginalKey,
         garment.backProcessedKey,
       ].filter((key): key is string => Boolean(key)))]
-      await Promise.all(keys.map((key) => images.delete(key)))
+      await discardImages(cleanup, keys, 'garment_deleted')
       response.status(204).end()
     } catch (error) {
       next(error)

@@ -1,10 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { type ComponentProps, type ReactNode, useState } from 'react';
-import { Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
+import { type ReactNode, useState } from 'react';
+import { ActivityIndicator, Alert, ScrollView, View } from 'react-native';
 
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
+import { Notice } from '@/components/notice';
+import { PressableScale } from '@/components/pressable-scale';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
+import { TextField } from '@/components/text-field';
 import { useAuth } from '@/providers/auth-provider';
 import { apiRequest } from '@/services/api-client';
 import { supabase } from '@/services/supabase';
@@ -23,7 +26,7 @@ export default function SettingsRoute() {
     queryFn: () => apiRequest<SocialSnapshot>('/api/social'),
   });
   if (social.error) return <ScreenError message={errorMessage(social.error, 'Không thể tải cài đặt.')} onRetry={() => void social.refetch()}/>;
-  if (social.data === undefined) return <ScreenLoading label="Đang tải cài đặt…"/>;
+  if (social.data === undefined) return <ScreenLoading variant="cards" label="Đang tải cài đặt…"/>;
   return <SettingsContent snapshot={social.data}/>;
 }
 
@@ -45,6 +48,7 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
   const [emailFeedback, setEmailFeedback] = useState<Feedback>(null);
   const [passwordFeedback, setPasswordFeedback] = useState<Feedback>(null);
   const [privacyFeedback, setPrivacyFeedback] = useState<Feedback>(null);
+  const [showPasswords, setShowPasswords] = useState(false);
   const syncSocialFields = (next: SocialSnapshot) => {
     setUsername(next.me.username);
     setBirthDate(next.me.birthDate ?? '');
@@ -153,6 +157,7 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
       body: JSON.stringify({ targetId }),
     }),
     onSuccess: (snapshot) => queryClient.setQueryData(['social'], snapshot),
+    onError: (error) => setPrivacyFeedback({ tone: 'error', text: errorMessage(error, 'Không thể bỏ chặn.') }),
   });
 
   const nameValid = displayName.trim().length >= 2 && displayName.trim().length <= 50;
@@ -166,14 +171,14 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
       keyboardShouldPersistTaps="handled"
       contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xxl, gap: spacing.md, backgroundColor: colors.background }}>
       <SettingsCard title="Hồ sơ">
-        <Field label="Tên hiển thị" value={displayName} onChangeText={setDisplayName} maxLength={50} autoCapitalize="words"/>
+        <TextField label="Tên hiển thị" value={displayName} onChangeText={setDisplayName} maxLength={50} autoCapitalize="words"/>
         <AppButton title="Lưu tên" loading={updateName.isPending} disabled={!nameValid} onPress={() => {
           setAccountFeedback(null);
           updateName.mutate();
         }}/>
         <View style={{ height: 1, backgroundColor: colors.separator }}/>
-        <Field label="Username" value={username} onChangeText={setUsername} maxLength={40} autoCapitalize="none" autoCorrect={false}/>
-        <Field
+        <TextField label="Username" value={username} onChangeText={setUsername} maxLength={40} autoCapitalize="none" autoCorrect={false}/>
+        <TextField
           label="Ngày sinh (YYYY-MM-DD)"
           value={birthDate}
           onChangeText={setBirthDate}
@@ -185,29 +190,30 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
           setAccountFeedback(null);
           saveSocialProfile.mutate();
         }}/>
-        <Message feedback={accountFeedback}/>
+        <Message feedback={accountFeedback} onDismiss={() => setAccountFeedback(null)}/>
       </SettingsCard>
 
       <SettingsCard title="Địa chỉ email">
         <AppText variant="subhead">{auth.user?.email}</AppText>
-        <Field label="Email mới" value={newEmail} onChangeText={setNewEmail} maxLength={254} keyboardType="email-address" autoCapitalize="none" autoCorrect={false}/>
-        <Field label="Mật khẩu hiện tại" value={emailPassword} onChangeText={setEmailPassword} maxLength={128} secureTextEntry autoCapitalize="none"/>
+        <TextField label="Email mới" value={newEmail} onChangeText={setNewEmail} maxLength={254} keyboardType="email-address" autoCapitalize="none" autoCorrect={false}/>
+        <TextField label="Mật khẩu hiện tại" value={emailPassword} onChangeText={setEmailPassword} maxLength={128} secureTextEntry autoCapitalize="none" autoComplete="current-password"/>
         <AppButton title="Đổi email" loading={changeEmail.isPending} disabled={!emailValid} onPress={() => {
           setEmailFeedback(null);
           changeEmail.mutate();
         }}/>
-        <Message feedback={emailFeedback}/>
+        <Message feedback={emailFeedback} onDismiss={() => setEmailFeedback(null)}/>
       </SettingsCard>
 
       <SettingsCard title="Mật khẩu">
-        <Field label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} maxLength={128} secureTextEntry autoCapitalize="none"/>
-        <Field label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} maxLength={128} secureTextEntry autoCapitalize="none"/>
-        <Field label="Nhập lại mật khẩu" value={confirmPassword} onChangeText={setConfirmPassword} maxLength={128} secureTextEntry autoCapitalize="none"/>
+        <TextField label="Mật khẩu hiện tại" value={currentPassword} onChangeText={setCurrentPassword} maxLength={128} passwordVisible={showPasswords} onTogglePasswordVisible={() => setShowPasswords((value) => !value)} autoCapitalize="none" autoComplete="current-password"/>
+        <TextField label="Mật khẩu mới" value={newPassword} onChangeText={setNewPassword} maxLength={128} passwordVisible={showPasswords} autoCapitalize="none" autoComplete="new-password" placeholder="Tối thiểu 8 ký tự"/>
+        <TextField label="Nhập lại mật khẩu" value={confirmPassword} onChangeText={setConfirmPassword} maxLength={128} passwordVisible={showPasswords} autoCapitalize="none" autoComplete="new-password" error={confirmPassword.length > 0 && confirmPassword !== newPassword}/>
+        {confirmPassword.length > 0 && confirmPassword !== newPassword && <AppText variant="caption" style={{ color: colors.destructive }}>Mật khẩu nhập lại chưa khớp.</AppText>}
         <AppButton title="Lưu mật khẩu" loading={changePassword.isPending} disabled={!passwordValid} onPress={() => {
           setPasswordFeedback(null);
           changePassword.mutate();
         }}/>
-        <Message feedback={passwordFeedback}/>
+        <Message feedback={passwordFeedback} onDismiss={() => setPasswordFeedback(null)}/>
       </SettingsCard>
 
       <SettingsCard title="Quyền riêng tư">
@@ -234,7 +240,7 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
           setPrivacyFeedback(null);
           savePrivacy.mutate();
         }}/>
-        <Message feedback={privacyFeedback}/>
+        <Message feedback={privacyFeedback} onDismiss={() => setPrivacyFeedback(null)}/>
       </SettingsCard>
 
       <SettingsCard title="Danh sách đã chặn">
@@ -246,21 +252,28 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
                 <AppText variant="headline">{person.name}</AppText>
                 <AppText variant="caption">@{person.username}</AppText>
               </View>
-              <Pressable
+              <PressableScale
                 accessibilityRole="button"
+                accessibilityLabel={'Bỏ chặn ' + person.name}
                 disabled={unblock.isPending}
                 onPress={() => unblock.mutate(person.id)}
-                style={({ pressed }) => ({
+                scaleTo={0.94}
+                style={{
+                  minWidth: 84,
+                  minHeight: 36,
+                  alignItems: 'center',
+                  justifyContent: 'center',
                   paddingHorizontal: spacing.md,
-                  paddingVertical: spacing.sm,
                   borderWidth: 1,
                   borderColor: colors.separator,
                   borderRadius: radius.full,
                   backgroundColor: colors.surface,
-                  opacity: pressed ? 0.65 : 1,
-                })}>
-                <AppText variant="caption" style={{ color: brand.primary, fontWeight: '800' }}>Bỏ chặn</AppText>
-              </Pressable>
+                  opacity: unblock.isPending && unblock.variables !== person.id ? 0.5 : 1,
+                }}>
+                {unblock.isPending && unblock.variables === person.id
+                  ? <ActivityIndicator size="small" color={brand.primary}/>
+                  : <AppText selectable={false} variant="caption" style={{ color: brand.primary, fontWeight: '800' }}>Bỏ chặn</AppText>}
+              </PressableScale>
             </View>
           ))}
       </SettingsCard>
@@ -294,29 +307,6 @@ function SettingsCard({ title, children }: { title: string; children: ReactNode 
   );
 }
 
-function Field({ label, ...props }: ComponentProps<typeof TextInput> & { label: string }) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <AppText variant="caption" style={{ color: colors.label, fontWeight: '700' }}>{label}</AppText>
-      <TextInput
-        {...props}
-        placeholderTextColor={colors.secondaryLabel}
-        style={{
-          minHeight: 50,
-          paddingHorizontal: spacing.md,
-          borderWidth: 1,
-          borderColor: colors.separator,
-          borderRadius: radius.lg,
-          borderCurve: 'continuous',
-          color: colors.label,
-          backgroundColor: props.editable === false ? colors.groupedBackground : colors.surface,
-          fontSize: 16,
-        }}
-      />
-    </View>
-  );
-}
-
 function ChoiceRow<T extends string>({
   value,
   choices,
@@ -331,36 +321,31 @@ function ChoiceRow<T extends string>({
       {choices.map(([choice, label]) => {
         const selected = value === choice;
         return (
-          <Pressable
+          <PressableScale
             key={choice}
             accessibilityRole="radio"
             accessibilityState={{ selected }}
             onPress={() => onChange(choice)}
-            style={({ pressed }) => ({
+            scaleTo={0.95}
+            style={{
               paddingHorizontal: spacing.md,
               paddingVertical: 10,
               borderWidth: 1,
               borderColor: selected ? colors.label : colors.separator,
               borderRadius: radius.full,
               backgroundColor: selected ? colors.label : colors.surface,
-              opacity: pressed ? 0.7 : 1,
-            })}>
-            <AppText variant="caption" style={{ color: selected ? colors.onBrand : colors.label, fontWeight: '700' }}>{label}</AppText>
-          </Pressable>
+            }}>
+            <AppText selectable={false} variant="caption" style={{ color: selected ? colors.onBrand : colors.label, fontWeight: '700' }}>{label}</AppText>
+          </PressableScale>
         );
       })}
     </View>
   );
 }
 
-function Message({ feedback }: { feedback: Feedback }) {
+function Message({ feedback, onDismiss }: { feedback: Feedback; onDismiss: () => void }) {
   if (!feedback) return null;
-  const error = feedback.tone === 'error';
-  return (
-    <View accessibilityRole="alert" style={{ padding: spacing.md, borderRadius: radius.md, backgroundColor: error ? colors.destructiveBackground : colors.successBackground }}>
-      <AppText variant="subhead" style={{ color: error ? colors.destructive : colors.success, fontWeight: '600' }}>{feedback.text}</AppText>
-    </View>
-  );
+  return <Notice key={feedback.text} tone={feedback.tone} text={feedback.text} onDismiss={feedback.tone === 'success' ? onDismiss : undefined} autoHideMs={feedback.tone === 'success' ? 4000 : undefined}/>;
 }
 
 function errorMessage(error: unknown, fallback: string) {

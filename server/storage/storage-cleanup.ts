@@ -9,6 +9,20 @@ export interface StorageCleanup {
   stop?(): void
 }
 
+/**
+ * Best-effort removal of images that are no longer needed. Never throws: a
+ * storage hiccup must not fail a request whose database work already succeeded.
+ */
+export const discardImages = async (cleanup: StorageCleanup, keys: Iterable<string | null | undefined>, reason: string): Promise<void> => {
+  const unique = [...new Set(keys)].filter((key): key is string => Boolean(key))
+  if (!unique.length) return
+  try {
+    await cleanup.enqueue(unique, reason)
+  } catch (error) {
+    console.error(`[storage.cleanup] Could not schedule ${unique.length} objects (${reason}):`, toError(error))
+  }
+}
+
 const MAX_ATTEMPTS = 12
 const BATCH_SIZE = 50
 const toError = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 500)

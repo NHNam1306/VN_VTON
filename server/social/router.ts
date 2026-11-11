@@ -3,6 +3,7 @@ import sharp from 'sharp'
 import { createImageUpload, validateImageContent } from '../http/image-upload.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { SocialService } from './social-service.js'
+import { discardImages, ImmediateStorageCleanup, type StorageCleanup } from '../storage/storage-cleanup.js'
 
 const avatarUpload = createImageUpload(1).single('avatar')
 const postUpload = createImageUpload(3).array('images', 3)
@@ -11,7 +12,11 @@ const imageKeyFromUrl = (value: string) => {
   try { return decodeURIComponent(value.slice('/uploads/'.length)) } catch { return null }
 }
 
-export function createSocialRouter(store: SocialService, images: ImageStorage) {
+export function createSocialRouter(
+  store: SocialService,
+  images: ImageStorage,
+  cleanup: StorageCleanup = new ImmediateStorageCleanup(images),
+) {
   const router = Router()
   router.use((_req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next() })
   router.get('/', async (req,res,next) => { try { res.json(await store.snapshot(req.authUser.id)) } catch (error) { next(error) } })
@@ -41,10 +46,31 @@ export function createSocialRouter(store: SocialService, images: ImageStorage) {
         defaultVisibility: before.me.defaultVisibility,
       })
       const oldKey = imageKeyFromUrl(before.me.avatar)
-      if (oldKey && oldKey !== savedKey) await images.delete(oldKey).catch(() => undefined)
+      if (oldKey && oldKey !== savedKey) await discardImages(cleanup, [oldKey], 'avatar_replaced')
+      savedKey = null
       res.json(updated)
     } catch (error) {
-      if (savedKey) await images.delete(savedKey).catch(() => undefined)
+      await discardImages(cleanup, [savedKey], 'avatar_upload_failed')
+      next(error)
+    }
+  })
+  router.delete('/avatar', async (req,res,next) => {
+    try {
+      const before = await store.snapshot(req.authUser.id)
+      if (!before.me.avatar) {
+        res.json(before)
+        return
+      }
+      const updated = await store.act(req.authUser.id, 'settings', {
+        username: before.me.username,
+        avatar: '',
+        invitePolicy: before.me.invitePolicy,
+        defaultVisibility: before.me.defaultVisibility,
+      })
+      const oldKey = imageKeyFromUrl(before.me.avatar)
+      await discardImages(cleanup, [oldKey], 'avatar_removed')
+      res.json(updated)
+    } catch (error) {
       next(error)
     }
   })
@@ -79,9 +105,10 @@ export function createSocialRouter(store: SocialService, images: ImageStorage) {
         groupIds:parseIds(req.body?.groupIds),
         recipientIds:parseIds(req.body?.recipientIds),
       })
+      savedKeys.length = 0
       res.json(updated)
     } catch (error) {
-      await Promise.all(savedKeys.map(key => images.delete(key).catch(() => undefined)))
+      await discardImages(cleanup, savedKeys, 'post_upload_failed')
       next(error)
     }
   })
@@ -91,7 +118,7 @@ export function createSocialRouter(store: SocialService, images: ImageStorage) {
       const post = before.posts.find(item => item.id === req.body?.id && item.owner.id === req.authUser.id)
         ?? before.creatorFeed.find(item => item.id === req.body?.id && item.owner.id === req.authUser.id)
       const updated = await store.act(req.authUser.id, 'post-delete', req.body ?? {})
-      await Promise.all((post?.imageUrls ?? []).map(imageKeyFromUrl).filter((key): key is string => Boolean(key)).map(key => images.delete(key).catch(() => undefined)))
+      await discardImages(cleanup, (post?.imageUrls ?? []).map(imageKeyFromUrl), 'post_deleted')
       res.json(updated)
     } catch (error) { next(error) }
   })

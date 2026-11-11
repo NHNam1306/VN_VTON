@@ -185,8 +185,8 @@ export class OpenRouterImageProvider implements ImageProvider {
 
     try {
       return await aiImageSemaphore.run(async () => {
-        const images: LoadedImage[] = []
-        for (const url of referenceUrls) images.push(await this.loadImage(url))
+        // Read and re-encode the reference images together; the order is preserved.
+        const images: LoadedImage[] = await Promise.all(referenceUrls.map((url) => this.loadImage(url)))
         const response = await this.fetchImpl(OPENROUTER_IMAGE_API_URL, {
         method: 'POST',
         headers: {

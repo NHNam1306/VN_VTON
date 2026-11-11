@@ -53,35 +53,84 @@ const validate = (email: string, displayName: string, password: string): void =>
   }
 }
 
+const AUTH_REQUEST_TIMEOUT_MS = 10_000
+const TOKEN_CACHE_TTL_MS = 60_000
+const TOKEN_CACHE_MAX_ENTRIES = 5_000
+
 export class SupabaseAuthService implements AuthBackend {
+  // Stateless calls only (token verification, sending emails). Anything that
+  // creates or refreshes a session must use `createAuthClient()`: supabase-js
+  // keeps the current session and a single in-flight refresh on the client
+  // object, so a shared instance hands one user's refreshed session to another
+  // user whose refresh overlaps it.
   private readonly client
   private readonly adminClient
+  private readonly fetch: typeof fetch
+  // Verified access tokens, so a page that loads dozens of images does not verify
+  // (or, on projects with a legacy HS256 secret, call Supabase for) the same token
+  // on every request. Entries never outlive the token's own expiry.
+  private readonly verifiedTokens = new Map<string, { user: PublicUser; expiresAt: number }>()
 
   constructor(
     private readonly url: string,
     private readonly publishableKey: string,
     private readonly appBaseUrl: string,
     serviceRoleKey?: string,
+    fetchImpl: typeof fetch = fetch,
   ) {
     if (!url || !publishableKey) throw new Error('Thiếu SUPABASE_URL hoặc SUPABASE_PUBLISHABLE_KEY.')
     if (!appBaseUrl) throw new Error('Thiếu APP_BASE_URL cho luồng khôi phục mật khẩu.')
+    // Supabase calls sit on the login and request-authentication paths: bound them
+    // so an Auth outage fails fast instead of piling up open requests.
+    this.fetch = (input, init) => fetchImpl(input, {
+      ...init,
+      signal: init?.signal ? AbortSignal.any([init.signal, AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS)]) : AbortSignal.timeout(AUTH_REQUEST_TIMEOUT_MS),
+    })
     this.client = this.createAuthClient()
     this.adminClient = serviceRoleKey
-      ? createClient(this.url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } })
+      ? createClient(this.url, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false }, global: { fetch: this.fetch } })
       : null
   }
 
+  /** A client with its own (empty) session state, for one sign-in, sign-up or refresh. */
   private createAuthClient() {
     return createClient(this.url, this.publishableKey, {
       auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
+      global: { fetch: this.fetch },
     })
+  }
+
+  /**
+   * Updates the signed-in user through the Auth REST API. `auth.updateUser()` cannot
+   * be used here: it needs a session stored in the client, which a server never has.
+   */
+  private async updateAuthUser(token: string, attributes: Record<string, unknown>): Promise<{ user: User | null; code: string; message: string }> {
+    let response: Response
+    try {
+      response = await this.fetch(`${this.url.replace(/\/+$/, '')}/auth/v1/user`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', apikey: this.publishableKey, Authorization: `Bearer ${token}` },
+        body: JSON.stringify(attributes),
+      })
+    } catch {
+      throw new AuthError(502, 'Dịch vụ tài khoản đang gặp sự cố. Vui lòng thử lại sau.')
+    }
+    const body = await response.json().catch(() => null) as Record<string, unknown> | null
+    if (!response.ok || !body || typeof body.id !== 'string') {
+      return {
+        user: null,
+        code: String(body?.error_code ?? body?.code ?? response.status),
+        message: String(body?.msg ?? body?.message ?? body?.error_description ?? ''),
+      }
+    }
+    return { user: body as unknown as User, code: '', message: '' }
   }
 
   async register(input: { email: string; displayName: string; password: string; legacyClaimToken?: string }): Promise<AuthResult> {
     const email = input.email.trim().toLowerCase()
     const displayName = input.displayName.trim()
     validate(email, displayName, input.password)
-    const { data, error } = await this.client.auth.signUp({
+    const { data, error } = await this.createAuthClient().auth.signUp({
       email,
       password: input.password,
       options: {
@@ -110,7 +159,7 @@ export class SupabaseAuthService implements AuthBackend {
   }
 
   async login(emailInput: string, password: string): Promise<AuthResult> {
-    const { data, error } = await this.client.auth.signInWithPassword({
+    const { data, error } = await this.createAuthClient().auth.signInWithPassword({
       email: emailInput.trim().toLowerCase(),
       password,
     })
@@ -193,22 +242,50 @@ export class SupabaseAuthService implements AuthBackend {
 
   async authenticate(token: string | null): Promise<PublicUser | null> {
     if (!token) return null
+    const now = Date.now()
+    const cached = this.verifiedTokens.get(token)
+    if (cached) {
+      if (cached.expiresAt > now) return cached.user
+      this.verifiedTokens.delete(token)
+    }
     // getClaims verifies signature/issuer/expiry and caches Supabase JWKS locally for
     // asymmetric projects, avoiding a remote Auth request for every API/image request.
     const { data, error } = await this.client.auth.getClaims(token)
-    return error || !data?.claims ? null : toPublicUserFromClaims(data.claims)
+    if (error || !data?.claims) return null
+    const user = toPublicUserFromClaims(data.claims)
+    if (!user) return null
+    const tokenExpiresAt = typeof data.claims.exp === 'number' ? data.claims.exp * 1000 : now
+    const expiresAt = Math.min(now + TOKEN_CACHE_TTL_MS, tokenExpiresAt)
+    if (expiresAt > now) {
+      if (this.verifiedTokens.size >= TOKEN_CACHE_MAX_ENTRIES) {
+        this.verifiedTokens.delete(this.verifiedTokens.keys().next().value as string)
+      }
+      this.verifiedTokens.set(token, { user, expiresAt })
+    }
+    return user
   }
 
   async refresh(refreshToken: string | null): Promise<AuthResult | null> {
     if (!refreshToken) return null
-    const { data, error } = await this.client.auth.refreshSession({ refresh_token: refreshToken })
+    // Never the shared client: see the note on `client`.
+    const { data, error } = await this.createAuthClient().auth.refreshSession({ refresh_token: refreshToken })
     if (error || !data.user || !data.session) return null
     return this.fromSession(data.user, data.session.access_token, data.session.refresh_token, data.session.expires_at)
   }
 
-  async logout(_token: string | null): Promise<void> {
-    // Cookie is authoritative for this backend. Supabase access tokens expire quickly;
-    // clearing both HttpOnly cookies prevents this browser from reusing the session.
+  async logout(token: string | null): Promise<void> {
+    if (!token) return
+    this.verifiedTokens.delete(token)
+    // Revoke this session's refresh token at Supabase so a copied cookie cannot be
+    // used after sign-out. Best effort: the caller clears the cookies either way.
+    try {
+      await this.fetch(`${this.url.replace(/\/+$/, '')}/auth/v1/logout?scope=local`, {
+        method: 'POST',
+        headers: { apikey: this.publishableKey, Authorization: `Bearer ${token}` },
+      })
+    } catch {
+      // Supabase unreachable: the access token still expires on its own schedule.
+    }
   }
 
   async updateProfile(userId: string, input: { displayName: string }, token?: string | null): Promise<PublicUser> {
@@ -217,17 +294,13 @@ export class SupabaseAuthService implements AuthBackend {
       throw new AuthError(400, 'Tên hiển thị phải từ 2 đến 50 ký tự.')
     }
     if (!token) throw new AuthError(401, 'Vui lòng đăng nhập để tiếp tục.')
-    const authedClient = createClient(this.url, this.publishableKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    })
-    const { data, error } = await authedClient.auth.updateUser({
-      data: { display_name: displayName },
-    })
-    if (error || !data.user) {
-      throw new AuthError(400, error?.message || 'Không thể cập nhật tên hiển thị.')
+    const result = await this.updateAuthUser(token, { data: { display_name: displayName } })
+    if (!result.user || result.user.id !== userId) {
+      throw new AuthError(400, 'Không thể cập nhật tên hiển thị. Vui lòng đăng nhập lại rồi thử lại.')
     }
-    return toPublicUser(data.user)
+    // The access token still carries the old name until it is refreshed.
+    this.verifiedTokens.delete(token)
+    return toPublicUser(result.user)
   }
 
   async changeEmail(userId: string, input: { newEmail: string; password: string }, token?: string | null): Promise<PublicUser> {
@@ -236,16 +309,13 @@ export class SupabaseAuthService implements AuthBackend {
       throw new AuthError(400, 'Email không hợp lệ.')
     }
     await this.verifyCurrentPassword(userId, input.password, token, 'Mật khẩu xác nhận không đúng.')
-    const authedClient = createClient(this.url, this.publishableKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    })
-    const { data, error } = await authedClient.auth.updateUser({ email: newEmail })
-    if (error || !data.user) {
-      const duplicate = /already|registered|exists/i.test(error?.message ?? '')
-      throw new AuthError(duplicate ? 409 : 400, duplicate ? 'Email này đã được sử dụng.' : (error?.message || 'Không thể đổi email.'))
+    const result = await this.updateAuthUser(token!, { email: newEmail })
+    if (!result.user || result.user.id !== userId) {
+      const duplicate = result.code === 'email_exists' || /already|registered|exists/i.test(result.message)
+      throw new AuthError(duplicate ? 409 : 400, duplicate ? 'Email này đã được sử dụng.' : 'Không thể đổi email. Vui lòng thử lại sau.')
     }
-    return toPublicUser(data.user)
+    this.verifiedTokens.delete(token!)
+    return toPublicUser(result.user)
   }
 
   async changePassword(userId: string, input: { currentPassword: string; newPassword: string }, token?: string | null): Promise<void> {
@@ -253,13 +323,15 @@ export class SupabaseAuthService implements AuthBackend {
       throw new AuthError(400, 'Mật khẩu mới phải từ 8 đến 128 ký tự.')
     }
     await this.verifyCurrentPassword(userId, input.currentPassword, token, 'Mật khẩu hiện tại không đúng.')
-    const authedClient = createClient(this.url, this.publishableKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      global: { headers: { Authorization: `Bearer ${token}` } },
-    })
-    const { error } = await authedClient.auth.updateUser({ password: input.newPassword })
-    if (error) {
-      throw new AuthError(400, error.message || 'Không thể đổi mật khẩu.')
+    const result = await this.updateAuthUser(token!, { password: input.newPassword })
+    if (!result.user || result.user.id !== userId) {
+      const samePassword = result.code === 'same_password' || /different from the old/i.test(result.message)
+      const weakPassword = result.code === 'weak_password' || /weak|pwned|leaked/i.test(result.message)
+      throw new AuthError(400, samePassword
+        ? 'Mật khẩu mới phải khác mật khẩu hiện tại.'
+        : weakPassword
+          ? 'Mật khẩu mới quá yếu hoặc đã bị lộ. Hãy chọn mật khẩu khác.'
+          : 'Không thể đổi mật khẩu. Vui lòng thử lại sau.')
     }
   }
 
@@ -270,6 +342,7 @@ export class SupabaseAuthService implements AuthBackend {
     if (!this.adminClient) throw new AuthError(503, 'Chức năng xóa tài khoản chưa được cấu hình trên máy chủ.')
     const { error } = await this.adminClient.auth.admin.deleteUser(userId)
     if (error) throw new AuthError(502, 'Chưa thể xóa tài khoản. Vui lòng thử lại sau.')
+    for (const [cachedToken, entry] of this.verifiedTokens) if (entry.user.id === userId) this.verifiedTokens.delete(cachedToken)
   }
 
   private fromSession(

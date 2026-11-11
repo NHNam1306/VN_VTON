@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import express from 'express'
 import { createServer as createHttpServer } from 'node:http'
+import sharp from 'sharp'
 import path from 'node:path'
 import { mkdir } from 'node:fs/promises'
 import { createApp } from './app.js'
@@ -47,6 +48,10 @@ import { MomoGateway } from './billing/momo-gateway.js'
 import type { PaymentGateway } from './billing/types.js'
 import { ExcelPaymentLedger } from './billing/excel-payment-ledger.js'
 
+// libvips keeps decoded pixels of recent operations in a cache (50 MB by default).
+// Every upload here is a different image, so the cache only costs memory.
+sharp.cache(false)
+
 const port = Number(process.env.PORT ?? 8787)
 const isDevelopment = process.argv.includes('--dev')
 const dataDirectory = path.resolve(process.env.DATA_DIR ?? './data')
@@ -58,6 +63,22 @@ const authBackend = process.env.AUTH_BACKEND ?? 'local'
 const appBaseUrl = process.env.APP_BASE_URL
   ?? process.env.RENDER_EXTERNAL_URL
   ?? `http://127.0.0.1:${port}`
+
+// Local-only backends lose data on every deploy and cannot be shared between
+// instances. Refuse to start a production process on them by mistake.
+if (process.env.NODE_ENV === 'production' && !isDevelopment && process.env.ALLOW_LOCAL_BACKENDS !== 'true') {
+  const localBackends = [
+    persistenceBackend === 'sqlite' ? 'PERSISTENCE_BACKEND=sqlite' : null,
+    authBackend === 'local' ? 'AUTH_BACKEND=local' : null,
+    imageStorageBackend === 'local' ? 'IMAGE_STORAGE=local' : null,
+  ].filter(Boolean)
+  if (localBackends.length) {
+    throw new Error(`NODE_ENV=production nhưng đang cấu hình ${localBackends.join(', ')}. Dùng postgres/supabase/r2, hoặc đặt ALLOW_LOCAL_BACKENDS=true nếu cố ý.`)
+  }
+  if (authBackend === 'supabase' && !process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+    console.warn('[config] Thiếu SUPABASE_SERVICE_ROLE_KEY: người dùng sẽ không xoá được tài khoản.')
+  }
+}
 
 let postgresPool: PostgresPool | undefined
 let repository: GarmentRepository
@@ -230,36 +251,73 @@ if (isDevelopment) {
       next()
       return
     }
+    // A hashed asset that no longer exists (a tab still open from before a deploy)
+    // must be a 404. Answering with index.html makes the browser parse HTML as
+    // JavaScript and the page fails with a confusing syntax error.
+    if (request.path.startsWith('/assets/')) {
+      response.status(404).type('text/plain').send('Not found')
+      return
+    }
     response.setHeader('Cache-Control', 'no-cache')
     response.sendFile(path.join(frontendDirectory, 'index.html'))
   })
 }
+
+// Keep idle sockets open longer than the platform load balancer does. If the
+// server closes a keep-alive socket first, the proxy can reuse it for the next
+// request and the user sees an intermittent 502.
+server.keepAliveTimeout = 75_000
+server.headersTimeout = 76_000
 
 const host = process.env.HOST ?? (process.env.NODE_ENV === 'production' ? '0.0.0.0' : '127.0.0.1')
 server.listen(port, host, () => {
   console.log(`Fitting Room listening on ${host}:${port}`)
 })
 
+// Render sends SIGTERM and kills the process about 30 seconds later. Stop taking
+// new connections, let in-flight requests finish, and exit before that deadline.
+const SHUTDOWN_GRACE_MS = 25_000
 let isShuttingDown = false
-const shutdown = async () => {
+const shutdown = async (signal: string) => {
   if (isShuttingDown) return
   isShuttingDown = true
-  await closeVite?.()
-  server.close(() => {
-    repository.close()
-    userDataRepository.close()
-    authStore?.close()
+  console.log(`[shutdown] ${signal} received; draining connections.`)
+  const releaseResources = async () => {
     storageCleanup.stop?.()
-    void social.close()
-    void admin.close()
-    void rateLimitStore.close?.()
-    void creditService.close()
-    void planService.close()
-    void billingService.close()
-    void postgresPool?.end()
-    process.exit(0)
+    await Promise.allSettled([
+      Promise.resolve(repository.close()),
+      Promise.resolve(userDataRepository.close()),
+      Promise.resolve(authStore?.close()),
+      Promise.resolve(social.close()),
+      Promise.resolve(admin.close()),
+      Promise.resolve(rateLimitStore.close?.()),
+      Promise.resolve(creditService.close()),
+      Promise.resolve(planService.close()),
+      Promise.resolve(billingService.close()),
+    ])
+    await postgresPool?.end().catch(() => undefined)
+  }
+  const forceExit = setTimeout(() => {
+    console.error('[shutdown] Grace period elapsed; exiting with requests still open.')
+    process.exit(1)
+  }, SHUTDOWN_GRACE_MS)
+  forceExit.unref()
+  try { await closeVite?.() } catch { /* dev server already closed */ }
+  server.close(() => {
+    void releaseResources().finally(() => process.exit(signal === 'uncaughtException' ? 1 : 0))
   })
+  // Keep-alive sockets with no request in flight would otherwise hold close() open.
+  server.closeIdleConnections()
 }
 
-process.on('SIGINT', shutdown)
-process.on('SIGTERM', shutdown)
+process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
+// A rejected promise nobody awaited must not take down every in-flight request.
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] Unhandled rejection:', reason instanceof Error ? reason.stack ?? reason.message : reason)
+})
+// After an uncaught exception the process state is unknown: log it and restart cleanly.
+process.on('uncaughtException', (error) => {
+  console.error('[process] Uncaught exception:', error.stack ?? error.message)
+  void shutdown('uncaughtException')
+})

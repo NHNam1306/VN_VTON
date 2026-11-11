@@ -49,8 +49,16 @@ export type SocialSnapshot = {
   outgoing: { id: string; to: SocialPerson; createdAt: number }[];
   polls: unknown[];
   blocked: SocialPerson[];
-  notifications: { id: string; text: string; read: boolean; createdAt: number }[];
+  notifications: SocialNotification[];
+  groups?: SocialGroup[];
+  policies?: OutfitPolicy[];
 };
+
+export type SocialNotification = { id: string; kind?: 'request' | 'poll' | 'result'; targetId?: string; text: string; read: boolean; createdAt: number };
+
+export type OutfitVisibility = 'private' | 'friends' | 'groups';
+export type SocialGroup = { id: string; name: string; ownerId: string };
+export type OutfitPolicy = { outfitId: string; visibility: OutfitVisibility; groupIds: string[] };
 
 export type Plan = {
   id: 'free' | 'plus' | 'pro' | 'max';

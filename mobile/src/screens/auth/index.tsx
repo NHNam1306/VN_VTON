@@ -1,32 +1,32 @@
 import { Redirect } from 'expo-router';
-import { type ComponentProps, useState } from 'react';
+import { type ComponentRef, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Pressable,
   ScrollView,
-  TextInput,
+  type TextInput,
   View,
 } from 'react-native';
+import Animated, { FadeIn, FadeInDown, LinearTransition } from 'react-native-reanimated';
 
 import { AppButton } from '@/components/app-button';
 import { AppText } from '@/components/app-text';
 import { FitsyMark, FitsyWordmark } from '@/components/fitsy-mark';
+import { Notice } from '@/components/notice';
+import { SegmentedControl } from '@/components/segmented-control';
+import { TextField } from '@/components/text-field';
 import { useAuth } from '@/providers/auth-provider';
 import { colors, radius, shadows, spacing } from '@/theme';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-const contentByMode: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
+const contentByMode: Record<AuthMode, { eyebrow: string; title?: string; description?: string }> = {
   login: {
     eyebrow: 'Chào mừng trở lại',
-    title: 'Tiếp tục vào phòng thử',
-    description: 'Đăng nhập để xem lại ảnh và tủ đồ đã lưu.',
   },
   register: {
     eyebrow: 'Tạo tài khoản mới',
-    title: 'Bắt đầu tủ đồ của riêng bạn',
-    description: 'Dùng email và mật khẩu tối thiểu 8 ký tự.',
   },
   forgot: {
     eyebrow: 'Khôi phục tài khoản',
@@ -57,6 +57,9 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
   const [error, setError] = useState<string | null>(auth.configurationError);
   const [notice, setNotice] = useState<string | null>(null);
   const visibleError = error ?? auth.linkError;
+  const emailRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const passwordRef = useRef<ComponentRef<typeof TextInput>>(null);
+  const confirmRef = useRef<ComponentRef<typeof TextInput>>(null);
 
   if (auth.session && mode !== 'reset' && !auth.recoveryMode) {
     return <Redirect href="/(tabs)/home" />;
@@ -186,17 +189,12 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
           backgroundColor: colors.background,
         }}>
         <View style={{ width: '100%', maxWidth: 520, gap: spacing.lg }}>
-          <View style={{ alignItems: 'center', gap: spacing.md }}>
+          <Animated.View entering={FadeInDown.duration(380)} style={{ alignItems: 'center', gap: spacing.md }}>
             <FitsyMark size={64} />
-            <View style={{ alignItems: 'center', gap: spacing.xs }}>
-              <FitsyWordmark size={32} />
-              <AppText variant="subhead" style={{ textAlign: 'center' }}>
-                Phòng thử đồ AI trong túi của bạn
-              </AppText>
-            </View>
-          </View>
+            <FitsyWordmark size={32} />
+          </Animated.View>
 
-          <View style={{
+          <Animated.View entering={FadeInDown.duration(380).delay(80)} layout={LinearTransition.duration(220)} style={{
             gap: spacing.md,
             padding: spacing.lg,
             borderWidth: 1,
@@ -207,37 +205,17 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
             boxShadow: shadows.raised,
           }}>
             {(mode === 'login' || mode === 'register') && (
-              <View style={{
-                flexDirection: 'row',
-                padding: spacing.xs,
-                borderRadius: radius.full,
-                backgroundColor: colors.groupedBackground,
-              }}>
-                {(['login', 'register'] as const).map((item) => {
-                  const selected = mode === item;
-                  return (
-                    <Pressable
-                      key={item}
-                      accessibilityRole="tab"
-                      accessibilityState={{ selected }}
-                      onPress={() => changeMode(item)}
-                      style={({ pressed }) => ({
-                        flex: 1,
-                        alignItems: 'center',
-                        paddingVertical: 11,
-                        borderRadius: radius.full,
-                        backgroundColor: selected ? colors.surface : 'transparent',
-                        opacity: pressed ? 0.72 : 1,
-                      })}>
-                      <AppText
-                        variant="subhead"
-                        style={{ fontWeight: selected ? '700' : '500', color: colors.label }}>
-                        {item === 'login' ? 'Đăng nhập' : 'Đăng ký'}
-                      </AppText>
-                    </Pressable>
-                  );
-                })}
-              </View>
+              <SegmentedControl
+                options={[{ value: 'login', label: 'Đăng nhập' }, { value: 'register', label: 'Đăng ký' }]}
+                value={mode}
+                onChange={changeMode}
+                stretch
+                trackColor={colors.groupedBackground}
+                indicatorColor={colors.surface}
+                activeColor={colors.label}
+                inactiveColor={colors.secondaryLabel}
+                indicatorStyle={{ boxShadow: '0 1px 4px rgba(20, 26, 60, 0.12)' }}
+              />
             )}
 
             {(mode === 'forgot' || mode === 'reset') && (
@@ -251,28 +229,34 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
               </Pressable>
             )}
 
+            <Animated.View key={mode} entering={FadeIn.duration(220)} style={{ gap: spacing.md }}>
             <View style={{ gap: spacing.xs }}>
               <AppText variant="caption" style={{ color: colors.success, fontWeight: '800', textTransform: 'uppercase', letterSpacing: 1.4 }}>
                 {content.eyebrow}
               </AppText>
-              <AppText variant="title">{content.title}</AppText>
-              <AppText variant="subhead">{content.description}</AppText>
+              {content.title ? <AppText variant="title">{content.title}</AppText> : null}
+              {content.description ? <AppText variant="subhead">{content.description}</AppText> : null}
             </View>
 
             {mode === 'register' && (
-              <Field
+              <TextField
                 label="Tên hiển thị"
                 value={name}
                 onChangeText={setName}
                 autoCapitalize="words"
                 autoComplete="name"
+                textContentType="name"
                 placeholder="Tên của bạn"
                 maxLength={50}
+                returnKeyType="next"
+                submitBehavior="submit"
+                onSubmitEditing={() => emailRef.current?.focus()}
               />
             )}
 
             {mode !== 'reset' && (
-              <Field
+              <TextField
+                ref={emailRef}
                 label="Email"
                 value={email}
                 onChangeText={setEmail}
@@ -280,19 +264,32 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
                 autoCapitalize="none"
                 autoCorrect={false}
                 autoComplete="email"
+                textContentType="emailAddress"
                 placeholder="email@example.com"
                 maxLength={254}
+                returnKeyType={mode === 'forgot' ? 'send' : 'next'}
+                submitBehavior={mode === 'forgot' ? 'blurAndSubmit' : 'submit'}
+                onSubmitEditing={() => { if (mode === 'forgot') void submit(); else passwordRef.current?.focus(); }}
               />
             )}
 
             {mode !== 'forgot' && (
-              <PasswordField
+              <TextField
+                ref={passwordRef}
                 label={mode === 'reset' ? 'Mật khẩu mới' : 'Mật khẩu'}
                 value={password}
                 onChangeText={setPassword}
-                visible={showPassword}
-                onToggleVisible={() => setShowPassword((current) => !current)}
+                passwordVisible={showPassword}
+                onTogglePasswordVisible={() => setShowPassword((current) => !current)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={128}
+                placeholder="Tối thiểu 8 ký tự"
                 autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                textContentType={mode === 'login' ? 'password' : 'newPassword'}
+                returnKeyType={mode === 'login' ? 'go' : 'next'}
+                submitBehavior={mode === 'login' ? 'blurAndSubmit' : 'submit'}
+                onSubmitEditing={() => { if (mode === 'login') void submit(); else confirmRef.current?.focus(); }}
               />
             )}
 
@@ -308,18 +305,28 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
             )}
 
             {(mode === 'register' || mode === 'reset') && (
-              <PasswordField
+              <TextField
+                ref={confirmRef}
                 label="Nhập lại mật khẩu"
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
-                visible={showPassword}
-                onToggleVisible={() => setShowPassword((current) => !current)}
+                passwordVisible={showPassword}
+                onTogglePasswordVisible={() => setShowPassword((current) => !current)}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={128}
+                placeholder="Tối thiểu 8 ký tự"
                 autoComplete="new-password"
+                textContentType="newPassword"
+                returnKeyType="go"
+                submitBehavior="blurAndSubmit"
+                onSubmitEditing={() => void submit()}
               />
             )}
+            </Animated.View>
 
-            {visibleError && <MessageBox tone="error" message={visibleError} />}
-            {notice && <MessageBox tone="success" message={notice} />}
+            {visibleError && <Notice tone="error" text={visibleError} />}
+            {notice && <Notice tone="success" text={notice} />}
 
             <AppButton
               title={submitLabel}
@@ -347,101 +354,9 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
                 </AppText>
               </Pressable>
             )}
-          </View>
+          </Animated.View>
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
-  );
-}
-
-function Field({ label, ...props }: ComponentProps<typeof TextInput> & { label: string }) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <AppText variant="caption" style={{ color: colors.label, fontWeight: '700' }}>{label}</AppText>
-      <TextInput
-        {...props}
-        placeholderTextColor={colors.secondaryLabel}
-        style={{
-          minHeight: 52,
-          paddingHorizontal: spacing.md,
-          borderWidth: 1,
-          borderColor: colors.separator,
-          borderRadius: radius.lg,
-          borderCurve: 'continuous',
-          color: colors.label,
-          backgroundColor: colors.surface,
-          fontSize: 16,
-        }}
-      />
-    </View>
-  );
-}
-
-function PasswordField({
-  label,
-  visible,
-  onToggleVisible,
-  ...props
-}: ComponentProps<typeof TextInput> & {
-  label: string;
-  visible: boolean;
-  onToggleVisible: () => void;
-}) {
-  return (
-    <View style={{ gap: spacing.sm }}>
-      <AppText variant="caption" style={{ color: colors.label, fontWeight: '700' }}>{label}</AppText>
-      <View style={{
-        minHeight: 52,
-        flexDirection: 'row',
-        alignItems: 'center',
-        borderWidth: 1,
-        borderColor: colors.separator,
-        borderRadius: radius.lg,
-        borderCurve: 'continuous',
-        backgroundColor: colors.surface,
-      }}>
-        <TextInput
-          {...props}
-          maxLength={128}
-          secureTextEntry={!visible}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder="Tối thiểu 8 ký tự"
-          placeholderTextColor={colors.secondaryLabel}
-          style={{ flex: 1, minHeight: 50, paddingHorizontal: spacing.md, color: colors.label, fontSize: 16 }}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={visible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
-          onPress={onToggleVisible}
-          hitSlop={8}
-          style={({ pressed }) => ({ paddingHorizontal: spacing.md, opacity: pressed ? 0.55 : 1 })}>
-          <AppText variant="caption" style={{ color: colors.success, fontWeight: '800' }}>
-            {visible ? 'Ẩn' : 'Hiện'}
-          </AppText>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-function MessageBox({ tone, message }: { tone: 'error' | 'success'; message: string }) {
-  const isError = tone === 'error';
-  return (
-    <View
-      accessibilityRole="alert"
-      style={{
-        padding: spacing.md,
-        borderWidth: 1,
-        borderColor: isError ? '#F2CACA' : '#C8E6D3',
-        borderRadius: radius.md,
-        backgroundColor: isError ? colors.destructiveBackground : colors.successBackground,
-      }}>
-      <AppText
-        variant="subhead"
-        style={{ color: isError ? colors.destructive : colors.success, fontWeight: '600' }}>
-        {message}
-      </AppText>
-    </View>
   );
 }

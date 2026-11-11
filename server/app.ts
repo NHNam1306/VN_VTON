@@ -68,6 +68,7 @@ export function createApp(
     const startedAt = performance.now()
     const incomingId = request.get('x-request-id')
     const requestId = incomingId && /^[a-zA-Z0-9_-]{8,100}$/.test(incomingId) ? incomingId : randomUUID()
+    response.locals.requestId = requestId
     response.setHeader('X-Request-ID', requestId)
     response.on('finish', () => {
       const durationMs = Math.round(performance.now() - startedAt)
@@ -102,6 +103,14 @@ export function createApp(
     skip: (request) => request.path === '/health',
   }))
   app.use(express.json({ limit: '32kb' }))
+  app.use('/api', (request, response, next) => {
+    // Express 5 leaves `body` undefined when no JSON was sent; handlers read fields
+    // from it directly, so a body-less POST must be a validation error, not a crash.
+    if (request.body === undefined) request.body = {}
+    // API responses are per-user data and must never be stored by shared caches.
+    response.setHeader('Cache-Control', 'private, no-store')
+    next()
+  })
   if (billingService) app.use('/api/billing/webhooks', createBillingWebhookRouter(billingService))
   app.use('/api', requireMutationHeader)
 
@@ -212,7 +221,13 @@ export function createApp(
         response.status(400).end()
         return
       }
-      const key = decodeURIComponent(rawKey)
+      let key: string
+      try {
+        key = decodeURIComponent(rawKey)
+      } catch {
+        response.status(400).end()
+        return
+      }
       if (!(await canReadImage(request.authUser.id, key))) {
         response.status(404).end()
         return
@@ -248,9 +263,9 @@ export function createApp(
       next(error)
     }
   })
-  if (social) app.use('/api/social', requireAuth, createSocialRouter(social, images))
+  if (social) app.use('/api/social', requireAuth, createSocialRouter(social, images, cleanup))
   if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin, social))
-  if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService))
+  if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService, sharedRateLimits))
   app.use('/api/plans', requireAuth, createPlanRouter(plans))
   // Global circuit breaker for paid AI calls, shared across instances through the
   // rate-limit store. Disabled unless AI_DAILY_REQUEST_LIMIT is set.
@@ -266,9 +281,9 @@ export function createApp(
     app.post('/api/garments/ai-extract', requireAuth, aiDailyBudget)
     app.post('/api/generations/angles/:angle', requireAuth, aiDailyBudget)
   }
-  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans, sharedRateLimits, credits))
-  app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images))
-  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, credits, sharedRateLimits, plans))
+  app.use('/api/garments', requireAuth, createGarmentRouter(repository, images, extractor, social, plans, sharedRateLimits, credits, cleanup))
+  app.use('/api', requireAuth, createUserDataRouter(userDataRepository, images, cleanup))
+  app.use('/api/generations', requireAuth, createGenerationRouter(imageProvider, repository, userDataRepository, images, credits, sharedRateLimits, plans, cleanup))
   app.use('/api/mock-images', requireAuth, createMockImageRouter())
 
   app.use('/api', (_request, response) => {
@@ -276,6 +291,11 @@ export function createApp(
   })
 
   const errorHandler: ErrorRequestHandler = (error, _request, response, _next) => {
+    if (response.headersSent) {
+      // The response already started (e.g. while streaming an image); nothing more can be sent.
+      response.destroy()
+      return
+    }
     if (error instanceof multer.MulterError) {
       const message = error.code === 'LIMIT_FILE_SIZE'
         ? 'Mỗi ảnh phải nhỏ hơn hoặc bằng 10MB.'
@@ -299,8 +319,25 @@ export function createApp(
       response.status(error.statusCode).json({ message: error.publicMessage })
       return
     }
-    console.error('Request failed:', error instanceof Error ? error.message : 'Unknown error')
-    response.status(500).json({ message: 'Máy chủ gặp lỗi. Vui lòng thử lại.' })
+    const detail = (error ?? {}) as { type?: string; status?: number; code?: string }
+    // body-parser: malformed JSON or a body over the limit is the client's mistake.
+    if (detail.type === 'entity.parse.failed' || detail.type === 'entity.too.large') {
+      const tooLarge = detail.type === 'entity.too.large'
+      response.status(tooLarge ? 413 : 400).json({ message: tooLarge ? 'Dữ liệu gửi lên quá lớn.' : 'Dữ liệu gửi lên không hợp lệ.' })
+      return
+    }
+    // PostgreSQL 22P02: a malformed id (not a UUID) reached a typed column.
+    if (detail.code === '22P02') {
+      response.status(400).json({ message: 'Mã định danh không hợp lệ.' })
+      return
+    }
+    console.error(JSON.stringify({
+      type: 'request_error',
+      requestId: response.locals.requestId,
+      message: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack?.split('\n').slice(0, 6).join(' | ') : undefined,
+    }))
+    response.status(500).json({ message: 'Máy chủ gặp lỗi. Vui lòng thử lại.', requestId: response.locals.requestId })
   }
   app.use(errorHandler)
   return app

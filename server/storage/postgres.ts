@@ -32,13 +32,27 @@ export const createPostgresPool = (connectionString: string): PostgresPool => {
   const poolMax = Number.isInteger(configuredPoolMax) && configuredPoolMax > 0 && configuredPoolMax <= 20
     ? configuredPoolMax
     : 5
-  return new Pool({
+  const configuredQueryTimeout = Number(process.env.DATABASE_QUERY_TIMEOUT_MS ?? 20_000)
+  const pool = new Pool({
     connectionString: url.toString(),
     ...(ca ? { ssl: { ca, rejectUnauthorized: true } } : {}),
     max: poolMax,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
+    // Client-side deadline per query: a stuck query fails the request instead of
+    // holding a pooled connection (and every request queued behind it) forever.
+    // Enforced by the driver, so it also works through Supabase's poolers.
+    query_timeout: Number.isFinite(configuredQueryTimeout) && configuredQueryTimeout >= 1_000 ? configuredQueryTimeout : 20_000,
+    // Detect connections silently dropped by the pooler or a NAT gateway.
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   })
+  // Idle connections are recycled by the pooler. Without a listener, the resulting
+  // 'error' event is unhandled and takes the whole process down.
+  pool.on('error', (error) => {
+    console.error('[postgres] Idle connection error:', error.message)
+  })
+  return pool
 }
 
 /**

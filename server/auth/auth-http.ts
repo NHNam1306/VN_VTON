@@ -21,7 +21,9 @@ const readCookie = (request: Request, cookieName: string): string | null => {
   if (!cookieHeader) return null
   for (const part of cookieHeader.split(';')) {
     const [name, ...valueParts] = part.trim().split('=')
-    if (name === cookieName) return decodeURIComponent(valueParts.join('='))
+    if (name !== cookieName) continue
+    // A hand-crafted cookie with a bad escape must read as "no cookie", not crash.
+    try { return decodeURIComponent(valueParts.join('=')) } catch { return null }
   }
   return null
 }

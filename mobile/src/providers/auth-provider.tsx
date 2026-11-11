@@ -174,8 +174,9 @@ export function AuthProvider({ children }: PropsWithChildren) {
       setLinkError(null);
     },
     signOut: async () => {
+      // Thu hồi phiên trên máy chủ; mất mạng thì vẫn xoá phiên trên máy để người dùng luôn đăng xuất được.
       const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (error) await supabase.auth.signOut({ scope: 'local' });
     },
   }), [linkError, ready, recoveryMode, session]);
 

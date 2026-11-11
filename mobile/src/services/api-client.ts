@@ -7,6 +7,8 @@ if (!configuredApiUrl) {
   throw new Error('Thiếu EXPO_PUBLIC_API_URL. Hãy cấu hình URL backend cho bản build này.');
 }
 export const apiBaseUrl = configuredApiUrl.replace(/\/$/, '');
+/** Địa chỉ trang web Fitsy (dùng cho liên kết chia sẻ); mặc định trùng máy chủ API. */
+export const webBaseUrl = (process.env.EXPO_PUBLIC_WEB_URL?.trim() || configuredApiUrl).replace(/\/$/, '');
 // Store builds (Google Play / App Store) must not reach external payment gateways;
 // the backend enforces this from the channel header.
 const clientChannel = process.env.EXPO_PUBLIC_BILLING_MODE === 'external' ? 'direct' : 'store';

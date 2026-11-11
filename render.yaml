@@ -41,12 +41,14 @@ services:
         value: "4:5"
       - key: OPENROUTER_TIMEOUT_MS
         value: "120000"
+      # Calls to the image provider are network-bound, so a few can run side by side.
+      # With 1, a second user always waits a full generation and usually times out.
       - key: AI_MAX_CONCURRENCY
-        value: "1"
+        value: "3"
       - key: AI_MAX_WAITING_REQUESTS
-        value: "4"
+        value: "12"
       - key: AI_QUEUE_TIMEOUT_MS
-        value: "30000"
+        value: "60000"
       - key: DATABASE_POOL_MAX
         value: "5"
       - key: AUTH_SESSION_DAYS
@@ -92,6 +94,10 @@ services:
       - key: R2_BUCKET
         sync: false
       - key: OPENROUTER_API_KEY
+        sync: false
+      - key: SHOPEE_AFFILIATE_APP_ID
+        sync: false
+      - key: SHOPEE_AFFILIATE_SECRET
         sync: false
       - key: PAYOS_CLIENT_ID
         sync: false

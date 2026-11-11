@@ -1,6 +1,8 @@
 import { Image, type ImageContentFit } from 'expo-image';
 import { router } from 'expo-router';
-import { Pressable, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+
+import { PressableScale } from '@/components/pressable-scale';
 
 import { useAuth } from '@/providers/auth-provider';
 import { protectedImageSource } from '@/services/api-client';
@@ -22,11 +24,12 @@ export function PreviewableImage({
 }: PreviewableImageProps) {
   const { session } = useAuth();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={title}
       onPress={() => router.push({ pathname: '/image-viewer', params: { uri, title } })}
-      style={({ pressed }) => [style, { overflow: 'hidden', opacity: pressed ? 0.78 : 1 }]}
+      scaleTo={0.95}
+      style={[style, { overflow: 'hidden' }]}
     >
       <Image
         source={protectedImageSource(uri, session?.access_token)}
@@ -34,6 +37,6 @@ export function PreviewableImage({
         contentFit={contentFit}
         transition={transition}
       />
-    </Pressable>
+    </PressableScale>
   );
 }

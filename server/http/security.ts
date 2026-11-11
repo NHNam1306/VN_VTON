@@ -33,6 +33,10 @@ export const setSecurityHeaders = (_request: Request, response: Response, next: 
   response.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin')
   response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
   response.setHeader('Cross-Origin-Opener-Policy', 'same-origin')
+  // Render terminates TLS in front of the app; tell browsers to never downgrade.
+  if (process.env.NODE_ENV === 'production') {
+    response.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+  }
   // Vite development injects its React Refresh/HMR bootstrap at runtime.
   // A production CSP blocks that bootstrap and leaves the dev page blank, so
   // keep the strict policy on built deployments only.

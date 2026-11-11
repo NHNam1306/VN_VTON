@@ -41,3 +41,6 @@ security_best_practices_report.md
 .DS_Store
 Thumbs.db
 Desktop.ini
+.gradle/
+.idea/
+settings.gradle.kts

@@ -59,7 +59,9 @@ export class BillingService {
       return { orderId: order.id, checkoutUrl: checkout.checkoutUrl }
     } catch (error) {
       await this.repository.setStatus(order.provider, order.providerOrderId, 'failed')
-      throw error
+      // The gateway refused or timed out: a temporary upstream failure, not a server bug.
+      console.error('[billing.checkout] Gateway error:', error instanceof Error ? error.message : 'Unknown error')
+      throw new AuthError(502, 'Cổng thanh toán đang gặp sự cố. Vui lòng thử lại sau ít phút.')
     }
   }
 
@@ -80,6 +82,7 @@ export class BillingService {
     if (!gateway || !gateway.verifyWebhook(payload)) throw new AuthError(401, 'Chữ ký payOS không hợp lệ.')
     const data = payload.data as Record<string, unknown>
     const providerOrderId = String(data.orderCode ?? '')
+    if (!providerOrderId) return
     const order = await this.repository.getByProviderOrder('payos', providerOrderId)
     if (!order) return
     if (Number(data.amount) !== order.amountVnd) throw new AuthError(400, 'Số tiền giao dịch không khớp.')
@@ -94,6 +97,7 @@ export class BillingService {
     const gateway = this.gateways.get('momo')
     if (!gateway || !gateway.verifyWebhook(payload)) throw new AuthError(401, 'Chữ ký MoMo không hợp lệ.')
     const providerOrderId = String(payload.orderId ?? '')
+    if (!providerOrderId) return
     const order = await this.repository.getByProviderOrder('momo', providerOrderId)
     if (!order) return
     if (Number(payload.amount) !== order.amountVnd) throw new AuthError(400, 'Số tiền giao dịch không khớp.')

@@ -15,6 +15,7 @@ export default function AppTabs() {
       labelStyle={{ default: { color: brand.primary }, selected: { color: brand.accent } }}
       backgroundColor={colors.surface}
       indicatorColor={brand.secondary}
+      rippleColor="transparent"
       tabBarRespectsIMEInsets>
       <NativeTabs.Trigger name="home">
         <NativeTabs.Trigger.Icon sf={{ default: 'house', selected: 'house.fill' }} md="home" />

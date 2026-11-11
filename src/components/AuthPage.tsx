@@ -49,16 +49,12 @@ const readRecoveryState = (): RecoveryState => {
   }
 }
 
-const contentByMode: Record<AuthMode, { eyebrow: string; title: string; description: string }> = {
+const contentByMode: Record<AuthMode, { eyebrow: string; title?: string; description?: string }> = {
   login: {
     eyebrow: 'Chào mừng trở lại',
-    title: 'Tiếp tục vào phòng thử',
-    description: 'Đăng nhập để xem lại ảnh và tủ đồ đã lưu.',
   },
   register: {
     eyebrow: 'Tạo tài khoản mới',
-    title: 'Bắt đầu tủ đồ của riêng bạn',
-    description: 'Dùng email và mật khẩu tối thiểu 8 ký tự.',
   },
   forgot: {
     eyebrow: 'Khôi phục tài khoản',
@@ -210,8 +206,8 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
 
           <div className="mt-8">
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-sage-700">{content.eyebrow}</p>
-            <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">{content.title}</h2>
-            <p className="mt-2 text-sm leading-6 text-ink/45">{content.description}</p>
+            {content.title && <h2 className="mt-2 font-display text-2xl font-bold leading-tight text-ink">{content.title}</h2>}
+            {content.description && <p className="mt-2 text-sm leading-6 text-ink/45">{content.description}</p>}
           </div>
 
           <form onSubmit={(event) => void submit(event)} className="mt-7 space-y-4">
