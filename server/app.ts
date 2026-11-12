@@ -37,6 +37,9 @@ import { MemoryPlanRepository } from './plans/memory-plan-repository.js'
 import { createPlanRouter } from './plans/router.js'
 import type { BillingService } from './billing/billing-service.js'
 import { createBillingRouter, createBillingWebhookRouter } from './billing/router.js'
+import { LivePreviewService } from './live-preview/service.js'
+import { MemoryLivePreviewRepository } from './live-preview/repository.js'
+import { createLivePreviewRouter } from './live-preview/router.js'
 
 export function createApp(
   repository: GarmentRepository,
@@ -55,6 +58,7 @@ export function createApp(
   billingService?: BillingService,
   readinessCheck?: () => Promise<void>,
   storageCleanup?: StorageCleanup,
+  livePreviewService?: LivePreviewService,
 ) {
   const cleanup = storageCleanup ?? new ImmediateStorageCleanup(images)
   const app = express()
@@ -63,6 +67,8 @@ export function createApp(
   const sharedRateLimits = rateLimitStore ?? new MemoryRateLimitStore()
   const plans = planService ?? new PlanService(new MemoryPlanRepository())
   const credits = creditService ?? new CreditService(new MemoryCreditRepository(), plans)
+  // Without a configured service the routes still answer, reporting the feature as disabled.
+  const livePreview = livePreviewService ?? new LivePreviewService(new MemoryLivePreviewRepository(), plans, repository, images, null)
   app.disable('x-powered-by')
   if (runtimeConfig.trustProxyHops) app.set('trust proxy', runtimeConfig.trustProxyHops)
   app.use(setSecurityHeaders)
@@ -273,6 +279,11 @@ export function createApp(
   if (admin) app.use('/api/admin', requireAuth, createAdminRouter(admin, social))
   if (billingService) app.use('/api/billing', requireAuth, createBillingRouter(billingService, sharedRateLimits))
   app.use('/api/plans', requireAuth, createPlanRouter(plans))
+  app.use('/api/live-preview', requireAuth, createLivePreviewRouter(livePreview, {
+    rateLimits: sharedRateLimits,
+    dailyLimit: runtimeConfig.livePreviewDailyLimit,
+    appOrigin: new URL(runtimeConfig.appBaseUrl).origin,
+  }))
   // Global circuit breaker for paid AI calls, shared across instances through the
   // rate-limit store. Disabled unless AI_DAILY_REQUEST_LIMIT is set.
   if (runtimeConfig.aiDailyRequestLimit) {

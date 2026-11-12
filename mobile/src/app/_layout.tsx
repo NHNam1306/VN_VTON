@@ -80,6 +80,7 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" options={{ headerShown: false, animation: 'fade' }} />
           <Stack.Screen name="plans" options={{ title: 'Gói đăng ký', headerBackTitle: 'Hồ sơ' }} />
           <Stack.Screen name="settings" options={{ title: 'Cài đặt', headerBackTitle: 'Hồ sơ' }} />
+          <Stack.Screen name="live-preview" options={{ title: 'Thử trực tiếp', headerBackTitle: 'Phòng thử' }} />
           <Stack.Screen name="image-viewer" options={{ title: 'Xem ảnh', presentation: 'fullScreenModal', animation: 'fade', headerBackTitle: 'Đóng' }} />
         </Stack.Protected>
       </Stack>

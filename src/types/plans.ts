@@ -5,6 +5,8 @@ export type PlanEntitlements = {
   wardrobeItems: number
   savedOutfits: number
   selectedGarments: number
+  livePreviewSessions: number
+  livePreviewSeconds: number
 }
 
 export type SubscriptionPlan = {
@@ -31,4 +33,6 @@ export const FREE_ENTITLEMENTS: PlanEntitlements = {
   wardrobeItems: 20,
   savedOutfits: 10,
   selectedGarments: 8,
+  livePreviewSessions: 0,
+  livePreviewSeconds: 10,
 }

@@ -41,8 +41,12 @@ const socialFailure = (provider?: SocialProvider) => provider
 /** Mã lỗi máy chủ gửi về deep link có dạng `<provider>_<lý do>`. */
 const providerFromAuthError = (code: string): SocialProvider | undefined =>
   (Object.keys(providerLabels) as SocialProvider[]).find(provider => code.startsWith(provider + '_'));
-/** Địa chỉ app nhận lại sau khi đăng nhập; máy chủ chỉ chấp nhận địa chỉ trong danh sách của nó. */
-const authRedirect = 'fitsy://auth-callback';
+/**
+ * Địa chỉ app nhận lại sau khi đăng nhập; máy chủ chỉ chấp nhận địa chỉ trong danh sách của nó.
+ * Bản cài đặt cho ra `fitsy://auth-callback`; chạy trong Expo Go cho ra `exp://<máy>:8081/--/auth-callback`,
+ * nên khi test bằng Expo Go phải thêm địa chỉ đó (hoặc `exp://*`) vào MOBILE_AUTH_REDIRECT_URLS của máy chủ.
+ */
+const authRedirect = Linking.createURL('auth-callback');
 
 type HandoffSession = { accessToken: string; refreshToken: string };
 

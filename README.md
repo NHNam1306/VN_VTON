@@ -75,7 +75,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `R2_PUBLIC_URL` | trống | Tuỳ chọn: domain HTTPS riêng của bucket, được thêm vào CSP `img-src` |
 | `R2_SIGNED_READ_TTL_SECONDS` | `300` | Thời hạn URL ký ngắn hạn khi trình duyệt đọc ảnh R2 (60–3600) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | OAuth client của Google; đặt cả hai thì nút "Tiếp tục với Google" mới hiện (web + mobile) |
-| `MOBILE_AUTH_REDIRECT_URLS` | `fitsy://auth-callback` | Danh sách deep link app mobile được phép nhận lại sau khi đăng nhập Google |
+| `MOBILE_AUTH_REDIRECT_URLS` | `fitsy://auth-callback` | Danh sách deep link app mobile được phép nhận lại sau khi đăng nhập Google/Zalo. Mục kết thúc bằng `*` là tiền tố (ví dụ `exp://*` cho Expo Go) và bị bỏ qua khi `NODE_ENV=production` |
 
 ### AI
 
@@ -95,6 +95,11 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `GEMINI_API_KEY`, `GEMINI_IMAGE_MODEL`, `GEMINI_TIMEOUT_MS` | trống, `gemini-3.1-flash-image`, `120000` | Khi dùng Gemini |
 | `MOCK_DELAY_MS` | `2000` | Độ trễ mỗi ảnh mock |
 | `MUAPI_API_KEY` | trống | Chưa dùng |
+| `DECART_API_KEY` | trống (tắt) | Khoá `dct_...` của Decart cho **thử trực tiếp bằng camera**; chỉ ở backend, client chỉ nhận token ngắn hạn |
+| `DECART_MODEL` | `lucy-vton-latest` | Model realtime của Decart |
+| `LIVE_PREVIEW_WINDOW_DAYS` | `30` | Cửa sổ trượt để đếm lượt thử trực tiếp của mỗi gói |
+| `LIVE_PREVIEW_DAILY_LIMIT` | trống (tắt) | Trần tổng số phiên thử trực tiếp của cả hệ thống mỗi 24 giờ |
+| `LIVE_PREVIEW_CONNECT_ORIGINS` | host Decart + LiveKit | Ghi đè danh sách host WebRTC trong CSP |
 
 ### Giới hạn tốc độ
 
@@ -149,6 +154,17 @@ Module social dùng các bảng quan hệ có index (migration 009): mỗi reque
 Tác vụ nền chạy trong tiến trình web, an toàn khi nhiều instance vì dùng khoá hàng: gửi kết quả bình chọn hết hạn, dọn thông báo cũ, và hàng đợi `storage_cleanup_queue` xoá object R2 (ảnh tạm quá 24 giờ, ảnh của tài khoản đã xoá) có retry. Object còn được tham chiếu ở bất kỳ bảng nào sẽ không bị xoá.
 
 Khi tăng số người dùng, nên dùng Supabase **transaction pooler** (port `6543`) và tăng `DATABASE_POOL_MAX`; các khoá trong code đều là khoá theo transaction nên tương thích. Gói free của Render ngủ sau 15 phút không có request và chỉ có một instance.
+
+### Giữ cho service free không ngủ
+
+Render cho mỗi **workspace** 750 giờ chạy mỗi tháng và ngủ sau 15 phút không có request; đánh thức mất khoảng một phút, nên lần tạo ảnh đầu tiên sau khi ngủ lâu hơn hẳn (đo thực tế: tạo ảnh ~13–17 giây, cộng thêm thời gian thức dậy).
+
+Cách giữ cho máy thức mà không tốn tiền: tạo một cron ping ở <https://cron-job.org> (miễn phí, tối đa 1 lần/phút) gọi `https://vn-vton.onrender.com/api/health` mỗi 10 phút. Lưu ý:
+
+- **Đừng chạy 24/7.** Tháng 31 ngày tốn 744/750 giờ, gần như không còn dư; vượt quota thì Render **treo toàn bộ service free của workspace tới đầu tháng sau**. Giới hạn ping trong khung giờ có người dùng (ví dụ 05:00–01:00 giờ VN ≈ 620 giờ/tháng) để còn dư.
+- Phải ping một đường dẫn thật của app. Request tới `/robots.txt` khi service đang ngủ **không** đánh thức nó.
+- cron-job.org timeout sau 30 giây và tự tắt job khi hỏng quá 25 lần liên tiếp; lần ping đầu lúc máy đang ngủ có thể bị tính là lỗi, các lần sau thì không vì máy đã thức.
+- `/api/health` có kiểm tra kết nối database, nên ping cũng giữ cho Supabase free không bị tạm dừng vì không hoạt động.
 
 Supabase Auth có thể yêu cầu xác minh email. Nếu bật, sau đăng ký người dùng phải mở email rồi đăng nhập; nếu tắt, đăng ký tạo phiên ngay. `SUPABASE_SERVICE_ROLE_KEY` chỉ dùng cho xoá tài khoản, không dùng cho đăng ký/đăng nhập.
 
@@ -209,6 +225,19 @@ GEMINI_TIMEOUT_MS=120000
 ```
 
 Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage local, chuyển chúng thành inline image data rồi mới gọi Gemini; Google không cần truy cập URL localhost. Output Gemini được lưu lại qua `ImageStorage` và chỉ key ảnh được ghi vào database.
+
+## Thử trực tiếp bằng camera (Decart)
+
+Người dùng gói trả phí bật camera và thấy món đồ được "mặc" lên người trong video trực tiếp (Decart Lucy VTON realtime, 720p), trước khi tạo ảnh chất lượng cao bằng luồng FLUX.
+
+- **Lượt theo gói** (`server/plans/catalog.ts`): Free 0 · Plus 3 · Pro 10 · Max 30 lượt mỗi 30 ngày, mỗi lượt 10 giây (`livePreviewSeconds`). Quản trị viên không giới hạn.
+- **Ảnh tham chiếu**: một món trong tủ đồ (máy chủ đọc ảnh đã tách nền và gửi về client dạng base64) hoặc ảnh người dùng tự chọn trên máy (đi thẳng từ thiết bị tới Decart, không lưu vào tủ đồ). Prompt chọn theo loại món đồ (`server/live-preview/prompts.ts`), `enhance` bật.
+- **Luồng**: `POST /api/live-preview/sessions` kiểm gói, trừ 1 lượt (ghi bảng `live_preview_sessions`) → SDK gọi `POST /api/live-preview/sessions/:id/token` mỗi lần kết nối → máy chủ xin Decart client token sống 60 giây, chỉ dùng được model VTON và có `constraints.realtime.maxSessionDuration` = 10 giây, nên Decart tự cắt phiên dù client có bị sửa. Mỗi phiên tối đa 2 token (lần đầu + 1 lần tự kết nối lại) trong 2 phút. Token web còn bị khoá theo origin của site.
+- **Hoàn lượt**: Decart từ chối cấp token đầu tiên thì xoá phiên (không mất lượt). Đã có hình thì không hoàn.
+- **Chi phí**: 0,02 USD/giây → khoảng 0,2 USD (≈5.000đ) mỗi phiên 10 giây, tệ nhất 0,4 USD khi kết nối lại. Đặt `LIVE_PREVIEW_DAILY_LIMIT` làm cầu chì.
+- **Web**: nút "Thử trực tiếp" ở trang Tạo ảnh (`src/components/LivePreviewModal.tsx`, SDK `@decartai/sdk` nạp lười). Khi có `DECART_API_KEY`, `Permissions-Policy` mở `camera=(self)` và CSP `connect-src` thêm host Decart/LiveKit.
+- **Mobile**: màn `mobile/src/app/live-preview.tsx` dùng LiveKit WebRTC, **không chạy trong Expo Go** (màn sẽ báo cần bản cài đặt) — xem `mobile/README.md`.
+- Migration: `supabase/migrations/012_live_preview_sessions.sql`.
 
 ## Cấu trúc
 

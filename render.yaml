@@ -55,6 +55,10 @@ services:
         value: "30"
       - key: ADMIN_EMAILS
         sync: false
+      - key: DECART_API_KEY
+        sync: false
+      - key: LIVE_PREVIEW_DAILY_LIMIT
+        value: "200"
       - key: AI_REQUESTS_PER_15_MIN
         value: "10"
       - key: API_REQUESTS_PER_MINUTE

@@ -19,7 +19,7 @@ import { ApiError, apiRequest, protectedImageSource } from '@/services/api-clien
 import { imageUploadFile } from '@/services/image-upload';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
 import { categoryNames } from '@/screens/wardrobe';
-import type { CreditStatus, Garment, PageResponse, PersonImage, PlanSnapshot, TryOnResult } from '@/types/api';
+import type { CreditStatus, Garment, LivePreviewStatus, PageResponse, PersonImage, PlanSnapshot, TryOnResult } from '@/types/api';
 
 const normalize = (value: string) => value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().trim();
 
@@ -49,6 +49,8 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
   });
   const results = useQuery({ queryKey: ['try-on-results'], queryFn: () => apiRequest<{ items: TryOnResult[] }>('/api/generations/results') });
   const plans = useQuery({ queryKey: ['plans'], queryFn: () => apiRequest<PlanSnapshot>('/api/plans') });
+  // Lỗi ở đây không chặn phòng thử: chỉ ẩn nút thử trực tiếp.
+  const livePreview = useQuery({ queryKey: ['live-preview-status'], queryFn: () => apiRequest<LivePreviewStatus>('/api/live-preview/status') });
   const garmentItems = useMemo(() => garments.data?.pages.flatMap((page) => page.items) ?? [], [garments.data?.pages]);
   const selectedGarmentIds = selected.filter((id) => garmentItems.some((item) => item.id === id));
   const searchTerm = normalize(deferredSearch);
@@ -217,6 +219,11 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
           <AppText variant="caption">Tôi xác nhận đây là ảnh của mình và đồng ý gửi ảnh tới dịch vụ AI để tạo kết quả thử đồ.</AppText>
         </View>
       </Pressable>
+      {livePreview.data?.enabled && <AppButton
+        title={`Thử trực tiếp ${livePreview.data.sessionSeconds} giây bằng camera`}
+        icon="camera"
+        variant="secondary"
+        onPress={() => router.push({ pathname: '/live-preview', params: selectedGarmentIds[0] ? { garmentId: selectedGarmentIds[0] } : {} })}/>}
       {latestFront && <AppButton title="Thêm góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || selectedGarmentIds.length === 0 || !privacyConsent} onPress={() => startGenerate('back')}/>}
     </View>
 

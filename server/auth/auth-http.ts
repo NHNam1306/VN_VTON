@@ -37,9 +37,19 @@ const safeNextPath = (value: unknown): string => {
 }
 
 /** The app's own deep link, and only one this operator listed: never an arbitrary URL. */
+/**
+ * A listed entry may end in `*` so that Expo Go, whose address changes with the
+ * development machine's IP, can be allowed during development. Wildcards are dropped
+ * in production: whoever picks the address also receives the session hand-off code.
+ */
 const allowedMobileRedirect = (value: unknown): string | null => {
-  const requested = typeof value === 'string' && value ? value : (runtimeConfig.mobileAuthRedirects[0] ?? '')
-  return requested && runtimeConfig.mobileAuthRedirects.includes(requested) ? requested : null
+  const allowed = runtimeConfig.mobileAuthRedirects
+  const requested = typeof value === 'string' && value ? value : (allowed[0] ?? '')
+  if (!requested) return null
+  const permitted = allowed.some(entry => entry.endsWith('*')
+    ? requested.startsWith(entry.slice(0, -1))
+    : entry === requested)
+  return permitted ? requested : null
 }
 
 const withParam = (url: string, name: string, value: string) =>

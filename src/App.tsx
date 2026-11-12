@@ -1,4 +1,4 @@
-import { LoaderCircle, Shirt } from 'lucide-react'
+import { Camera, LoaderCircle, Shirt } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { Header } from './components/Header'
 import { BrandMark } from './components/brand/BrandMark'
@@ -13,6 +13,7 @@ import { garmentApi } from './services/garment-api'
 import { personApi } from './services/person-api'
 import { socialApi } from './services/social-api'
 import { tryOnApi } from './services/try-on-api'
+import { livePreviewApi } from './services/live-preview-api'
 import { useFittingRoomStore } from './store/useFittingRoomStore'
 import type { AuthUser } from './types/auth'
 import { MAX_SELECTED_GARMENTS } from './types/fitting-room'
@@ -26,6 +27,7 @@ const OutfitHistory = lazy(() => import('./components/OutfitHistory').then((modu
 const PersonPanel = lazy(() => import('./components/PersonPanel').then((module) => ({ default: module.PersonPanel })))
 const ProfilePage = lazy(() => import('./components/ProfilePage').then((module) => ({ default: module.ProfilePage })))
 const PlansPage = lazy(() => import('./components/PlansPage').then((module) => ({ default: module.PlansPage })))
+const LivePreviewModal = lazy(() => import('./components/LivePreviewModal').then((module) => ({ default: module.LivePreviewModal })))
 const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 const SocialPage = lazy(() => import('./components/social/SocialPage').then((module) => ({ default: module.SocialPage })))
 const ResultStage = lazy(() => import('./components/ResultStage').then((module) => ({ default: module.ResultStage })))
@@ -77,6 +79,9 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
   const setPersonImage = useFittingRoomStore((state) => state.setPersonImage)
   const resetWorkspace = useFittingRoomStore((state) => state.resetWorkspace)
   const plan = usePlanStatus()
+  const [isLivePreviewOpen, setIsLivePreviewOpen] = useState(false)
+  // Hidden until the server confirms the feature is configured (DECART_API_KEY).
+  const [livePreviewEnabled, setLivePreviewEnabled] = useState(false)
   const entitlements = plan.snapshot?.current.entitlements ?? FREE_ENTITLEMENTS
   const generation = useTryOnGeneration(activeView === 'fitting' || activeView === 'outfits', entitlements.savedOutfits)
   const selectedCount = [
@@ -104,6 +109,14 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
         if (current) setAvatarUrl(snapshot.me.avatar.startsWith('/uploads/') ? snapshot.me.avatar : null)
       })
       .catch(() => { if (current) setAvatarUrl(null) })
+    return () => { current = false }
+  }, [user.id])
+
+  useEffect(() => {
+    let current = true
+    livePreviewApi.status()
+      .then((status) => { if (current) setLivePreviewEnabled(status.enabled) })
+      .catch(() => { if (current) setLivePreviewEnabled(false) })
     return () => { current = false }
   }, [user.id])
 
@@ -220,6 +233,17 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
                 <h2 className="font-display text-2xl font-bold tracking-tight text-ink sm:text-3xl">Tạo ảnh thử đồ</h2>
                 <p className="mt-1 text-xs text-ink/45 sm:text-sm">Hoàn thành lần lượt ba bước dưới đây.</p>
               </div>
+              <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
+              {livePreviewEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setIsLivePreviewOpen(true)}
+                  className="group flex items-center gap-2 rounded-full bg-[#16171b] px-4 py-2 text-xs font-semibold text-white shadow-xs transition-all hover:bg-black hover:shadow-md sm:text-sm"
+                >
+                  <Camera size={15} className="transition-transform group-hover:scale-110" />
+                  <span>Thử trực tiếp</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => navigate('wardrobe')}
@@ -231,7 +255,15 @@ function FittingRoomApp({ user, onLoggedOut, onUserUpdate }: FittingRoomAppProps
                   {selectedCount}/{MAX_SELECTED_GARMENTS}
                 </span>
               </button>
+              </div>
             </section>
+            {isLivePreviewOpen && (
+              <LivePreviewModal
+                open={isLivePreviewOpen}
+                onClose={() => setIsLivePreviewOpen(false)}
+                onOpenPlans={() => navigate('plans')}
+              />
+            )}
 
             <nav className="mb-5 grid grid-cols-3 overflow-hidden rounded-[22px] border border-black/[0.07] bg-white/75 p-1.5 shadow-xs backdrop-blur-sm" aria-label="Các bước tạo ảnh">
               <button

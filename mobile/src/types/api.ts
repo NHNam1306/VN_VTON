@@ -60,13 +60,23 @@ export type OutfitVisibility = 'private' | 'friends' | 'groups';
 export type SocialGroup = { id: string; name: string; ownerId: string };
 export type OutfitPolicy = { outfitId: string; visibility: OutfitVisibility; groupIds: string[] };
 
+export type PlanEntitlements = {
+  imageCredits: number;
+  wardrobeItems: number;
+  savedOutfits: number;
+  selectedGarments: number;
+  /** Lượt thử trực tiếp bằng camera trong mỗi 30 ngày; 0 = gói không có. */
+  livePreviewSessions: number;
+  livePreviewSeconds: number;
+};
+
 export type Plan = {
   id: 'free' | 'plus' | 'pro' | 'max';
   name: string;
   description: string;
   monthlyPriceVnd: number;
   recommended: boolean;
-  entitlements: { imageCredits: number; wardrobeItems: number; savedOutfits: number; selectedGarments: number };
+  entitlements: PlanEntitlements;
   highlights: string[];
 };
 
@@ -76,6 +86,26 @@ export type PlanSnapshot = {
     planId: 'free' | 'plus' | 'pro' | 'max';
     planName: string;
     unlimited: boolean;
-    entitlements: { imageCredits: number; wardrobeItems: number; savedOutfits: number; selectedGarments: number };
+    entitlements: PlanEntitlements;
   };
 };
+
+export type LivePreviewStatus = {
+  enabled: boolean;
+  included: boolean;
+  unlimited: boolean;
+  sessionSeconds: number;
+  limit: number;
+  used: number;
+  remaining: number | null;
+  windowDays: number;
+  nextResetAt: string | null;
+};
+
+export type LivePreviewStartResponse = {
+  session: { id: string; model: string; seconds: number; tokenWindowEndsAt: string };
+  reference: { prompt: string; imageBase64: string | null; mimeType: string | null };
+  status: LivePreviewStatus;
+};
+
+export type LivePreviewToken = { apiKey: string; expiresAt: string; model: string; seconds: number };

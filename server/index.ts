@@ -43,6 +43,10 @@ import { SqlitePlanRepository } from './plans/sqlite-plan-repository.js'
 import { BillingService } from './billing/billing-service.js'
 import { PostgresBillingRepository } from './billing/postgres-billing-repository.js'
 import { SqliteBillingRepository } from './billing/sqlite-billing-repository.js'
+import { LivePreviewService } from './live-preview/service.js'
+import { PostgresLivePreviewRepository } from './live-preview/postgres-repository.js'
+import { SqliteLivePreviewRepository } from './live-preview/sqlite-repository.js'
+import { DecartHttpTokenIssuer } from './live-preview/decart-client.js'
 import { PayosGateway } from './billing/payos-gateway.js'
 import { MomoGateway } from './billing/momo-gateway.js'
 import type { PaymentGateway } from './billing/types.js'
@@ -221,6 +225,16 @@ const billingService = new BillingService(
   appBaseUrl,
   paymentLedger,
 )
+const livePreviewService = new LivePreviewService(
+  persistenceBackend === 'postgres'
+    ? new PostgresLivePreviewRepository(postgresPool!)
+    : new SqliteLivePreviewRepository(sqliteDatabasePath!),
+  planService,
+  repository,
+  imageStorage,
+  runtimeConfig.decartApiKey ? new DecartHttpTokenIssuer(runtimeConfig.decartApiKey) : null,
+  { model: runtimeConfig.decartModel, windowDays: runtimeConfig.livePreviewWindowDays },
+)
 const app = createApp(
   repository,
   userDataRepository,
@@ -240,6 +254,7 @@ const app = createApp(
     if (postgresPool) await postgresPool.query('SELECT 1')
   },
   storageCleanup,
+  livePreviewService,
 )
 const server = createHttpServer(app)
 let closeVite: (() => Promise<void>) | undefined
@@ -315,6 +330,7 @@ const shutdown = async (signal: string) => {
       Promise.resolve(creditService.close()),
       Promise.resolve(planService.close()),
       Promise.resolve(billingService.close()),
+      Promise.resolve(livePreviewService.close()),
     ])
     await postgresPool?.end().catch(() => undefined)
   }

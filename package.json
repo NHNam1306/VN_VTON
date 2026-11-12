@@ -16,6 +16,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1161.0",
     "@aws-sdk/s3-request-presigner": "3.1161.0",
+    "@decartai/sdk": "^0.2.14",
     "@google/genai": "^2.31.0",
     "@imgly/background-removal": "^1.7.0",
     "@supabase/supabase-js": "^2.118.0",

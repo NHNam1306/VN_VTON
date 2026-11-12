@@ -39,7 +39,15 @@
         "expo-image-picker",
         {
           "photosPermission": "Fitsy cần truy cập thư viện ảnh để bạn chọn ảnh đại diện, ảnh toàn thân và ảnh món đồ.",
-          "cameraPermission": "Fitsy cần dùng camera để bạn chụp ảnh đại diện."
+          "cameraPermission": "Fitsy cần dùng camera để bạn chụp ảnh và thử đồ trực tiếp."
+        }
+      ],
+      "@livekit/react-native-expo-plugin",
+      [
+        "@config-plugins/react-native-webrtc",
+        {
+          "cameraPermission": "Fitsy cần dùng camera để bạn chụp ảnh và thử đồ trực tiếp.",
+          "microphonePermission": "Fitsy không ghi âm. Quyền này chỉ do thành phần video trực tiếp yêu cầu."
         }
       ]
     ],

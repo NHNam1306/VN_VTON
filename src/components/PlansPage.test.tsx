@@ -4,10 +4,10 @@ import type { PlanSnapshot } from '../types/plans'
 import { PlansPage } from './PlansPage'
 
 const snapshot: PlanSnapshot = {
-  current: { planId: 'free', planName: 'Free', unlimited: false, entitlements: { imageCredits: 10, wardrobeItems: 20, savedOutfits: 10, selectedGarments: 8 } },
+  current: { planId: 'free', planName: 'Free', unlimited: false, entitlements: { imageCredits: 10, wardrobeItems: 20, savedOutfits: 10, selectedGarments: 8, livePreviewSessions: 0, livePreviewSeconds: 10 } },
   plans: [
-    { id: 'free', name: 'Free', description: 'Dùng thử.', monthlyPriceVnd: 0, recommended: false, entitlements: { imageCredits: 10, wardrobeItems: 20, savedOutfits: 10, selectedGarments: 8 }, highlights: ['10 ảnh tạo thử trọn đời'] },
-    { id: 'pro', name: 'Pro', description: 'Sáng tạo.', monthlyPriceVnd: 199000, recommended: true, entitlements: { imageCredits: 200, wardrobeItems: 300, savedOutfits: 150, selectedGarments: 8 }, highlights: ['200 ảnh mỗi chu kỳ'] },
+    { id: 'free', name: 'Free', description: 'Dùng thử.', monthlyPriceVnd: 0, recommended: false, entitlements: { imageCredits: 10, wardrobeItems: 20, savedOutfits: 10, selectedGarments: 8, livePreviewSessions: 0, livePreviewSeconds: 10 }, highlights: ['10 ảnh tạo thử trọn đời'] },
+    { id: 'pro', name: 'Pro', description: 'Sáng tạo.', monthlyPriceVnd: 199000, recommended: true, entitlements: { imageCredits: 200, wardrobeItems: 300, savedOutfits: 150, selectedGarments: 8, livePreviewSessions: 0, livePreviewSeconds: 10 }, highlights: ['200 ảnh mỗi chu kỳ'] },
   ],
 }
 
