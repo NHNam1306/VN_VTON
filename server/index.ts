@@ -89,6 +89,18 @@ if (!googleConfigured) {
   console.info(`[config] Đăng nhập bằng Google: Authorized redirect URI phải đúng là ${new URL('/api/auth/oauth/callback', appBaseUrl).toString()}`)
 }
 
+const zaloConfigured = Boolean(process.env.ZALO_APP_ID?.trim() && process.env.ZALO_APP_SECRET?.trim())
+if (!zaloConfigured) {
+  console.info('[config] Chưa có ZALO_APP_ID/ZALO_APP_SECRET: nút "Tiếp tục với Zalo" sẽ không hiện.')
+} else if (authBackend !== 'supabase') {
+  console.warn(`[config] Đăng nhập bằng Zalo cần AUTH_BACKEND=supabase (đang là "${authBackend}"): nút sẽ không hiện.`)
+} else if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
+  // Supabase cannot verify a Zalo token, so the session is minted with the service role.
+  console.warn('[config] Đăng nhập bằng Zalo cần SUPABASE_SERVICE_ROLE_KEY: nút sẽ hiện nhưng đăng nhập sẽ lỗi.')
+} else {
+  console.info(`[config] Đăng nhập bằng Zalo: Redirect URI trên Zalo App phải đúng là ${new URL('/api/auth/oauth/zalo/callback', appBaseUrl).toString()}`)
+}
+
 let postgresPool: PostgresPool | undefined
 let repository: GarmentRepository
 let userDataRepository: UserDataRepository

@@ -205,7 +205,8 @@ export function Header({
             </button>
             <div className="hidden min-w-0 pr-1 sm:block">
               <p className="max-w-28 truncate text-[11px] font-bold text-ink leading-tight">{user.displayName}</p>
-              <p className="max-w-28 truncate text-[8.5px] font-medium text-ink/40">{user.email}</p>
+              {/* Tài khoản Zalo không có email thật: hiện cách đăng nhập thay cho địa chỉ nội bộ. */}
+              <p className="max-w-28 truncate text-[8.5px] font-medium text-ink/40">{user.externalProvider === 'zalo' ? 'Đăng nhập bằng Zalo' : user.email}</p>
             </div>
             <button type="button" onClick={() => onViewChange('plans')} className={`grid size-9 shrink-0 place-items-center rounded-full transition sm:size-7 ${activeView === 'plans' ? 'bg-amber-100 text-amber-800' : 'text-ink/35 hover:bg-amber-50 hover:text-amber-700'}`} aria-label="Xem gói đăng ký" title="Gói đăng ký"><Crown size={13} /></button>
             <button type="button" onClick={() => onViewChange('settings')} className={`grid size-9 shrink-0 place-items-center rounded-full transition sm:size-7 ${activeView === 'settings' ? 'bg-sage-100 text-sage-800' : 'text-ink/35 hover:bg-sage-50 hover:text-ink/70'}`} aria-label="Mở cài đặt" title="Cài đặt"><Settings size={13} /></button>

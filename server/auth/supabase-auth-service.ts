@@ -1,5 +1,5 @@
 import { createClient, type User } from '@supabase/supabase-js'
-import type { AuthBackend, AuthResult, OAuthProvider } from './auth-backend.js'
+import type { AuthBackend, AuthResult, ExternalAuthProvider, ExternalIdentity, OAuthProvider } from './auth-backend.js'
 import { AuthError } from './auth-service.js'
 import type { PublicUser } from './auth-store.js'
 import type { UserRole } from '../admin/types.js'
@@ -18,23 +18,38 @@ export const displayNameFromMetadata = (metadata: Record<string, unknown> | unde
   return local.length >= 2 ? local : 'Người dùng'
 }
 
-/** Accounts created through Google have no password until they set one. */
+/**
+ * Providers this server authenticates itself: the Supabase account behind them is an
+ * ordinary email account with an internal address (see `signInWithExternalIdentity`),
+ * so `app_metadata.external_provider` is what tells them apart.
+ */
+const externalProviderFrom = (appMetadata: Record<string, unknown> | undefined): 'zalo' | undefined =>
+  appMetadata?.external_provider === 'zalo' ? 'zalo' : undefined
+
+/** Accounts created through Google or Zalo have no password until they set one. */
 const hasPasswordFrom = (appMetadata: Record<string, unknown> | undefined): boolean | undefined => {
+  // Internally an email account, so `providers` would wrongly claim it has a password.
+  if (externalProviderFrom(appMetadata)) return false
   const providers = Array.isArray(appMetadata?.providers) ? appMetadata.providers : appMetadata?.provider ? [appMetadata.provider] : null
   return providers ? providers.includes('email') : undefined
 }
 
-const toPublicUser = (user: User): PublicUser => ({
+const toPublicUser = (user: User): PublicUser => {
+  const externalProvider = externalProviderFrom(user.app_metadata)
+  return {
   id: user.id,
   email: user.email ?? '',
-  displayName: displayNameFromMetadata(user.user_metadata, user.email ?? ''),
+  externalProvider,
+  // The internal address of a Zalo account is no basis for a name: fall back to "Người dùng".
+  displayName: displayNameFromMetadata(user.user_metadata, externalProvider ? '' : user.email ?? ''),
   createdAt: user.created_at,
   role: (['user', 'koc', 'moderator', 'admin'].includes(String(user.app_metadata.role))
     ? user.app_metadata.role
     : 'user') as UserRole,
   status: 'active',
   hasPassword: hasPasswordFrom(user.app_metadata),
-})
+  }
+}
 
 const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | null => {
   const id = typeof claims.sub === 'string' ? claims.sub : ''
@@ -46,11 +61,13 @@ const toPublicUserFromClaims = (claims: Record<string, unknown>): PublicUser | n
   const appMetadata = claims.app_metadata && typeof claims.app_metadata === 'object'
     ? claims.app_metadata as Record<string, unknown>
     : {}
-  const displayName = displayNameFromMetadata(userMetadata, email)
+  const externalProvider = externalProviderFrom(appMetadata)
+  const displayName = displayNameFromMetadata(userMetadata, externalProvider ? '' : email)
   const roleValue = String(appMetadata.role ?? 'user')
   return {
     id,
     email,
+    externalProvider,
     displayName,
     createdAt: new Date((typeof claims.iat === 'number' ? claims.iat : Math.floor(Date.now() / 1000)) * 1000).toISOString(),
     role: (['user', 'koc', 'moderator', 'admin'].includes(roleValue) ? roleValue : 'user') as UserRole,
@@ -70,6 +87,12 @@ const validate = (email: string, displayName: string, password: string): void =>
     throw new AuthError(400, 'Mật khẩu phải từ 8 đến 128 ký tự.')
   }
 }
+
+const EXTERNAL_SIGN_IN_FAILED = 'Không thể đăng nhập bằng Zalo. Vui lòng thử lại.'
+
+/** Supabase's way of saying the account already exists, which is not a failure here. */
+const isAlreadyRegistered = (error: { code?: string; message?: string }): boolean =>
+  error.code === 'email_exists' || /already (been )?registered|already exists/i.test(error.message ?? '')
 
 const AUTH_REQUEST_TIMEOUT_MS = 10_000
 const TOKEN_CACHE_TTL_MS = 60_000
@@ -395,6 +418,94 @@ export class SupabaseAuthService implements AuthBackend {
     }
     const expiresAt = body.expires_at ?? (body.expires_in ? Math.floor(Date.now() / 1000) + body.expires_in : undefined)
     return this.fromSession(body.user, body.access_token, body.refresh_token, expiresAt)
+  }
+
+  /**
+   * Signs in an account from a provider this server authenticates itself (Zalo).
+   *
+   * Supabase has no Zalo provider and nothing it could verify, so the trust comes from
+   * this server having just completed Zalo's own flow (see `ZaloOAuth`). The session is
+   * minted for an account kept for that Zalo id: created on first sign-in, then issued a
+   * single-use token through the admin API which is traded for a real session. Nothing is
+   * emailed — `generate_link` hands the token back to this server instead of sending it.
+   *
+   * The address is internal on purpose: both `profiles` and the token claims need an
+   * email and Zalo never gives one. `app_metadata.external_provider` marks the account so
+   * neither the API nor the UI ever shows that address as the person's own.
+   */
+  async signInWithExternalIdentity(identity: ExternalIdentity): Promise<AuthResult> {
+    if (!this.adminClient) {
+      throw new AuthError(503, 'Đăng nhập bằng Zalo chưa được cấu hình trên máy chủ.')
+    }
+    const providerUserId = identity.providerUserId.trim()
+    // This ends up inside an email address and identifies the account: refuse surprises.
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(providerUserId)) {
+      console.error('[auth.external] unusable provider id', { provider: identity.provider, length: providerUserId.length })
+      throw new AuthError(400, EXTERNAL_SIGN_IN_FAILED)
+    }
+    const email = this.externalIdentityEmail(identity.provider, providerUserId)
+    const displayName = (identity.displayName ?? '').trim().slice(0, 50)
+
+    const created = await this.adminClient.auth.admin.createUser({
+      email,
+      email_confirm: true,
+      user_metadata: displayName.length >= 2 ? { display_name: displayName } : {},
+      app_metadata: { external_provider: identity.provider, external_id: providerUserId },
+    })
+    // An address that already exists is this same person signing in again; whatever they
+    // renamed themselves to since is left alone.
+    if (created.error && !isAlreadyRegistered(created.error)) {
+      console.error('[auth.external] could not create the account', {
+        provider: identity.provider,
+        code: created.error.code,
+        status: created.error.status,
+        message: created.error.message,
+      })
+      throw new AuthError(502, EXTERNAL_SIGN_IN_FAILED)
+    }
+
+    const link = await this.adminClient.auth.admin.generateLink({ type: 'magiclink', email })
+    const tokenHash = link.data?.properties?.hashed_token
+    if (link.error || !tokenHash) {
+      console.error('[auth.external] could not issue a sign-in token', {
+        provider: identity.provider,
+        code: link.error?.code,
+        status: link.error?.status,
+        message: link.error?.message,
+      })
+      throw new AuthError(502, EXTERNAL_SIGN_IN_FAILED)
+    }
+    // Which name Auth wants for this kind of token has changed between GoTrue versions
+    // ('email' in the current docs, 'magiclink' in older ones) and a rejected token is not
+    // consumed, so try both rather than leave sign-in broken on one of them.
+    let rejection: { code?: string; status?: number; message?: string } | null = null
+    for (const type of ['email', 'magiclink'] as const) {
+      // Never the shared client: see the note on `client`.
+      const { data, error } = await this.createAuthClient().auth.verifyOtp({ token_hash: tokenHash, type })
+      if (!error && data.user && data.session) {
+        return this.fromSession(data.user, data.session.access_token, data.session.refresh_token, data.session.expires_at)
+      }
+      rejection = { code: error?.code, status: error?.status, message: error?.message }
+    }
+    console.error('[auth.external] token exchange rejected', { provider: identity.provider, ...rejection })
+    throw new AuthError(502, EXTERNAL_SIGN_IN_FAILED)
+  }
+
+  /**
+   * `zalo_<id>@zalo.<this deployment's host>`: one address per Zalo account, on a domain
+   * tied to this deployment rather than a stranger's. Nothing is ever sent to it.
+   */
+  private externalIdentityEmail(provider: ExternalAuthProvider, providerUserId: string): string {
+    const configured = process.env.EXTERNAL_IDENTITY_EMAIL_DOMAIN?.trim().toLowerCase().replace(/^@/, '')
+    return `${provider}_${providerUserId.toLowerCase()}@${configured || this.defaultExternalDomain(provider)}`
+  }
+
+  private defaultExternalDomain(provider: ExternalAuthProvider): string {
+    let host = ''
+    try { host = new URL(this.appBaseUrl).hostname.toLowerCase() } catch { host = '' }
+    // An IP or a bare hostname is not a mail domain any Auth provider will accept.
+    const usable = host.includes('.') && !/^[\d.]+$/.test(host)
+    return `${provider}.${usable ? host : 'fitsy.local'}`
   }
 
   private fromSession(

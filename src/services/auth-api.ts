@@ -1,4 +1,8 @@
 import type { AuthUser } from '../types/auth'
+
+/** Cách đăng nhập xã hội máy chủ có thể bật. */
+export type SocialProvider = 'google' | 'zalo'
+export type SocialProviders = Record<SocialProvider, boolean>
 import { apiFetch } from './api-client'
 
 const parseError = async (response: Response) => {
@@ -11,20 +15,24 @@ const parseError = async (response: Response) => {
 }
 
 export const authApi = {
-  /** Sign-in methods the server has enabled (Google needs GOOGLE_CLIENT_ID/SECRET). */
-  async providers(): Promise<{ google: boolean }> {
+  /**
+   * Sign-in methods the server has enabled (Google needs GOOGLE_CLIENT_ID/SECRET,
+   * Zalo needs ZALO_APP_ID/SECRET).
+   */
+  async providers(): Promise<SocialProviders> {
+    const none: SocialProviders = { google: false, zalo: false }
     try {
       const response = await fetch('/api/auth/providers')
-      if (!response.ok) return { google: false }
-      return await response.json() as { google: boolean }
+      if (!response.ok) return none
+      return { ...none, ...(await response.json() as Partial<SocialProviders>) }
     } catch {
-      return { google: false }
+      return none
     }
   },
 
-  /** Full-page redirect to Google; the server sets the session cookies on the way back. */
-  startGoogleSignIn(nextPath = '/') {
-    window.location.assign('/api/auth/oauth/google?next=' + encodeURIComponent(nextPath))
+  /** Full-page redirect to the provider; the server sets the session cookies on the way back. */
+  startSocialSignIn(provider: SocialProvider, nextPath = '/') {
+    window.location.assign('/api/auth/oauth/' + provider + '?next=' + encodeURIComponent(nextPath))
   },
 
   async me(): Promise<AuthUser | null> {

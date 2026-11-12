@@ -9,7 +9,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
-import { authApi } from '../services/auth-api'
+import { authApi, type SocialProvider, type SocialProviders } from '../services/auth-api'
 import type { AuthUser } from '../types/auth'
 import { BrandLogo } from './brand/BrandMark'
 
@@ -49,14 +49,20 @@ const readRecoveryState = (): RecoveryState => {
   }
 }
 
+const providerLabels: Record<SocialProvider, string> = { google: 'Google', zalo: 'Zalo' }
+
 const oauthErrorMessages: Record<string, string> = {
   google_cancelled: 'Bạn đã huỷ đăng nhập bằng Google.',
   google_expired: 'Phiên đăng nhập Google đã hết hạn. Vui lòng thử lại.',
   google_unavailable: 'Đăng nhập bằng Google hiện chưa được bật.',
   google_failed: 'Không thể đăng nhập bằng Google. Vui lòng thử lại.',
+  zalo_cancelled: 'Bạn đã huỷ đăng nhập bằng Zalo.',
+  zalo_expired: 'Phiên đăng nhập Zalo đã hết hạn. Vui lòng thử lại.',
+  zalo_unavailable: 'Đăng nhập bằng Zalo hiện chưa được bật.',
+  zalo_failed: 'Không thể đăng nhập bằng Zalo. Vui lòng thử lại.',
 }
 
-/** Lỗi máy chủ gửi kèm khi quay về từ Google (`/?auth_error=…`); đọc một lần rồi xoá khỏi URL. */
+/** Lỗi máy chủ gửi kèm khi quay về từ Google/Zalo (`/?auth_error=…`); đọc một lần rồi xoá khỏi URL. */
 const readOAuthError = (): string | null => {
   const params = new URLSearchParams(window.location.search)
   const code = params.get('auth_error')
@@ -99,22 +105,22 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
   const [isResendingConfirmation, setIsResendingConfirmation] = useState(false)
   const [awaitingConfirmation, setAwaitingConfirmation] = useState(false)
   const [error, setError] = useState<string | null>(() => recovery.error ?? readOAuthError())
-  const [googleEnabled, setGoogleEnabled] = useState(false)
-  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [socialProviders, setSocialProviders] = useState<SocialProviders>({ google: false, zalo: false })
+  const [redirectingTo, setRedirectingTo] = useState<SocialProvider | null>(null)
 
   useEffect(() => {
     let active = true
-    void authApi.providers().then((providers) => { if (active) setGoogleEnabled(providers.google) })
-    // Bấm Back từ trang Google: trình duyệt khôi phục trang cũ, nút không được kẹt ở trạng thái đang chuyển.
-    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) setIsRedirecting(false) }
+    void authApi.providers().then((providers) => { if (active) setSocialProviders(providers) })
+    // Bấm Back từ trang Google/Zalo: trình duyệt khôi phục trang cũ, nút không được kẹt ở trạng thái đang chuyển.
+    const onPageShow = (event: PageTransitionEvent) => { if (event.persisted) setRedirectingTo(null) }
     window.addEventListener('pageshow', onPageShow)
     return () => { active = false; window.removeEventListener('pageshow', onPageShow) }
   }, [])
 
-  const continueWithGoogle = () => {
+  const continueWith = (provider: SocialProvider) => {
     setError(null)
-    setIsRedirecting(true)
-    authApi.startGoogleSignIn(portal === 'creator' ? '/koc' : '/')
+    setRedirectingTo(provider)
+    authApi.startSocialSignIn(provider, portal === 'creator' ? '/koc' : '/')
   }
   const [success, setSuccess] = useState<string | null>(null)
 
@@ -283,14 +289,16 @@ export function AuthPage({ onAuthenticated }: AuthPageProps) {
               </button>
             )}
 
-            {googleEnabled && (mode === 'login' || mode === 'register') && <>
+            {(socialProviders.google || socialProviders.zalo) && (mode === 'login' || mode === 'register') && <>
               <div className="flex items-center gap-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink/30" aria-hidden="true">
                 <span className="h-px flex-1 bg-black/[0.08]" />hoặc<span className="h-px flex-1 bg-black/[0.08]" />
               </div>
-              <button type="button" onClick={continueWithGoogle} disabled={isRedirecting || isSubmitting} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-black/10 bg-white px-5 py-3.5 text-sm font-bold text-ink transition hover:border-black/20 hover:bg-black/[0.02] disabled:cursor-wait disabled:opacity-60">
-                {isRedirecting && <LoaderCircle size={17} className="animate-spin" />}
-                {isRedirecting ? 'Đang chuyển tới Google…' : 'Tiếp tục với Google'}
-              </button>
+              {(['google', 'zalo'] as const).filter(provider => socialProviders[provider]).map(provider => (
+                <button key={provider} type="button" onClick={() => continueWith(provider)} disabled={redirectingTo !== null || isSubmitting} className={`flex w-full items-center justify-center gap-2 rounded-2xl border px-5 py-3.5 text-sm font-bold transition disabled:cursor-wait disabled:opacity-60 ${provider === 'zalo' ? 'border-sky-200 bg-white text-sky-700 hover:border-sky-300 hover:bg-sky-50/60' : 'border-black/10 bg-white text-ink hover:border-black/20 hover:bg-black/[0.02]'}`}>
+                  {redirectingTo === provider && <LoaderCircle size={17} className="animate-spin" />}
+                  {redirectingTo === provider ? `Đang chuyển tới ${providerLabels[provider]}…` : `Tiếp tục với ${providerLabels[provider]}`}
+                </button>
+              ))}
             </>}
 
             {mode === 'reset' && !recovery.credentials && (

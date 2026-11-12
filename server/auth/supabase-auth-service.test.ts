@@ -30,7 +30,7 @@ const accessToken = (name: string) => [
 
 type Call = { method: string; path: string; authorization: string | null; body: unknown }
 
-const createService = () => {
+const createService = (options: { serviceRole?: boolean } = {}) => {
   const calls: Call[] = []
   const fakeFetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input))
@@ -54,9 +54,48 @@ const createService = () => {
       if (body?.id_token !== 'google-id-token') return json(400, { error_code: 'bad_id_token' })
       return json(200, { ...session('google'), user: { ...authUser('google'), user_metadata: { full_name: 'Lan Nguyễn', name: 'Lan Nguyễn' }, app_metadata: { provider: 'google', providers: ['google'] } } })
     }
+    // Zalo: the account is created with the service role, then handed a one-time token.
+    if (url.pathname === '/auth/v1/admin/users' && call.method === 'POST') {
+      const email = String(body?.email ?? '')
+      if (email.includes('existing')) {
+        return json(422, { code: 422, error_code: 'email_exists', msg: 'A user with this email address has already been registered' })
+      }
+      return json(200, { ...authUser('zalo'), email })
+    }
+    if (url.pathname === '/auth/v1/admin/generate_link') {
+      return json(200, {
+        ...authUser('zalo'),
+        email: String(body?.email ?? ''),
+        action_link: 'https://project.supabase.co/auth/v1/verify?token=hashed',
+        email_otp: '123456',
+        hashed_token: 'hashed-token-for-' + String(body?.email ?? ''),
+        redirect_to: 'https://app.example.com',
+        verification_type: String(body?.type ?? ''),
+      })
+    }
+    if (url.pathname === '/auth/v1/verify') {
+      if (!String(body?.token_hash ?? '').startsWith('hashed-token-for-')) return json(401, { error_code: 'otp_expired' })
+      // An older Auth that only knows this token by its 'magiclink' name.
+      if (body?.type === 'email' && String(body?.token_hash).includes('legacy')) return json(403, { error_code: 'otp_expired' })
+      return json(200, {
+        ...session('zalo'),
+        user: {
+          ...authUser('zalo'),
+          email: String(body?.token_hash).replace('hashed-token-for-', ''),
+          user_metadata: { display_name: 'Lan Nguyễn' },
+          app_metadata: { provider: 'email', providers: ['email'], external_provider: 'zalo', external_id: '7712345' },
+        },
+      })
+    }
     return json(404, { message: 'not found' })
   }) as typeof fetch
-  const service = new SupabaseAuthService('https://project.supabase.co', 'sb_publishable_test', 'https://app.example.com', undefined, fakeFetch)
+  const service = new SupabaseAuthService(
+    'https://project.supabase.co',
+    'sb_publishable_test',
+    'https://app.example.com',
+    options.serviceRole ? 'sb_secret_service_role' : undefined,
+    fakeFetch,
+  )
   return { service, calls }
 }
 
@@ -116,5 +155,52 @@ describe('SupabaseAuthService', () => {
     expect(result.refreshToken).toBe('next-refresh-google')
     expect(result.user).toMatchObject({ id: 'id-google', displayName: 'Lan Nguyễn', hasPassword: false })
     await expect(service.signInWithIdToken('google', '')).rejects.toMatchObject({ statusCode: 400 })
+  })
+
+  it('gives a Zalo id its own account and a real session, with no email sent', async () => {
+    const { service, calls } = createService({ serviceRole: true })
+    const result = await service.signInWithExternalIdentity({ provider: 'zalo', providerUserId: '7712345', displayName: 'Lan Nguyễn' })
+
+    const created = calls.find(call => call.path === '/auth/v1/admin/users')
+    expect(created?.body).toMatchObject({
+      email: 'zalo_7712345@zalo.app.example.com',
+      email_confirm: true,
+      user_metadata: { display_name: 'Lan Nguyễn' },
+      app_metadata: { external_provider: 'zalo', external_id: '7712345' },
+    })
+    expect(calls.find(call => call.path === '/auth/v1/admin/generate_link')?.body).toMatchObject({
+      type: 'magiclink', email: 'zalo_7712345@zalo.app.example.com',
+    })
+    // Nothing goes through the endpoints that would actually send mail.
+    expect(calls.some(call => call.path.startsWith('/auth/v1/otp') || call.path.startsWith('/auth/v1/recover'))).toBe(false)
+    expect(result.token).toBe('access-zalo')
+    expect(result.refreshToken).toBe('next-refresh-zalo')
+    // The internal address is never presented as a password account.
+    expect(result.user).toMatchObject({ displayName: 'Lan Nguyễn', externalProvider: 'zalo', hasPassword: false })
+  })
+
+  it('signs the same Zalo account back in once it exists', async () => {
+    const { service } = createService({ serviceRole: true })
+    const result = await service.signInWithExternalIdentity({ provider: 'zalo', providerUserId: 'existing-7', displayName: 'Lan' })
+    expect(result.user.externalProvider).toBe('zalo')
+    expect(result.token).toBe('access-zalo')
+  })
+
+  it('still signs in where Auth only accepts the older token type', async () => {
+    const { service, calls } = createService({ serviceRole: true })
+    const result = await service.signInWithExternalIdentity({ provider: 'zalo', providerUserId: 'legacy-9' })
+    expect(result.token).toBe('access-zalo')
+    expect(calls.filter(call => call.path === '/auth/v1/verify').map(call => (call.body as { type: string }).type))
+      .toEqual(['email', 'magiclink'])
+  })
+
+  it('refuses a Zalo sign-in without a service role key, or with an unusable id', async () => {
+    const withoutKey = createService().service
+    await expect(withoutKey.signInWithExternalIdentity({ provider: 'zalo', providerUserId: '7712345' }))
+      .rejects.toMatchObject({ statusCode: 503 })
+
+    const { service } = createService({ serviceRole: true })
+    await expect(service.signInWithExternalIdentity({ provider: 'zalo', providerUserId: 'nguoi dung@evil' }))
+      .rejects.toMatchObject({ statusCode: 400 })
   })
 })

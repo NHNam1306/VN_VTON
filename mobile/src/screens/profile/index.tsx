@@ -66,7 +66,9 @@ export function ProfileScreen() {
   if (plans.data === undefined || social.data === undefined) return <ScreenLoading variant="cards" label="Đang tải hồ sơ…"/>;
 
   const me = social.data.me;
-  const name = me.name || String(auth.user?.user_metadata.display_name ?? auth.user?.email?.split('@')[0] ?? 'Người dùng');
+  // Tài khoản Zalo có email nội bộ (zalo_<id>@…), không dùng làm tên được.
+  const emailName = auth.user?.app_metadata.external_provider ? undefined : auth.user?.email?.split('@')[0];
+  const name = me.name || String(auth.user?.user_metadata.display_name ?? emailName ?? 'Người dùng');
   const avatarSource = me.avatar ? protectedImageSource(me.avatar, auth.session?.access_token) : undefined;
   const profileLink = me.inviteCode ? webBaseUrl + '/ban-be?invite=' + encodeURIComponent(me.inviteCode) : null;
   const busy = uploadAvatar.isPending || deleteAvatar.isPending;

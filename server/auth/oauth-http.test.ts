@@ -3,9 +3,10 @@ import type { AddressInfo } from 'node:net'
 import type { Server } from 'node:http'
 import express from 'express'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
-import type { AuthBackend, AuthResult } from './auth-backend.js'
+import type { AuthBackend, AuthResult, ExternalIdentity } from './auth-backend.js'
 import { createAuthRouter, OAUTH_COOKIE, SESSION_COOKIE } from './auth-http.js'
 import { GoogleOAuth } from './google-oauth.js'
+import { ZaloOAuth } from './zalo-oauth.js'
 
 const result: AuthResult = {
   user: { id: 'user-1', email: 'lan@gmail.com', displayName: 'Lan Nguyễn', createdAt: '2026-11-11T00:00:00.000Z', role: 'user', status: 'active', hasPassword: false },
@@ -16,6 +17,31 @@ const result: AuthResult = {
 
 const redeemed: Array<{ code: string; verifier: string; redirectUri: string }> = []
 const identities: string[] = []
+const zaloRedeemed: Array<{ code: string; verifier: string }> = []
+const zaloIdentities: ExternalIdentity[] = []
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
+
+/** Zalo reports a bad code or token with HTTP 200 and an `error` field, not a 4xx. */
+const zaloFetch = (async (input: string | URL | Request, init?: RequestInit) => {
+  const url = String(input)
+  const headers = (init?.headers ?? {}) as Record<string, string>
+  if (url.startsWith('https://oauth.zaloapp.com/v4/access_token')) {
+    expect(headers.secret_key).toBe('zalo-secret')
+    const form = new URLSearchParams(String(init?.body))
+    zaloRedeemed.push({ code: form.get('code') ?? '', verifier: form.get('code_verifier') ?? '' })
+    expect(form.get('app_id')).toBe('zalo-app-id')
+    expect(form.get('grant_type')).toBe('authorization_code')
+    if (form.get('code') !== 'good-code') return json({ error: -14005, error_name: 'invalid_code' })
+    return json({ access_token: 'zalo-access-' + form.get('code') })
+  }
+  if (url.startsWith('https://graph.zalo.me/v2.0/me')) {
+    if (headers.access_token !== 'zalo-access-good-code') return json({ error: -216, message: 'invalid access token' })
+    return json({ id: '7712345', name: 'Lan Nguyễn' })
+  }
+  throw new Error('unexpected request to ' + url)
+}) as typeof fetch
 
 const googleFetch = (async (input: string | URL | Request, init?: RequestInit) => {
   const form = new URLSearchParams(String(init?.body))
@@ -28,7 +54,7 @@ const googleFetch = (async (input: string | URL | Request, init?: RequestInit) =
   return new Response(JSON.stringify({ id_token: 'id-token-for-' + form.get('code') }), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }) as typeof fetch
 
-const backend = (google = true): AuthBackend => ({
+const backend = (google = true, zalo = false): AuthBackend => ({
   register: async () => result,
   login: async () => result,
   authenticate: async () => null,
@@ -39,12 +65,18 @@ const backend = (google = true): AuthBackend => ({
       return result
     },
   } : {}),
+  ...(zalo ? {
+    signInWithExternalIdentity: async (identity: ExternalIdentity) => {
+      zaloIdentities.push(identity)
+      return result
+    },
+  } : {}),
 })
 
-const listen = (auth: AuthBackend, google: GoogleOAuth | null) => {
+const listen = (auth: AuthBackend, google: GoogleOAuth | null, zalo: ZaloOAuth | null = null) => {
   const app = express()
   app.use(express.json())
-  app.use('/api/auth', createAuthRouter(auth, false, 30, undefined, undefined, undefined, google))
+  app.use('/api/auth', createAuthRouter(auth, false, 30, undefined, undefined, undefined, google, zalo))
   const server = app.listen(0)
   return { server, baseUrl: `http://127.0.0.1:${(server.address() as AddressInfo).port}` }
 }
@@ -177,9 +209,108 @@ describe('without Google credentials', () => {
   afterAll(() => new Promise<void>(resolve => server.close(() => resolve())))
 
   it('hides the button and refuses to start', async () => {
-    expect(await (await fetch(`${baseUrl}/api/auth/providers`)).json()).toEqual({ google: false })
+    expect(await (await fetch(`${baseUrl}/api/auth/providers`)).json()).toEqual({ google: false, zalo: false })
     const start = await fetch(`${baseUrl}/api/auth/oauth/google`, { redirect: 'manual' })
     expect(start.status).toBe(303)
     expect(start.headers.get('location')).toBe('/?auth_error=google_unavailable')
+  })
+})
+
+describe('Zalo sign-in, with no token for Supabase to verify', () => {
+  let server: Server
+  let baseUrl: string
+
+  beforeAll(() => {
+    const zalo = new ZaloOAuth({
+      appId: 'zalo-app-id',
+      appSecret: 'zalo-secret',
+      redirectUri: 'https://fitsy.example/api/auth/oauth/zalo/callback',
+      fetchImpl: zaloFetch,
+    })
+    const started = listen(backend(false, true), null, zalo)
+    server = started.server
+    baseUrl = started.baseUrl
+  })
+  afterAll(() => new Promise<void>(resolve => server.close(() => resolve())))
+  beforeEach(() => { zaloRedeemed.length = 0; zaloIdentities.length = 0 })
+
+  const cookieValue = (response: Response, name: string) => response.headers.getSetCookie()
+    .map(value => value.split(';')[0])
+    .find(value => value.startsWith(name + '='))
+
+  const start = async (query = '') => {
+    const response = await fetch(`${baseUrl}/api/auth/oauth/zalo${query}`, { redirect: 'manual' })
+    const location = response.headers.get('location') ?? ''
+    return { response, location, state: new URL(location).searchParams.get('state') ?? '', cookie: cookieValue(response, OAUTH_COOKIE) }
+  }
+  const callback = (query: string, cookie?: string) => fetch(`${baseUrl}/api/auth/oauth/zalo/callback?${query}`, {
+    redirect: 'manual',
+    headers: cookie ? { Cookie: cookie } : undefined,
+  })
+
+  it('offers Zalo alongside nothing else, and sends people to Zalo itself', async () => {
+    expect(await (await fetch(`${baseUrl}/api/auth/providers`)).json()).toEqual({ google: false, zalo: true })
+    const { response, location, cookie } = await start('?next=/koc')
+    expect(response.status).toBe(302)
+    const url = new URL(location)
+    expect(url.origin + url.pathname).toBe('https://oauth.zaloapp.com/v4/permission')
+    expect(url.searchParams.get('app_id')).toBe('zalo-app-id')
+    expect(url.searchParams.get('redirect_uri')).toBe('https://fitsy.example/api/auth/oauth/zalo/callback')
+    expect(url.searchParams.get('code_challenge')).toMatch(/^[\w-]{43}$/)
+    expect(location).not.toContain('supabase')
+    expect(cookie).toBeTruthy()
+  })
+
+  it('signs in with the Zalo id and the name Zalo gives', async () => {
+    const { state, cookie } = await start('?next=/koc')
+    const response = await callback(`code=good-code&state=${state}`, cookie)
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/koc')
+    expect(cookieValue(response, SESSION_COOKIE)).toBe(`${SESSION_COOKIE}=access-token`)
+    expect(zaloRedeemed[0]?.code).toBe('good-code')
+    expect(zaloRedeemed[0]?.verifier.length).toBeGreaterThanOrEqual(43)
+    expect(zaloIdentities).toEqual([{ provider: 'zalo', providerUserId: '7712345', displayName: 'Lan Nguyễn' }])
+  })
+
+  it('refuses a callback from another browser, and a state replayed later', async () => {
+    const { state, cookie } = await start()
+    const forged = await callback(`code=good-code&state=${state}`)
+    expect(forged.headers.get('location')).toBe('/?auth_error=zalo_expired')
+    expect(zaloRedeemed).toEqual([])
+
+    const replay = await callback(`code=good-code&state=${state}`, cookie)
+    expect(replay.headers.get('location')).toBe('/?auth_error=zalo_expired')
+    expect(zaloIdentities).toEqual([])
+  })
+
+  it('tells a cancelled sign-in apart from a failed one', async () => {
+    const cancelled = await start().then(({ state, cookie }) => callback(`error=-1012&state=${state}`, cookie))
+    expect(cancelled.headers.get('location')).toBe('/?auth_error=zalo_cancelled')
+
+    // Zalo answers 200 with an error body for a code it will not redeem.
+    const { state, cookie } = await start()
+    const failed = await callback(`code=stolen-code&state=${state}`, cookie)
+    expect(failed.headers.get('location')).toBe('/?auth_error=zalo_failed')
+    expect(cookieValue(failed, SESSION_COOKIE)).toBeUndefined()
+    expect(zaloIdentities).toEqual([])
+  })
+
+  it('hands the mobile app a one-time code, on its own callback path', async () => {
+    const { location, state } = await start('?client=mobile&redirect=' + encodeURIComponent('fitsy://auth-callback'))
+    expect(location).toContain('oauth.zaloapp.com')
+    const response = await callback(`code=good-code&state=${state}`)
+    const handoff = new URL(response.headers.get('location') ?? '').searchParams.get('fitsy_code')
+    expect(response.headers.get('location')).toContain('fitsy://auth-callback?fitsy_code=')
+
+    const claim = await fetch(`${baseUrl}/api/auth/oauth/session`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: handoff }),
+    })
+    expect(await claim.json()).toMatchObject({ accessToken: 'access-token', refreshToken: 'refresh-token' })
+  })
+
+  it('reports Google as unavailable instead of 404ing its route', async () => {
+    const response = await fetch(`${baseUrl}/api/auth/oauth/google`, { redirect: 'manual' })
+    expect(response.status).toBe(303)
+    expect(response.headers.get('location')).toBe('/?auth_error=google_unavailable')
   })
 })

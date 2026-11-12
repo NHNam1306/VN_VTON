@@ -282,9 +282,16 @@ export function SettingsPage({
               </SettingsCard>
 
               {user.hasPassword === false ? (
+                user.externalProvider === 'zalo' ? (
+                  <SettingsCard icon={KeyRound} title="Đăng nhập bằng Zalo" className="lg:col-span-2">
+                    {/* Zalo không cung cấp email, nên tài khoản này không có email lẫn mật khẩu Fitsy để đổi. */}
+                    <p className="text-sm leading-6 text-ink/60">Tài khoản của bạn đăng nhập bằng <span className="font-semibold text-ink">Zalo</span> nên không có email hay mật khẩu Fitsy. Tên hiển thị và ảnh đại diện vẫn đổi được ở trên.</p>
+                  </SettingsCard>
+                ) : (
                 <SettingsCard icon={KeyRound} title="Đăng nhập bằng Google" className="lg:col-span-2">
                   <p className="text-sm leading-6 text-ink/60">Tài khoản <span className="font-semibold text-ink">{user.email}</span> đăng nhập bằng Google nên không có mật khẩu Fitsy. Email và mật khẩu được quản lý trong tài khoản Google của bạn.</p>
                 </SettingsCard>
+                )
               ) : <>
               <SettingsCard icon={Mail} title="Địa chỉ email">
                 <p className="mb-4 truncate text-sm font-semibold text-ink/60">{user.email}</p>

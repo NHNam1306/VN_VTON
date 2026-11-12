@@ -16,7 +16,7 @@ type AuthContextValue = {
   configurationError: string | null;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (name: string, email: string, password: string) => Promise<'signed-in' | 'confirmation-required'>;
-  signInWithGoogle: () => Promise<'signed-in' | 'cancelled'>;
+  signInWithProvider: (provider: SocialProvider) => Promise<'signed-in' | 'cancelled'>;
   resendConfirmation: (email: string) => Promise<void>;
   requestPasswordReset: (email: string) => Promise<void>;
   resetPassword: (password: string) => Promise<void>;
@@ -27,18 +27,27 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Mã dùng một lần đã/đang được đổi lấy phiên. Sau khi đăng nhập Google, cùng một mã có
- * thể về hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
+ * Mã dùng một lần đã/đang được đổi lấy phiên. Sau khi đăng nhập Google/Zalo, cùng một mã
+ * có thể về hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
  */
 const consumedCodes = new Set<string>();
-const googleFailure = 'Không thể đăng nhập bằng Google. Vui lòng thử lại.';
+
+/** Cách đăng nhập xã hội máy chủ có thể bật. */
+export type SocialProvider = 'google' | 'zalo';
+const providerLabels: Record<SocialProvider, string> = { google: 'Google', zalo: 'Zalo' };
+const socialFailure = (provider?: SocialProvider) => provider
+  ? `Không thể đăng nhập bằng ${providerLabels[provider]}. Vui lòng thử lại.`
+  : 'Không thể đăng nhập. Vui lòng thử lại.';
+/** Mã lỗi máy chủ gửi về deep link có dạng `<provider>_<lý do>`. */
+const providerFromAuthError = (code: string): SocialProvider | undefined =>
+  (Object.keys(providerLabels) as SocialProvider[]).find(provider => code.startsWith(provider + '_'));
 /** Địa chỉ app nhận lại sau khi đăng nhập; máy chủ chỉ chấp nhận địa chỉ trong danh sách của nó. */
-const googleRedirect = 'fitsy://auth-callback';
+const authRedirect = 'fitsy://auth-callback';
 
 type HandoffSession = { accessToken: string; refreshToken: string };
 
 /** Đổi mã dùng một lần của máy chủ lấy phiên Supabase rồi lưu phiên đó. */
-const claimGoogleSession = async (code: string) => {
+const claimHandoffSession = async (code: string, provider?: SocialProvider) => {
   if (consumedCodes.has(code)) return;
   consumedCodes.add(code);
   const response = await fetch(apiBaseUrl + '/api/auth/oauth/session', {
@@ -46,10 +55,10 @@ const claimGoogleSession = async (code: string) => {
     headers: { 'Content-Type': 'application/json', 'X-Fitting-Room-Request': '1' },
     body: JSON.stringify({ code }),
   });
-  if (!response.ok) throw new Error(googleFailure);
+  if (!response.ok) throw new Error(socialFailure(provider));
   const session = await response.json() as HandoffSession;
   const { error } = await supabase.auth.setSession({ access_token: session.accessToken, refresh_token: session.refreshToken });
-  if (error) throw new Error(googleFailure);
+  if (error) throw new Error(socialFailure(provider));
 };
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -97,18 +106,21 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (isRecovery) setRecoveryMode(true);
       setLinkError(null);
 
-      // Quay về từ đăng nhập Google (máy chủ Fitsy gửi kèm mã dùng một lần).
+      // Quay về từ đăng nhập Google/Zalo (máy chủ Fitsy gửi kèm mã dùng một lần).
       const handoff = parsed.queryParams?.fitsy_code;
       if (typeof handoff === 'string') {
         try {
-          await claimGoogleSession(handoff);
+          await claimHandoffSession(handoff);
         } catch {
-          setLinkError(googleFailure);
+          setLinkError(socialFailure());
         }
         return;
       }
-      if (parsed.queryParams?.auth_error) {
-        setLinkError(parsed.queryParams.auth_error === 'google_cancelled' ? null : googleFailure);
+      const authError = parsed.queryParams?.auth_error;
+      if (authError) {
+        // Người dùng tự huỷ ở trang của provider thì không phải lỗi để báo.
+        const code = typeof authError === 'string' ? authError : '';
+        setLinkError(code.endsWith('_cancelled') ? null : socialFailure(providerFromAuthError(code)));
         return;
       }
 
@@ -189,18 +201,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
       return data.session ? 'signed-in' : 'confirmation-required';
     },
-    signInWithGoogle: async () => {
-      // Mở trang đăng nhập của chính máy chủ Fitsy: Google hiện tên miền Fitsy,
+    signInWithProvider: async (provider) => {
+      // Mở trang đăng nhập của chính máy chủ Fitsy: Google/Zalo hiện tên miền Fitsy,
       // không phải địa chỉ project Supabase.
-      const startUrl = apiBaseUrl + '/api/auth/oauth/google?client=mobile&redirect=' + encodeURIComponent(googleRedirect);
-      const result = await WebBrowser.openAuthSessionAsync(startUrl, googleRedirect);
+      const startUrl = `${apiBaseUrl}/api/auth/oauth/${provider}?client=mobile&redirect=${encodeURIComponent(authRedirect)}`;
+      const result = await WebBrowser.openAuthSessionAsync(startUrl, authRedirect);
       if (result.type !== 'success') return 'cancelled';
       const params = Linking.parse(result.url).queryParams ?? {};
-      if (params.auth_error === 'google_cancelled') return 'cancelled';
-      if (params.auth_error) throw new Error(googleFailure);
+      if (params.auth_error === `${provider}_cancelled`) return 'cancelled';
+      if (params.auth_error) throw new Error(socialFailure(provider));
       const handoff = params.fitsy_code;
-      if (typeof handoff !== 'string') throw new Error(googleFailure);
-      await claimGoogleSession(handoff);
+      if (typeof handoff !== 'string') throw new Error(socialFailure(provider));
+      await claimHandoffSession(handoff, provider);
       return 'signed-in';
     },
     resendConfirmation: async (email) => {
