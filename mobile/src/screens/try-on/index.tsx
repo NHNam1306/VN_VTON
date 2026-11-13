@@ -66,7 +66,9 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
     mutationFn: async () => {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) throw new Error('Cần quyền truy cập thư viện ảnh để chọn ảnh toàn thân.');
-      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: true, aspect: [4, 5], quality: 0.9 });
+      // Không bật khung cắt: trên iOS khung cắt của hệ thống luôn vuông (bỏ qua `aspect`),
+      // nên ảnh toàn thân bị mất đầu/chân và mất một phần outfit. Gửi nguyên ảnh lên máy chủ.
+      const picked = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsEditing: false, quality: 0.9 });
       if (picked.canceled) return null;
       const asset = picked.assets[0];
       const form = new FormData();
