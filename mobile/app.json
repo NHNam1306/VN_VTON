@@ -49,6 +49,14 @@
           "cameraPermission": "Fitsy cần dùng camera để bạn chụp ảnh và thử đồ trực tiếp.",
           "microphonePermission": "Fitsy không ghi âm. Quyền này chỉ do thành phần video trực tiếp yêu cầu."
         }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraProguardRules": "# @livekit/react-native-webrtc references Chromium's JNI Zero classes but does not\n# ship them, so R8 stops on \"missing class\". It only needs to be told not to warn.\n-dontwarn livekit.org.jni_zero.**\n# WebRTC and LiveKit classes are reached from native code, so R8 cannot see the uses.\n-keep class livekit.org.jni_zero.** { *; }\n-keep class livekit.org.webrtc.** { *; }\n-keep class com.livekit.** { *; }\n"
+          }
+        }
       ]
     ],
     "experiments": {

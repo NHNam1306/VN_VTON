@@ -1,12 +1,16 @@
 import type { MaybePromise } from '../storage/maybe-promise.js'
 import type { LivePreviewSessionRecord, NewLivePreviewSession } from './types.js'
 
+/** One counted session: when it started and how many quota sessions it used. */
+export type LivePreviewUsage = { createdAt: string; cost: number }
+
 export interface LivePreviewRepository {
-  /** Sessions created after `since`, oldest first (only `createdAt` is needed). */
-  listCreatedSince(userId: string, since: Date): MaybePromise<string[]>
+  /** Sessions created after `since`, oldest first. */
+  listUsageSince(userId: string, since: Date): MaybePromise<LivePreviewUsage[]>
   /**
-   * Atomically records a session if fewer than `limit` sessions were created after
-   * `since`; `limit === null` means unlimited. Returns null when the quota is used up.
+   * Atomically records a session if the cost already used after `since` plus this
+   * session's cost stays within `limit`; `limit === null` means unlimited.
+   * Returns null when the quota is used up.
    */
   tryCreate(session: NewLivePreviewSession, limit: number | null, since: Date): MaybePromise<LivePreviewSessionRecord | null>
   /**
@@ -24,15 +28,16 @@ export interface LivePreviewRepository {
 export class MemoryLivePreviewRepository implements LivePreviewRepository {
   private readonly sessions = new Map<string, LivePreviewSessionRecord>()
 
-  listCreatedSince(userId: string, since: Date): string[] {
+  listUsageSince(userId: string, since: Date): LivePreviewUsage[] {
     return [...this.sessions.values()]
       .filter(item => item.userId === userId && new Date(item.createdAt) > since)
-      .map(item => item.createdAt)
-      .sort()
+      .map(item => ({ createdAt: item.createdAt, cost: item.cost }))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   }
 
   tryCreate(session: NewLivePreviewSession, limit: number | null, since: Date): LivePreviewSessionRecord | null {
-    if (limit !== null && this.listCreatedSince(session.userId, since).length >= limit) return null
+    const used = this.listUsageSince(session.userId, since).reduce((sum, item) => sum + item.cost, 0)
+    if (limit !== null && used + session.cost > limit) return null
     const record: LivePreviewSessionRecord = { ...session, tokensIssued: 0, createdAt: new Date().toISOString() }
     this.sessions.set(record.id, record)
     return { ...record }

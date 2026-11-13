@@ -5,7 +5,7 @@ import type { Server } from 'node:http'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { PublicUser } from '../auth/auth-store.js'
 import { PlanService } from '../plans/plan-service.js'
-import type { GarmentRepository } from '../storage/garment-repository.js'
+import type { GarmentRepository } from '../garments/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { DecartTokenRequest } from './decart-client.js'
 import { MemoryLivePreviewRepository } from './repository.js'
@@ -49,6 +49,7 @@ describe('live preview HTTP routes', () => {
     expect((await post('/sessions', { source: 'camera' })).status).toBe(400)
     expect((await post('/sessions', { source: 'wardrobe', garmentId: 'not-a-uuid' })).status).toBe(400)
     expect((await post('/sessions', { source: 'upload', category: 'hats' })).status).toBe(400)
+    expect((await post('/sessions', { source: 'upload', speed: 'turbo' })).status).toBe(400)
     expect((await post('/sessions/not-a-uuid/token')).status).toBe(400)
   })
 

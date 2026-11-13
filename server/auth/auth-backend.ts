@@ -32,22 +32,6 @@ export interface AuthBackend {
   deleteAccount?(userId: string, token?: string | null): Promise<void>
   /** Trades a provider's ID token (obtained by this server) for an application session. */
   signInWithIdToken?(provider: OAuthProvider, idToken: string): Promise<AuthResult>
-  /**
-   * Signs in a social account this server authenticated itself, for providers the auth
-   * backend cannot verify a token for (Zalo). Creates the account on first sign-in.
-   */
-  signInWithExternalIdentity?(identity: ExternalIdentity): Promise<AuthResult>
 }
 
 export type OAuthProvider = 'google'
-
-/** Providers this server authenticates on its own, with no token for Supabase to check. */
-export type ExternalAuthProvider = 'zalo'
-
-export type ExternalIdentity = {
-  provider: ExternalAuthProvider
-  /** The provider's own stable id for this person. */
-  providerUserId: string
-  /** Name as the provider has it; only used when the account is created. */
-  displayName?: string
-}

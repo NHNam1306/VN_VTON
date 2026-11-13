@@ -13,8 +13,8 @@ import { AuthStore } from './auth/auth-store.js'
 import { MockImageProvider } from './providers/mock-image-provider.js'
 import type { ImageStorage } from './storage/image-storage.js'
 import { LocalImageStorage } from './storage/local-image-storage.js'
-import { SqliteGarmentRepository } from './storage/sqlite-garment-repository.js'
-import { SqliteUserDataRepository } from './storage/sqlite-user-data-repository.js'
+import { SqliteGarmentRepository } from './garments/sqlite-garment-repository.js'
+import { SqliteUserDataRepository } from './user-data/sqlite-user-data-repository.js'
 
 const MUTATION = { 'X-Fitting-Room-Request': '1' }
 

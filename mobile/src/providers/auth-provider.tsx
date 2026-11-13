@@ -27,14 +27,14 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 /**
- * Mã dùng một lần đã/đang được đổi lấy phiên. Sau khi đăng nhập Google/Zalo, cùng một mã
+ * Mã dùng một lần đã/đang được đổi lấy phiên. Sau khi đăng nhập Google, cùng một mã
  * có thể về hai đường (kết quả của trình duyệt và sự kiện deep link); mã chỉ đổi được một lần.
  */
 const consumedCodes = new Set<string>();
 
 /** Cách đăng nhập xã hội máy chủ có thể bật. */
-export type SocialProvider = 'google' | 'zalo';
-const providerLabels: Record<SocialProvider, string> = { google: 'Google', zalo: 'Zalo' };
+export type SocialProvider = 'google';
+const providerLabels: Record<SocialProvider, string> = { google: 'Google' };
 const socialFailure = (provider?: SocialProvider) => provider
   ? `Không thể đăng nhập bằng ${providerLabels[provider]}. Vui lòng thử lại.`
   : 'Không thể đăng nhập. Vui lòng thử lại.';
@@ -110,7 +110,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       if (isRecovery) setRecoveryMode(true);
       setLinkError(null);
 
-      // Quay về từ đăng nhập Google/Zalo (máy chủ Fitsy gửi kèm mã dùng một lần).
+      // Quay về từ đăng nhập Google (máy chủ Fitsy gửi kèm mã dùng một lần).
       const handoff = parsed.queryParams?.fitsy_code;
       if (typeof handoff === 'string') {
         try {
@@ -206,7 +206,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return data.session ? 'signed-in' : 'confirmation-required';
     },
     signInWithProvider: async (provider) => {
-      // Mở trang đăng nhập của chính máy chủ Fitsy: Google/Zalo hiện tên miền Fitsy,
+      // Mở trang đăng nhập của chính máy chủ Fitsy: Google hiện tên miền Fitsy,
       // không phải địa chỉ project Supabase.
       const startUrl = `${apiBaseUrl}/api/auth/oauth/${provider}?client=mobile&redirect=${encodeURIComponent(authRedirect)}`;
       const result = await WebBrowser.openAuthSessionAsync(startUrl, authRedirect);

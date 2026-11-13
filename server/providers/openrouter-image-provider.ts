@@ -3,7 +3,7 @@ import type { ImageStorage } from '../storage/image-storage.js'
 import type { GenerateImageInput, GeneratedImage, ImageProvider } from './image-provider.js'
 import { ImageProviderError } from './image-provider-error.js'
 import sharp from 'sharp'
-import { AiQueueBusyError, aiImageSemaphore } from '../services/ai-concurrency.js'
+import { AiQueueBusyError, aiImageSemaphore } from './ai-concurrency.js'
 
 const OPENROUTER_IMAGE_API_URL = 'https://openrouter.ai/api/v1/images'
 const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])

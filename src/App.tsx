@@ -1,11 +1,11 @@
 import { Camera, LoaderCircle, Shirt } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
-import { Header } from './components/Header'
-import { BrandMark } from './components/brand/BrandMark'
-import { MobileNavigation, QuickActionSheet } from './components/MobileNavigation'
-import type { PersonPanelHandle } from './components/PersonPanel'
-import { useTryOnGeneration } from './hooks/useTryOnGeneration'
-import { usePlanStatus } from './hooks/usePlanStatus'
+import { Header } from './shared/layout/Header'
+import { BrandMark } from './shared/components/BrandMark'
+import { MobileNavigation, QuickActionSheet } from './shared/layout/MobileNavigation'
+import type { PersonPanelHandle } from './features/fitting-room/PersonPanel'
+import { useTryOnGeneration } from './features/fitting-room/useTryOnGeneration'
+import { usePlanStatus } from './features/plans/usePlanStatus'
 import { appViewPaths, resolveAppView, type AppView } from './navigation'
 import { authApi } from './services/auth-api'
 import { readStoredValue, storageKeys, writeStoredValue } from './services/local-storage-keys'
@@ -19,20 +19,20 @@ import type { AuthUser } from './types/auth'
 import { MAX_SELECTED_GARMENTS } from './types/fitting-room'
 import { FREE_ENTITLEMENTS } from './types/plans'
 
-const AuthPage = lazy(() => import('./components/AuthPage').then((module) => ({ default: module.AuthPage })))
-const AdminPage = lazy(() => import('./components/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
-const KocStudioPage = lazy(() => import('./components/KocStudioPage').then((module) => ({ default: module.KocStudioPage })))
-const OnboardingFlow = lazy(() => import('./components/OnboardingFlow').then((module) => ({ default: module.OnboardingFlow })))
-const OutfitHistory = lazy(() => import('./components/OutfitHistory').then((module) => ({ default: module.OutfitHistory })))
-const PersonPanel = lazy(() => import('./components/PersonPanel').then((module) => ({ default: module.PersonPanel })))
-const ProfilePage = lazy(() => import('./components/ProfilePage').then((module) => ({ default: module.ProfilePage })))
-const PlansPage = lazy(() => import('./components/PlansPage').then((module) => ({ default: module.PlansPage })))
-const LivePreviewModal = lazy(() => import('./components/LivePreviewModal').then((module) => ({ default: module.LivePreviewModal })))
-const SettingsPage = lazy(() => import('./components/SettingsPage').then((module) => ({ default: module.SettingsPage })))
-const SocialPage = lazy(() => import('./components/social/SocialPage').then((module) => ({ default: module.SocialPage })))
-const ResultStage = lazy(() => import('./components/ResultStage').then((module) => ({ default: module.ResultStage })))
-const UploadGarmentModal = lazy(() => import('./components/UploadGarmentModal').then((module) => ({ default: module.UploadGarmentModal })))
-const WardrobePanel = lazy(() => import('./components/WardrobePanel').then((module) => ({ default: module.WardrobePanel })))
+const AuthPage = lazy(() => import('./features/auth/AuthPage').then((module) => ({ default: module.AuthPage })))
+const AdminPage = lazy(() => import('./features/admin/AdminPage').then((module) => ({ default: module.AdminPage })))
+const KocStudioPage = lazy(() => import('./features/koc/KocStudioPage').then((module) => ({ default: module.KocStudioPage })))
+const OnboardingFlow = lazy(() => import('./features/onboarding/OnboardingFlow').then((module) => ({ default: module.OnboardingFlow })))
+const OutfitHistory = lazy(() => import('./features/outfits/OutfitHistory').then((module) => ({ default: module.OutfitHistory })))
+const PersonPanel = lazy(() => import('./features/fitting-room/PersonPanel').then((module) => ({ default: module.PersonPanel })))
+const ProfilePage = lazy(() => import('./features/profile/ProfilePage').then((module) => ({ default: module.ProfilePage })))
+const PlansPage = lazy(() => import('./features/plans/PlansPage').then((module) => ({ default: module.PlansPage })))
+const LivePreviewModal = lazy(() => import('./features/live-preview/LivePreviewModal').then((module) => ({ default: module.LivePreviewModal })))
+const SettingsPage = lazy(() => import('./features/settings/SettingsPage').then((module) => ({ default: module.SettingsPage })))
+const SocialPage = lazy(() => import('./features/social/SocialPage').then((module) => ({ default: module.SocialPage })))
+const ResultStage = lazy(() => import('./features/fitting-room/ResultStage').then((module) => ({ default: module.ResultStage })))
+const UploadGarmentModal = lazy(() => import('./features/wardrobe/UploadGarmentModal').then((module) => ({ default: module.UploadGarmentModal })))
+const WardrobePanel = lazy(() => import('./features/wardrobe/WardrobePanel').then((module) => ({ default: module.WardrobePanel })))
 
 type FittingRoomAppProps = {
   user: AuthUser

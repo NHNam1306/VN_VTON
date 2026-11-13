@@ -7,6 +7,7 @@ export type PlanEntitlements = {
   selectedGarments: number
   livePreviewSessions: number
   livePreviewSeconds: number
+  livePreviewFastMode: boolean
 }
 
 export type SubscriptionPlan = {
@@ -35,4 +36,5 @@ export const FREE_ENTITLEMENTS: PlanEntitlements = {
   selectedGarments: 8,
   livePreviewSessions: 0,
   livePreviewSeconds: 10,
+  livePreviewFastMode: false,
 }

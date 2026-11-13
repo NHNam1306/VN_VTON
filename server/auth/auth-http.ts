@@ -2,7 +2,6 @@ import type { NextFunction, Request, Response } from 'express'
 import { Router } from 'express'
 import type { AuthBackend, AuthResult } from './auth-backend.js'
 import type { GoogleOAuth } from './google-oauth.js'
-import type { ZaloOAuth } from './zalo-oauth.js'
 import { newBrowserSecret, OAuthStore } from './oauth-store.js'
 import { AuthError } from './auth-service.js'
 import type { PublicUser } from './auth-store.js'
@@ -17,13 +16,13 @@ import {
 } from '../http/rate-limit.js'
 
 export const SESSION_COOKIE = 'fitting_room_session'
-export const REFRESH_COOKIE = 'fitting_room_refresh'
+const REFRESH_COOKIE = 'fitting_room_refresh'
 /** Social providers this build knows how to sign people in with. */
-const OAUTH_PROVIDER_NAMES = ['google', 'zalo'] as const
+const OAUTH_PROVIDER_NAMES = ['google'] as const
 type OAuthProviderName = typeof OAUTH_PROVIDER_NAMES[number]
 
 /** What a provider reports when the person said no, rather than something breaking. */
-const CANCELLED_BY_USER = new Set(['access_denied', 'user_denied', 'user_cancelled', '-1012'])
+const CANCELLED_BY_USER = new Set(['access_denied'])
 
 /** Ties the browser that started a social sign-in to the callback that finishes it. */
 export const OAUTH_COOKIE = 'fitting_room_oauth'
@@ -137,7 +136,6 @@ export function createAuthRouter(
   rateLimits: RateLimitStore = new MemoryRateLimitStore(),
   deleteAccountData?: (user: PublicUser, token: string | null) => Promise<void>,
   google?: GoogleOAuth | null,
-  zalo?: ZaloOAuth | null,
 ) {
   const router = Router()
   const cookieOptions = { secure: secureCookies, sessionDays }
@@ -197,28 +195,13 @@ export function createAuthRouter(
       signIn: async (code, codeVerifier) => signInWithIdToken('google', await google.exchangeCode(code, codeVerifier)),
     })
   }
-  if (zalo && auth.signInWithExternalIdentity) {
-    const signInWithExternalIdentity = auth.signInWithExternalIdentity.bind(auth)
-    flows.push({
-      provider: 'zalo',
-      callbackPath: '/oauth/zalo/callback',
-      createVerifier: () => zalo.createVerifier(),
-      authorizationUrl: (state, codeVerifier) => zalo.authorizationUrl(state, codeVerifier),
-      // Zalo issues no ID token and Supabase cannot verify it: this server reads the
-      // profile itself and asks for a session for that Zalo id.
-      signIn: async (code, codeVerifier) => {
-        const profile = await zalo.fetchProfile(await zalo.exchangeCode(code, codeVerifier))
-        return signInWithExternalIdentity({ provider: 'zalo', providerUserId: profile.id, displayName: profile.name })
-      },
-    })
-  }
   const enabled = (provider: OAuthProviderName) => flows.some(flow => flow.provider === provider)
 
   const oauthStore = new OAuthStore()
   const oauthCookieOptions = { httpOnly: true, sameSite: 'lax' as const, secure: secureCookies, path: OAUTH_COOKIE_PATH }
 
   router.get('/providers', (_request, response) => {
-    response.json({ google: enabled('google'), zalo: enabled('zalo') })
+    response.json({ google: enabled('google') })
   })
 
   /**

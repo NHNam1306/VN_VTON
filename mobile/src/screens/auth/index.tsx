@@ -22,8 +22,8 @@ import { colors, radius, shadows, spacing } from '@/theme';
 
 type AuthMode = 'login' | 'register' | 'forgot' | 'reset';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const socialProviderOrder: readonly SocialProvider[] = ['google', 'zalo'];
-const socialProviderLabels: Record<SocialProvider, string> = { google: 'Google', zalo: 'Zalo' };
+const socialProviderOrder: readonly SocialProvider[] = ['google'];
+const socialProviderLabels: Record<SocialProvider, string> = { google: 'Google' };
 
 const contentByMode: Record<AuthMode, { eyebrow: string; title?: string; description?: string }> = {
   login: {
@@ -57,7 +57,7 @@ export function AuthScreen({ initialMode = 'login' }: { initialMode?: AuthMode }
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [socialBusy, setSocialBusy] = useState<SocialProvider | null>(null);
-  // Máy chủ quyết định hiện nút nào (Google cần GOOGLE_CLIENT_ID/SECRET, Zalo cần ZALO_APP_ID/SECRET).
+  // Máy chủ quyết định có hiện nút Google không (cần GOOGLE_CLIENT_ID/SECRET).
   const providers = useQuery({
     queryKey: ['auth-providers'],
     queryFn: () => apiRequest<Partial<Record<SocialProvider, boolean>>>('/api/auth/providers'),

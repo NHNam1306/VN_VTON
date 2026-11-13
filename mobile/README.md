@@ -44,7 +44,7 @@ App chỉ dùng các module có sẵn trong Expo Go nên chạy thẳng được
 
 Mời thêm người vào tổ chức `lmaolmao130s-team` tại <https://expo.dev/settings/members> (Owner/Admin mới mời được; số thành viên không giới hạn kể cả gói Free). Lưu ý: tài liệu Expo chỉ nói Expo Go và terminal phải **cùng một tài khoản**, không nói chung tổ chức là đủ — nên người test chỉ cầm điện thoại thì cách chắc chắn là dev build hoặc bản ad hoc ở Cách 2.
 
-Khác biệt so với bản cài đặt: icon và tên là Expo Go, và địa chỉ quay về sau khi đăng nhập Google/Zalo là `exp://<ip máy>:8081/--/auth-callback` thay vì `fitsy://auth-callback`. Vì vậy máy chủ phải có `MOBILE_AUTH_REDIRECT_URLS=fitsy://auth-callback,exp://*` (mục `*` chỉ dùng khi phát triển, máy chủ tự bỏ qua khi `NODE_ENV=production`).
+Khác biệt so với bản cài đặt: icon và tên là Expo Go, và địa chỉ quay về sau khi đăng nhập Google là `exp://<ip máy>:8081/--/auth-callback` thay vì `fitsy://auth-callback`. Vì vậy máy chủ phải có `MOBILE_AUTH_REDIRECT_URLS=fitsy://auth-callback,exp://*` (mục `*` chỉ dùng khi phát triển, máy chủ tự bỏ qua khi `NODE_ENV=production`).
 
 ### Cách 2 — EAS Build bản nội bộ (cần tài khoản Apple Developer, 99 USD/năm)
 

@@ -9,6 +9,8 @@ export type PlanEntitlements = {
   livePreviewSessions: number
   /** Length of one live preview session, in seconds. */
   livePreviewSeconds: number
+  /** Whether the user may pick Decart's fast tier (lower latency, double price). */
+  livePreviewFastMode: boolean
 }
 
 export type SubscriptionPlan = {

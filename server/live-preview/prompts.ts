@@ -1,4 +1,4 @@
-import type { GarmentCategory } from '../domain/garment.js'
+import type { GarmentCategory } from '../garments/garment.js'
 
 // Decart's VTON guide recommends "substitute" for replacing what the person wears
 // and "add" for layering items. `enhance` stays on, so these are kept generic and

@@ -1,7 +1,7 @@
 import type { AuthUser } from '../types/auth'
 
 /** Cách đăng nhập xã hội máy chủ có thể bật. */
-export type SocialProvider = 'google' | 'zalo'
+export type SocialProvider = 'google'
 export type SocialProviders = Record<SocialProvider, boolean>
 import { apiFetch } from './api-client'
 
@@ -15,12 +15,9 @@ const parseError = async (response: Response) => {
 }
 
 export const authApi = {
-  /**
-   * Sign-in methods the server has enabled (Google needs GOOGLE_CLIENT_ID/SECRET,
-   * Zalo needs ZALO_APP_ID/SECRET).
-   */
+  /** Sign-in methods the server has enabled (Google needs GOOGLE_CLIENT_ID/SECRET). */
   async providers(): Promise<SocialProviders> {
-    const none: SocialProviders = { google: false, zalo: false }
+    const none: SocialProviders = { google: false }
     try {
       const response = await fetch('/api/auth/providers')
       if (!response.ok) return none

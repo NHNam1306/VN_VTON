@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import type { PublicUser } from '../auth/auth-store.js'
-import { GARMENT_CATEGORIES, type GarmentCategory } from '../domain/garment.js'
+import { GARMENT_CATEGORIES, type GarmentCategory } from '../garments/garment.js'
 import type { PlanService } from '../plans/plan-service.js'
-import type { GarmentRepository } from '../storage/garment-repository.js'
+import type { GarmentRepository } from '../garments/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { DecartTokenIssuer } from './decart-client.js'
 import { LIVE_PREVIEW_PROMPTS } from './prompts.js'
@@ -10,6 +10,7 @@ import type { LivePreviewRepository } from './repository.js'
 import {
   LivePreviewError,
   type LivePreviewSource,
+  type LivePreviewSpeed,
   type LivePreviewStartResponse,
   type LivePreviewStatus,
   type LivePreviewTokenResponse,
@@ -33,20 +34,24 @@ export type LivePreviewOptions = {
   maxTokensPerSession: number
   /** How long after starting a session tokens can still be minted for it. */
   tokenWindowSeconds: number
+  /** Quota sessions one fast-tier session uses (it costs Decart twice as much). */
+  fastCost: number
 }
 
-export const DEFAULT_LIVE_PREVIEW_OPTIONS: LivePreviewOptions = {
+const DEFAULT_LIVE_PREVIEW_OPTIONS: LivePreviewOptions = {
   model: 'lucy-vton-latest',
   windowDays: 30,
   tokenTtlSeconds: 60,
   maxTokensPerSession: 2,
   tokenWindowSeconds: 120,
+  fastCost: 1,
 }
 
 export type StartLivePreviewInput = {
   source: LivePreviewSource
   garmentId?: string
   category?: GarmentCategory
+  speed?: LivePreviewSpeed
 }
 
 export const isGarmentCategory = (value: unknown): value is GarmentCategory =>
@@ -74,17 +79,20 @@ export class LivePreviewService {
 
   async status(user: PublicUser): Promise<LivePreviewStatus> {
     const plan = await this.plans.status(user)
-    const { livePreviewSessions: limit, livePreviewSeconds: sessionSeconds } = plan.entitlements
-    const used = await this.repository.listCreatedSince(user.id, this.windowStart())
-    const oldest = used[0]
+    const { livePreviewSessions: limit, livePreviewSeconds: sessionSeconds, livePreviewFastMode } = plan.entitlements
+    const usage = await this.repository.listUsageSince(user.id, this.windowStart())
+    const used = usage.reduce((sum, item) => sum + item.cost, 0)
+    const oldest = usage[0]?.createdAt
     return {
       enabled: this.enabled,
       included: plan.unlimited || limit > 0,
       unlimited: plan.unlimited,
       sessionSeconds,
+      fastModeIncluded: plan.unlimited || livePreviewFastMode,
+      fastCost: this.options.fastCost,
       limit,
-      used: used.length,
-      remaining: plan.unlimited ? null : Math.max(0, limit - used.length),
+      used,
+      remaining: plan.unlimited ? null : Math.max(0, limit - used),
       windowDays: this.options.windowDays,
       nextResetAt: oldest ? new Date(new Date(oldest).getTime() + this.options.windowDays * DAY_MS).toISOString() : null,
     }
@@ -97,6 +105,11 @@ export class LivePreviewService {
     if (!plan.unlimited && limit <= 0) {
       throw new LivePreviewError(402, 'plan_required', 'Thử trực tiếp bằng camera dành cho gói trả phí. Hãy đăng ký gói Plus trở lên để sử dụng.')
     }
+    const speed: LivePreviewSpeed = input.speed ?? 'standard'
+    if (speed === 'fast' && !plan.unlimited && !plan.entitlements.livePreviewFastMode) {
+      throw new LivePreviewError(403, 'fast_mode_not_included', 'Chế độ Nhanh dành cho gói Pro và Max. Hãy chọn chế độ Tiêu chuẩn hoặc nâng cấp gói.')
+    }
+    const cost = speed === 'fast' ? this.options.fastCost : 1
 
     let category: GarmentCategory
     let garmentId: string | null = null
@@ -127,15 +140,20 @@ export class LivePreviewService {
       source: input.source,
       garmentId,
       category,
+      speed,
+      cost,
       seconds,
     }, plan.unlimited ? null : limit, this.windowStart())
     if (!record) {
-      throw new LivePreviewError(402, 'quota_exhausted', `Bạn đã dùng hết ${limit} lượt thử trực tiếp trong ${this.options.windowDays} ngày. Nâng cấp gói để có thêm lượt.`)
+      throw new LivePreviewError(402, 'quota_exhausted', cost > 1
+        ? `Không đủ lượt cho chế độ Nhanh (cần ${cost} lượt). Hãy chọn chế độ Tiêu chuẩn hoặc đợi lượt mới.`
+        : `Bạn đã dùng hết ${limit} lượt thử trực tiếp trong ${this.options.windowDays} ngày. Nâng cấp gói để có thêm lượt.`)
     }
     return {
       session: {
         id: record.id,
         model: this.options.model,
+        speed: record.speed,
         seconds: record.seconds,
         tokenWindowEndsAt: new Date(new Date(record.createdAt).getTime() + this.options.tokenWindowSeconds * 1000).toISOString(),
       },
@@ -155,7 +173,7 @@ export class LivePreviewService {
         maxSessionSeconds: record.seconds,
         expiresInSeconds: this.options.tokenTtlSeconds,
         allowedOrigins: origin ? [origin] : undefined,
-        metadata: { userId: user.id, sessionId: record.id, planId: record.planId },
+        metadata: { userId: user.id, sessionId: record.id, planId: record.planId, speed: record.speed },
       })
       return { apiKey: token.apiKey, expiresAt: token.expiresAt, model: this.options.model, seconds: record.seconds }
     } catch (error) {

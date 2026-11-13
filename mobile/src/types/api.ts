@@ -68,6 +68,8 @@ export type PlanEntitlements = {
   /** Lượt thử trực tiếp bằng camera trong mỗi 30 ngày; 0 = gói không có. */
   livePreviewSessions: number;
   livePreviewSeconds: number;
+  /** Gói được chọn chế độ Nhanh (Pro, Max). */
+  livePreviewFastMode: boolean;
 };
 
 export type Plan = {
@@ -90,11 +92,15 @@ export type PlanSnapshot = {
   };
 };
 
+export type LivePreviewSpeed = 'standard' | 'fast';
+
 export type LivePreviewStatus = {
   enabled: boolean;
   included: boolean;
   unlimited: boolean;
   sessionSeconds: number;
+  fastModeIncluded: boolean;
+  fastCost: number;
   limit: number;
   used: number;
   remaining: number | null;
@@ -103,7 +109,7 @@ export type LivePreviewStatus = {
 };
 
 export type LivePreviewStartResponse = {
-  session: { id: string; model: string; seconds: number; tokenWindowEndsAt: string };
+  session: { id: string; model: string; speed: LivePreviewSpeed; seconds: number; tokenWindowEndsAt: string };
   reference: { prompt: string; imageBase64: string | null; mimeType: string | null };
   status: LivePreviewStatus;
 };

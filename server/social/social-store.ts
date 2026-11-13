@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { AuthError } from '../auth/auth-service.js'
-import type { SqliteUserDataRepository } from '../storage/sqlite-user-data-repository.js'
+import type { SqliteUserDataRepository } from '../user-data/sqlite-user-data-repository.js'
 import type { SocialPerson, SocialProfile, SocialPoll, SocialSnapshot, OutfitPolicy, SocialPost, SocialVisibility } from './types.js'
 import { prepareSocialSearch, socialSearchScore } from './search.js'
 

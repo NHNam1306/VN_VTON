@@ -1,10 +1,10 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import type { PublicUser } from '../auth/auth-store.js'
-import type { GarmentRecord } from '../domain/garment.js'
+import type { GarmentRecord } from '../garments/garment.js'
 import { PlanService } from '../plans/plan-service.js'
 import type { SubscriptionPlanId } from '../plans/types.js'
-import type { GarmentRepository } from '../storage/garment-repository.js'
+import type { GarmentRepository } from '../garments/garment-repository.js'
 import type { ImageStorage } from '../storage/image-storage.js'
 import type { DecartTokenIssuer, DecartTokenRequest } from './decart-client.js'
 import { MemoryLivePreviewRepository } from './repository.js'
@@ -21,14 +21,14 @@ const garment: GarmentRecord = {
   createdAt: new Date().toISOString(),
 }
 
-const setup = (planId: SubscriptionPlanId, issuerOverride?: DecartTokenIssuer | null, now?: () => Date) => {
+const setup = (planId: SubscriptionPlanId, issuerOverride?: DecartTokenIssuer | null, now?: () => Date, fastCost = 1) => {
   const repository = new MemoryLivePreviewRepository()
   const plans = new PlanService({ getPlan: () => planId, close: () => undefined })
   const garments = { findById: (userId: string, id: string) => (userId === user.id && id === GARMENT_ID ? garment : null) } as unknown as GarmentRepository
   const images = { read: vi.fn(async () => ({ buffer: Buffer.from('png-bytes'), mimeType: 'image/png' })) } as unknown as ImageStorage
   const requests: DecartTokenRequest[] = []
   const issuer: DecartTokenIssuer = { createToken: async (request) => { requests.push(request); return { apiKey: 'ek_test', expiresAt: '2030-01-01T00:00:00.000Z' } } }
-  const service = new LivePreviewService(repository, plans, garments, images, issuerOverride === undefined ? issuer : issuerOverride, {}, now)
+  const service = new LivePreviewService(repository, plans, garments, images, issuerOverride === undefined ? issuer : issuerOverride, { fastCost }, now)
   return { service, repository, requests, images }
 }
 
@@ -123,5 +123,29 @@ describe('LivePreviewService', () => {
     vi.spyOn(console, 'error').mockImplementation(() => undefined)
     expect(await errorCode(service.issueToken(user, session.id))).toBe('provider_error')
     await expect(service.status(user)).resolves.toMatchObject({ used: 0, remaining: 3 })
+  })
+
+  it('refuses the fast tier on Plus but allows it on Pro', async () => {
+    const plus = setup('plus')
+    expect(await errorCode(plus.service.start(user, { source: 'upload', speed: 'fast' }))).toBe('fast_mode_not_included')
+    await expect(plus.service.status(user)).resolves.toMatchObject({ fastModeIncluded: false, used: 0 })
+    const standard = await plus.service.start(user, { source: 'upload', speed: 'standard' })
+    expect(standard.session.speed).toBe('standard')
+
+    const pro = setup('pro')
+    await expect(pro.service.status(user)).resolves.toMatchObject({ fastModeIncluded: true })
+    const fast = await pro.service.start(user, { source: 'upload', speed: 'fast' })
+    expect(fast.session.speed).toBe('fast')
+    await pro.service.issueToken(user, fast.session.id)
+    expect(pro.requests[0]?.metadata).toMatchObject({ speed: 'fast' })
+  })
+
+  it('charges a fast session at the configured cost', async () => {
+    const { service } = setup('pro', undefined, undefined, 2)
+    for (let index = 0; index < 4; index += 1) await service.start(user, { source: 'upload', speed: 'fast' })
+    await expect(service.status(user)).resolves.toMatchObject({ used: 8, remaining: 2, fastCost: 2 })
+    await service.start(user, { source: 'upload', speed: 'fast' })
+    expect(await errorCode(service.start(user, { source: 'upload', speed: 'fast' }))).toBe('quota_exhausted')
+    expect(await errorCode(service.start(user, { source: 'upload' }))).toBe('quota_exhausted')
   })
 })

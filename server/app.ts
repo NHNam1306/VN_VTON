@@ -1,22 +1,21 @@
 import express, { type ErrorRequestHandler } from 'express'
 import { randomUUID } from 'node:crypto'
 import multer from 'multer'
-import type { GarmentRepository } from './storage/garment-repository.js'
+import type { GarmentRepository } from './garments/garment-repository.js'
 import type { ImageStorage } from './storage/image-storage.js'
-import type { UserDataRepository } from './storage/user-data-repository.js'
-import { createGarmentRouter } from './routes/garments.js'
-import { createUserDataRouter } from './routes/user-data.js'
-import { createGenerationRouter } from './routes/generations.js'
-import { createMockImageRouter } from './routes/mock-images.js'
+import type { UserDataRepository } from './user-data/user-data-repository.js'
+import { createGarmentRouter } from './garments/router.js'
+import { createUserDataRouter } from './user-data/router.js'
+import { createGenerationRouter } from './generations/router.js'
+import { createMockImageRouter } from './providers/mock-images-router.js'
 import type { ImageProvider } from './providers/image-provider.js'
 import { ImageProviderError } from './providers/image-provider-error.js'
 import type { AuthBackend } from './auth/auth-backend.js'
 import { AuthError } from './auth/auth-service.js'
 import { createAuthRouter, createRequireAuth, SESSION_COOKIE } from './auth/auth-http.js'
 import { createGoogleOAuth } from './auth/google-oauth.js'
-import { createZaloOAuth } from './auth/zalo-oauth.js'
-import { GarmentExtractorService } from './services/garment-extractor.js'
-import { AiQueueBusyError } from './services/ai-concurrency.js'
+import { GarmentExtractorService } from './garments/garment-extractor.js'
+import { AiQueueBusyError } from './providers/ai-concurrency.js'
 import { ImmediateStorageCleanup, type StorageCleanup } from './storage/storage-cleanup.js'
 import type { SocialService } from './social/social-service.js'
 import { createSocialRouter } from './social/router.js'
@@ -172,11 +171,10 @@ export function createApp(
     // Durable in production: failed object deletions are retried in the background.
     await cleanup.enqueue(imageKeys, 'account_deleted')
   }
-  // Google and Zalo send people back to this server, not to Supabase, so their consent
-  // screens show this site's domain. Absent credentials simply leave the button hidden.
+  // Google sends people back to this server, not to Supabase, so its consent
+  // screen shows this site's domain. Absent credentials simply leave the button hidden.
   const googleOAuth = createGoogleOAuth(new URL('/api/auth/oauth/callback', runtimeConfig.appBaseUrl).toString())
-  const zaloOAuth = createZaloOAuth(new URL('/api/auth/oauth/zalo/callback', runtimeConfig.appBaseUrl).toString())
-  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits, deleteAccountData, googleOAuth, zaloOAuth))
+  app.use('/api/auth', createAuthRouter(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser, sharedRateLimits, deleteAccountData, googleOAuth))
   const requireAuth = createRequireAuth(authService, secureCookies, runtimeConfig.authSessionDays, decorateUser)
 
   const getOwnImageKeys = (userId: string) => {

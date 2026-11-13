@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Response } from 'express'
 import { createFixedWindowRateLimit, MemoryRateLimitStore, type RateLimitStore } from '../http/rate-limit.js'
 import { isGarmentCategory, type LivePreviewService } from './service.js'
-import { LivePreviewError } from './types.js'
+import { isLivePreviewSpeed, LivePreviewError } from './types.js'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -70,10 +70,14 @@ export const createLivePreviewRouter = (service: LivePreviewService, options: Li
       if (body.category !== undefined && !isGarmentCategory(body.category)) {
         throw new LivePreviewError(400, 'invalid_request', 'Loại món đồ không hợp lệ.')
       }
+      if (body.speed !== undefined && !isLivePreviewSpeed(body.speed)) {
+        throw new LivePreviewError(400, 'invalid_request', 'Chế độ không hợp lệ.')
+      }
       const result = await service.start(request.authUser, {
         source,
         garmentId: source === 'wardrobe' ? garmentId as string : undefined,
         category: isGarmentCategory(body.category) ? body.category : undefined,
+        speed: isLivePreviewSpeed(body.speed) ? body.speed : undefined,
       })
       response.status(201).json(result)
     } catch (error) { fail(error, response, next) }

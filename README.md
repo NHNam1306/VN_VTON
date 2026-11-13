@@ -75,7 +75,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `R2_PUBLIC_URL` | trống | Tuỳ chọn: domain HTTPS riêng của bucket, được thêm vào CSP `img-src` |
 | `R2_SIGNED_READ_TTL_SECONDS` | `300` | Thời hạn URL ký ngắn hạn khi trình duyệt đọc ảnh R2 (60–3600) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | trống | OAuth client của Google; đặt cả hai thì nút "Tiếp tục với Google" mới hiện (web + mobile) |
-| `MOBILE_AUTH_REDIRECT_URLS` | `fitsy://auth-callback` | Danh sách deep link app mobile được phép nhận lại sau khi đăng nhập Google/Zalo. Mục kết thúc bằng `*` là tiền tố (ví dụ `exp://*` cho Expo Go) và bị bỏ qua khi `NODE_ENV=production` |
+| `MOBILE_AUTH_REDIRECT_URLS` | `fitsy://auth-callback` | Danh sách deep link app mobile được phép nhận lại sau khi đăng nhập Google. Mục kết thúc bằng `*` là tiền tố (ví dụ `exp://*` cho Expo Go) và bị bỏ qua khi `NODE_ENV=production` |
 
 ### AI
 
@@ -98,6 +98,7 @@ Test của các repository PostgreSQL (credit ledger, social, moderation, dọn 
 | `DECART_API_KEY` | trống (tắt) | Khoá `dct_...` của Decart cho **thử trực tiếp bằng camera**; chỉ ở backend, client chỉ nhận token ngắn hạn |
 | `DECART_MODEL` | `lucy-vton-latest` | Model realtime của Decart |
 | `LIVE_PREVIEW_WINDOW_DAYS` | `30` | Cửa sổ trượt để đếm lượt thử trực tiếp của mỗi gói |
+| `LIVE_PREVIEW_FAST_COST` | `1` | Số lượt một phiên chế độ Nhanh bị trừ (Decart tính Nhanh gấp đôi; đặt `2` để chi phí theo lượt không đổi) |
 | `LIVE_PREVIEW_DAILY_LIMIT` | trống (tắt) | Trần tổng số phiên thử trực tiếp của cả hệ thống mỗi 24 giờ |
 | `LIVE_PREVIEW_CONNECT_ORIGINS` | host Decart + LiveKit | Ghi đè danh sách host WebRTC trong CSP |
 
@@ -231,37 +232,56 @@ Không commit `.env`. Backend đọc ảnh người và ảnh đồ từ storage
 Người dùng gói trả phí bật camera và thấy món đồ được "mặc" lên người trong video trực tiếp (Decart Lucy VTON realtime, 720p), trước khi tạo ảnh chất lượng cao bằng luồng FLUX.
 
 - **Lượt theo gói** (`server/plans/catalog.ts`): Free 0 · Plus 3 · Pro 10 · Max 30 lượt mỗi 30 ngày, mỗi lượt 10 giây (`livePreviewSeconds`). Quản trị viên không giới hạn.
+- **Chế độ**: Tiêu chuẩn cho mọi gói trả phí; **Nhanh** (độ trễ thấp hơn, Decart tính 0,04 USD/giây) chỉ cho Pro và Max (`livePreviewFastMode`). Máy chủ từ chối `speed: fast` với gói khác (403 `fast_mode_not_included`); mỗi phiên Nhanh trừ `LIVE_PREVIEW_FAST_COST` lượt. Decart chưa có ràng buộc tốc độ trong client token, nên một client bị sửa vẫn có thể tự bật Nhanh — cột `speed` trong `live_preview_sessions` và metadata token giúp đối soát.
 - **Ảnh tham chiếu**: một món trong tủ đồ (máy chủ đọc ảnh đã tách nền và gửi về client dạng base64) hoặc ảnh người dùng tự chọn trên máy (đi thẳng từ thiết bị tới Decart, không lưu vào tủ đồ). Prompt chọn theo loại món đồ (`server/live-preview/prompts.ts`), `enhance` bật.
 - **Luồng**: `POST /api/live-preview/sessions` kiểm gói, trừ 1 lượt (ghi bảng `live_preview_sessions`) → SDK gọi `POST /api/live-preview/sessions/:id/token` mỗi lần kết nối → máy chủ xin Decart client token sống 60 giây, chỉ dùng được model VTON và có `constraints.realtime.maxSessionDuration` = 10 giây, nên Decart tự cắt phiên dù client có bị sửa. Mỗi phiên tối đa 2 token (lần đầu + 1 lần tự kết nối lại) trong 2 phút. Token web còn bị khoá theo origin của site.
 - **Hoàn lượt**: Decart từ chối cấp token đầu tiên thì xoá phiên (không mất lượt). Đã có hình thì không hoàn.
 - **Chi phí**: 0,02 USD/giây → khoảng 0,2 USD (≈5.000đ) mỗi phiên 10 giây, tệ nhất 0,4 USD khi kết nối lại. Đặt `LIVE_PREVIEW_DAILY_LIMIT` làm cầu chì.
-- **Web**: nút "Thử trực tiếp" ở trang Tạo ảnh (`src/components/LivePreviewModal.tsx`, SDK `@decartai/sdk` nạp lười). Khi có `DECART_API_KEY`, `Permissions-Policy` mở `camera=(self)` và CSP `connect-src` thêm host Decart/LiveKit.
+- **Web**: nút "Thử trực tiếp" ở trang Tạo ảnh (`src/features/live-preview/LivePreviewModal.tsx`, SDK `@decartai/sdk` nạp lười). Khi có `DECART_API_KEY`, `Permissions-Policy` mở `camera=(self)` và CSP `connect-src` thêm host Decart/LiveKit.
 - **Mobile**: màn `mobile/src/app/live-preview.tsx` dùng LiveKit WebRTC, **không chạy trong Expo Go** (màn sẽ báo cần bản cài đặt) — xem `mobile/README.md`.
 - Migration: `supabase/migrations/012_live_preview_sessions.sql`.
 
 ## Cấu trúc
 
+Cả web lẫn server đều chia **theo tính năng**: mỗi thư mục giữ router/màn hình, logic và repository của đúng một tính năng; phần dùng chung nằm riêng.
+
 ```text
-src/
-  components/       Giao diện: tủ đồ, phòng thử, bộ đồ, social, cài đặt, gói, KOC Studio, admin
-  garment_normalizer/  Chuẩn hoá ảnh món đồ chạy trong Web Worker
-  hooks/ store/     Hook React và Zustand store
-  services/         API client (thêm header chống CSRF), tách nền trên trình duyệt
-server/
-  admin/            Phân quyền, audit log, moderation báo cáo
-  auth/             Auth local (SQLite) và Supabase; route /api/auth, xoá tài khoản
-  billing/          payOS, MoMo, webhook, sổ giao dịch Excel
-  credits/ plans/   Credit, sổ credit_ledger, gói Free/Plus/Pro/Max
-  http/             Security headers/CSP, rate limit, kiểm tra ảnh upload, phân trang
-  prompts/          Prompt FLUX
-  providers/        Adapter OpenRouter/Gemini/mock; API key chỉ đọc từ env backend
-  routes/           Tủ đồ, AI Extract, tạo ảnh, dữ liệu người dùng
-  services/         Tách món đồ bằng AI, hàng đợi AI có giới hạn
-  social/           Bạn bè, nhóm, bình chọn, bài đăng (SQLite JSON cho local, bảng quan hệ cho PostgreSQL)
-  storage/          Repository SQLite/PostgreSQL, lưu ảnh local/R2, hàng đợi dọn R2
-  __tests__/        Helper PGlite cho test PostgreSQL
-supabase/migrations/  Migration 001–009, chạy theo thứ tự
-mobile/             App Expo/React Native dùng chung backend
+src/                      Web (React + Vite)
+  App.tsx main.tsx        Khung ứng dụng và điều hướng (navigation.ts)
+  features/
+    auth/                 Đăng nhập, đăng ký, quên mật khẩu, Google
+    onboarding/           Hướng dẫn lần đầu
+    fitting-room/         Phòng thử: ảnh người, kết quả, hook tạo ảnh
+    wardrobe/             Tủ đồ, thêm/sửa món đồ (upload-garment/ là các mảnh của hộp thoại tải lên)
+    outfits/              Bộ sưu tập outfit
+    live-preview/         Thử trực tiếp bằng camera (Decart)
+    plans/                Gói đăng ký, trạng thái gói
+    profile/ settings/    Hồ sơ, ảnh đại diện, cài đặt tài khoản
+    social/ koc/          Bạn bè, bình chọn, bài đăng; KOC Studio
+    admin/                Trang quản trị
+  shared/
+    components/           Thành phần dùng nhiều nơi (ConfirmDialog, ImageLightbox, Avatar, BrandMark…)
+    layout/               Header, thanh điều hướng mobile
+    hooks/                Hook chung
+  lib/garment-normalizer/ Chuẩn hoá ảnh món đồ chạy trong Web Worker
+  services/               Lớp gọi API (thêm header chống CSRF), tách nền trên trình duyệt
+  store/ types/ styles/   Zustand store, kiểu dữ liệu dùng chung, CSS
+server/                   Express API
+  index.ts app.ts         Khởi tạo backend theo env; ráp router và middleware
+  auth/                   Auth local (SQLite) và Supabase, Google OAuth, xoá tài khoản
+  garments/               Tủ đồ: router /api/garments, AI Extract, repository SQLite/PostgreSQL
+  generations/            Tạo ảnh thử đồ /api/generations
+  user-data/              Ảnh toàn thân, kết quả, outfit đã lưu và repository của chúng
+  live-preview/           Thử trực tiếp: phiên, lượt theo gói, token Decart
+  billing/ credits/ plans/  Thanh toán payOS/MoMo, sổ credit, gói Free/Plus/Pro/Max
+  social/ admin/ shop/    Mạng xã hội, quản trị + moderation, Shopee Affiliate
+  providers/              Adapter OpenRouter/Gemini/mock, hàng đợi AI có giới hạn
+  prompts/                Prompt FLUX
+  http/ config/           Security headers/CSP, rate limit, upload ảnh, phân trang; đọc env
+  storage/                Hạ tầng lưu trữ: ảnh local/R2, pool PostgreSQL, hàng đợi dọn ảnh
+  __tests__/              Helper PGlite cho test PostgreSQL
+supabase/migrations/      Migration 001–012, chạy theo thứ tự
+mobile/                   App Expo/React Native dùng chung backend
 ```
 
 ## Đã hoàn thành ở Giai đoạn 1
@@ -307,16 +327,16 @@ mobile/             App Expo/React Native dùng chung backend
 - Google Play Billing / App Store in-app purchase cho bản mobile trên cửa hàng.
 - Shop và gợi ý sản phẩm có link affiliate của KOL/KOC: kiến trúc và chi phí đã phân tích, chờ chốt nguồn affiliate (xem [`docs/tryoh-implementation-roadmap.md`](docs/tryoh-implementation-roadmap.md)).
 
-## Chuẩn hoá trang phục (Module garment_normalizer)
+## Chuẩn hoá trang phục (Module garment-normalizer)
 
-Module độc lập tại [`src/garment_normalizer/`](src/garment_normalizer) nhận ảnh món đồ sau khi tách nền (PNG RGBA) và chuẩn hoá để mọi món đồ nằm đúng khung, thẳng, cùng tỉ lệ:
+Module độc lập tại [`src/lib/garment-normalizer/`](src/lib/garment-normalizer) nhận ảnh món đồ sau khi tách nền (PNG RGBA) và chuẩn hoá để mọi món đồ nằm đúng khung, thẳng, cùng tỉ lệ:
 
 - **Kiến trúc 2 tầng độc lập**:
   1. `core/`: Hàm thuần trên `RGBAImage = { data: Uint8ClampedArray; width; height }`, không DOM, chạy và test trực tiếp trong Node.js/Vitest.
   2. `io/`: Xử lý I/O, canvas multi-step halving resize, và chạy ngầm qua **Web Worker** (`postMessage` truyền `ArrayBuffer` dạng transferable, không đơ UI).
 - **Lưu ý Safari di động**: Mobile Safari có giới hạn bộ nhớ/diện tích Canvas (`canvas.maxArea`), do đó `max_input_px` được mặc định là `2048` (trên các thiết bị iOS cũ hoặc bộ nhớ thấp có thể điều chỉnh xuống `1536`).
 - **Hiệu năng thực tế (Benchmark)**: Ảnh độ phân giải $2048 \times 2048$ hoàn thành toàn bộ pipeline core trong **~930ms** (ngưỡng yêu cầu < 1.5 giây).
-- **Kiểm thử tự động**: 10 kịch bản kiểm thử toàn diện tại `src/garment_normalizer/__tests__/phase8_comprehensive.test.ts` (kiểm tra lệch tâm, nghiêng ±10°, nghiêng 25°, cắt mép, xoá rác, lấp lỗ, khử viền đỏ, tính lũy đẳng idempotent, và tỉ lệ relative).
+- **Kiểm thử tự động**: 10 kịch bản kiểm thử toàn diện tại `src/lib/garment-normalizer/__tests__/phase8_comprehensive.test.ts` (kiểm tra lệch tâm, nghiêng ±10°, nghiêng 25°, cắt mép, xoá rác, lấp lỗ, khử viền đỏ, tính lũy đẳng idempotent, và tỉ lệ relative).
 
 ## Module bạn bè & bình chọn
 

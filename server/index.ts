@@ -7,12 +7,12 @@ import { mkdir } from 'node:fs/promises'
 import { createApp } from './app.js'
 import { LocalImageStorage } from './storage/local-image-storage.js'
 import type { ImageStorage } from './storage/image-storage.js'
-import type { GarmentRepository } from './storage/garment-repository.js'
-import type { UserDataRepository } from './storage/user-data-repository.js'
-import { SqliteGarmentRepository } from './storage/sqlite-garment-repository.js'
-import { SqliteUserDataRepository } from './storage/sqlite-user-data-repository.js'
-import { PostgresGarmentRepository } from './storage/postgres-garment-repository.js'
-import { PostgresUserDataRepository } from './storage/postgres-user-data-repository.js'
+import type { GarmentRepository } from './garments/garment-repository.js'
+import type { UserDataRepository } from './user-data/user-data-repository.js'
+import { SqliteGarmentRepository } from './garments/sqlite-garment-repository.js'
+import { SqliteUserDataRepository } from './user-data/sqlite-user-data-repository.js'
+import { PostgresGarmentRepository } from './garments/postgres-garment-repository.js'
+import { PostgresUserDataRepository } from './user-data/postgres-user-data-repository.js'
 import { createPostgresPool, type PostgresPool } from './storage/postgres.js'
 import { R2ImageStorage } from './storage/r2-image-storage.js'
 import { createImageProvider } from './providers/provider-factory.js'
@@ -93,18 +93,6 @@ if (!googleConfigured) {
   console.info(`[config] Đăng nhập bằng Google: Authorized redirect URI phải đúng là ${new URL('/api/auth/oauth/callback', appBaseUrl).toString()}`)
 }
 
-const zaloConfigured = Boolean(process.env.ZALO_APP_ID?.trim() && process.env.ZALO_APP_SECRET?.trim())
-if (!zaloConfigured) {
-  console.info('[config] Chưa có ZALO_APP_ID/ZALO_APP_SECRET: nút "Tiếp tục với Zalo" sẽ không hiện.')
-} else if (authBackend !== 'supabase') {
-  console.warn(`[config] Đăng nhập bằng Zalo cần AUTH_BACKEND=supabase (đang là "${authBackend}"): nút sẽ không hiện.`)
-} else if (!process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()) {
-  // Supabase cannot verify a Zalo token, so the session is minted with the service role.
-  console.warn('[config] Đăng nhập bằng Zalo cần SUPABASE_SERVICE_ROLE_KEY: nút sẽ hiện nhưng đăng nhập sẽ lỗi.')
-} else {
-  console.info(`[config] Đăng nhập bằng Zalo: Redirect URI trên Zalo App phải đúng là ${new URL('/api/auth/oauth/zalo/callback', appBaseUrl).toString()}`)
-}
-
 let postgresPool: PostgresPool | undefined
 let repository: GarmentRepository
 let userDataRepository: UserDataRepository
@@ -147,6 +135,11 @@ if (imageStorageBackend === 'r2') {
 }
 
 if (authBackend === 'supabase') {
+  // Supabase accounts live in PostgreSQL `profiles`; the SQLite stores only know local
+  // accounts, so every signed-in request would fail with "Máy chủ gặp lỗi".
+  if (persistenceBackend !== 'postgres') {
+    throw new Error('AUTH_BACKEND=supabase cần PERSISTENCE_BACKEND=postgres và DATABASE_URL. Khi chạy local không có database Supabase, đặt AUTH_BACKEND=local (tài khoản lưu trong data/fitting-room.sqlite).')
+  }
   authService = new SupabaseAuthService(
     process.env.SUPABASE_URL ?? '',
     process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY ?? '',
@@ -233,7 +226,7 @@ const livePreviewService = new LivePreviewService(
   repository,
   imageStorage,
   runtimeConfig.decartApiKey ? new DecartHttpTokenIssuer(runtimeConfig.decartApiKey) : null,
-  { model: runtimeConfig.decartModel, windowDays: runtimeConfig.livePreviewWindowDays },
+  { model: runtimeConfig.decartModel, windowDays: runtimeConfig.livePreviewWindowDays, fastCost: runtimeConfig.livePreviewFastCost },
 )
 const app = createApp(
   repository,

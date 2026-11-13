@@ -17,7 +17,7 @@ export interface DecartTokenIssuer {
   createToken(request: DecartTokenRequest): Promise<DecartToken>
 }
 
-export class DecartTokenError extends Error {
+class DecartTokenError extends Error {
   constructor(message: string, readonly status?: number) {
     super(message)
   }

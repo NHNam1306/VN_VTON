@@ -18,7 +18,7 @@ import { ApiError, apiRequest, protectedImageSource } from '@/services/api-clien
 import { livePreviewSupport, loadLivePreviewRuntime } from '@/services/live-preview-runtime';
 import { categoryNames } from '@/screens/wardrobe';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
-import type { Garment, GarmentCategory, LivePreviewStartResponse, LivePreviewStatus, LivePreviewToken, PageResponse } from '@/types/api';
+import type { Garment, GarmentCategory, LivePreviewSpeed, LivePreviewStartResponse, LivePreviewStatus, LivePreviewToken, PageResponse } from '@/types/api';
 
 type Phase = 'idle' | 'starting' | 'connecting' | 'live' | 'ended';
 type Source = 'wardrobe' | 'upload';
@@ -41,6 +41,7 @@ export default function LivePreviewRoute() {
   const [pickedGarmentId, setGarmentId] = useState<string | null>(params.garmentId ?? null);
   const [uploaded, setUploaded] = useState<UploadedReference | null>(null);
   const [uploadCategory, setUploadCategory] = useState<GarmentCategory>('tops');
+  const [preferredSpeed, setPreferredSpeed] = useState<LivePreviewSpeed>('standard');
   const [phase, setPhase] = useState<Phase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
@@ -85,6 +86,9 @@ export default function LivePreviewRoute() {
     setUploaded({ uri: asset.uri, base64: asset.base64 });
   };
 
+  // Gói không có chế độ Nhanh thì luôn chạy Tiêu chuẩn; máy chủ cũng kiểm lại.
+  const speed: LivePreviewSpeed = preferredSpeed === 'fast' && status.data?.fastModeIncluded ? 'fast' : 'standard';
+  const sessionCost = speed === 'fast' ? status.data?.fastCost ?? 1 : 1;
   const busy = phase === 'starting' || phase === 'connecting';
   const canStart = !busy && phase !== 'live' && (source === 'wardrobe' ? Boolean(garmentId) : Boolean(uploaded));
 
@@ -111,8 +115,8 @@ export default function LivePreviewRoute() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(source === 'wardrobe'
-          ? { source: 'wardrobe', garmentId }
-          : { source: 'upload', category: uploadCategory }),
+          ? { source: 'wardrobe', garmentId, speed }
+          : { source: 'upload', category: uploadCategory, speed }),
       });
       queryClient.setQueryData(['live-preview-status'], started.status);
       const seconds = started.session.seconds;
@@ -146,6 +150,7 @@ export default function LivePreviewRoute() {
       const realtime = await client.realtime.connect(camera, {
         model: sdk.models.realtime(started.session.model as Parameters<typeof sdk.models.realtime>[0]),
         preferredVideoCodec: 'vp8',
+        ...(started.session.speed === 'fast' ? { speed: 'fast' as const } : {}),
         initialState: {
           prompt: { text: started.reference.prompt, enhance: true },
           image: started.reference.imageBase64 ?? uploaded!.base64,
@@ -251,15 +256,34 @@ export default function LivePreviewRoute() {
             </View>}
       </View>}
 
+      {!busy && phase !== 'live' && <View style={{ gap: spacing.xs }}>
+        <AppText variant="caption" style={{ fontWeight: '700', color: colors.label }}>Chế độ</AppText>
+        <SegmentedControl<LivePreviewSpeed>
+          stretch
+          value={speed}
+          onChange={(value) => {
+            if (value === 'fast' && !info.fastModeIncluded) { setError('Chế độ Nhanh dành cho gói Pro và Max.'); return; }
+            setPreferredSpeed(value);
+          }}
+          options={[
+            { value: 'standard', label: 'Tiêu chuẩn' },
+            { value: 'fast', label: info.fastModeIncluded ? 'Nhanh' : 'Nhanh · Pro', icon: info.fastModeIncluded ? undefined : 'lock' },
+          ]}
+        />
+        <AppText variant="caption">{speed === 'fast'
+          ? `Phản hồi nhanh hơn khi bạn cử động · ${info.fastCost} lượt mỗi phiên.`
+          : info.fastModeIncluded ? 'Chất lượng như nhau, độ trễ cao hơn chế độ Nhanh · 1 lượt mỗi phiên.' : '1 lượt mỗi phiên. Gói Pro và Max có thêm chế độ Nhanh.'}</AppText>
+      </View>}
+
       {error && <Notice tone="error" text={error} onDismiss={() => setError(null)}/>}
 
       {phase === 'live'
         ? <AppButton title="Dừng" variant="secondary" onPress={() => stop()}/>
         : <AppButton
-            title={phase === 'ended' ? 'Xem lại (dùng 1 lượt)' : `Bắt đầu ${info.sessionSeconds} giây (dùng 1 lượt)`}
+            title={phase === 'ended' ? `Xem lại (dùng ${sessionCost} lượt)` : `Bắt đầu ${info.sessionSeconds} giây (dùng ${sessionCost} lượt)`}
             icon="camera"
             loading={busy}
-            disabled={!canStart || exhausted || !info.enabled || !support.supported}
+            disabled={!canStart || exhausted || !info.enabled || !support.supported || (!info.unlimited && (info.remaining ?? 0) < sessionCost)}
             onPress={() => void start()}/>}
       {exhausted && <AppButton title="Nâng cấp để có thêm lượt" variant="secondary" onPress={() => router.push('/plans')}/>}
     </>}

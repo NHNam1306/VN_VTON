@@ -15,9 +15,6 @@ export type AuthUser = {
 export type PublicUser = Pick<AuthUser, 'id' | 'email' | 'displayName' | 'createdAt' | 'role' | 'status'> & {
   /** False for accounts that only sign in through a social provider (no password to confirm with). */
   hasPassword?: boolean
-  /** Set when the account exists only through a provider this server authenticates itself
-   *  (Zalo): its `email` is an internal address, not something to show or write to. */
-  externalProvider?: 'zalo'
 }
 export type CreateAuthUser = Omit<AuthUser, 'role' | 'status'> & Partial<Pick<AuthUser, 'role' | 'status'>>
 

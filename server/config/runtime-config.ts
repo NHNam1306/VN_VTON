@@ -31,6 +31,8 @@ export const runtimeConfig = {
   decartApiKey: process.env.DECART_API_KEY?.trim() || undefined,
   decartModel: process.env.DECART_MODEL?.trim() || 'lucy-vton-latest',
   livePreviewWindowDays: positiveInteger(process.env.LIVE_PREVIEW_WINDOW_DAYS, 30),
+  // Quota sessions one fast-tier session uses; Decart charges fast at twice the price.
+  livePreviewFastCost: Math.min(10, positiveInteger(process.env.LIVE_PREVIEW_FAST_COST, 1)),
   // Sessions all users together may start per day (cost circuit breaker); unset disables.
   livePreviewDailyLimit: optionalPositiveInteger(process.env.LIVE_PREVIEW_DAILY_LIMIT),
   apiRequestsPerMinute: positiveInteger(process.env.API_REQUESTS_PER_MINUTE, 600),

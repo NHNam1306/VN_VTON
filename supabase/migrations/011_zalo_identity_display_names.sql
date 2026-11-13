@@ -1,3 +1,5 @@
+-- Ghi chú 13/11/2026: đăng nhập Zalo đã bị gỡ khỏi ứng dụng. Migration này giữ nguyên để lịch sử
+-- migration không bị lệch (có thể đã chạy ở môi trường thật); nó vô hại khi không có tài khoản Zalo.
 -- Đăng nhập bằng Zalo (server/auth/zalo-oauth.ts): Zalo không cung cấp email, nên tài khoản
 -- được tạo với một địa chỉ nội bộ `zalo_<id>@zalo.<host>` và được đánh dấu bằng
 -- raw_app_meta_data.external_provider. Phần trước @ của địa chỉ đó không phải là tên người

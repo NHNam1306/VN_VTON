@@ -1,8 +1,11 @@
-import type { GarmentCategory } from '../domain/garment.js'
+import type { GarmentCategory } from '../garments/garment.js'
 import type { SubscriptionPlanId } from '../plans/types.js'
 
 /** Where the reference garment of a live preview comes from. */
 export type LivePreviewSource = 'wardrobe' | 'upload'
+/** Decart realtime tier: `fast` has lower latency and costs twice as much per second. */
+export type LivePreviewSpeed = 'standard' | 'fast'
+export const isLivePreviewSpeed = (value: unknown): value is LivePreviewSpeed => value === 'standard' || value === 'fast'
 
 export type LivePreviewSessionRecord = {
   id: string
@@ -11,6 +14,9 @@ export type LivePreviewSessionRecord = {
   source: LivePreviewSource
   garmentId: string | null
   category: GarmentCategory
+  speed: LivePreviewSpeed
+  /** Sessions this one counts as against the plan quota. */
+  cost: number
   seconds: number
   tokensIssued: number
   createdAt: string
@@ -25,6 +31,10 @@ export type LivePreviewStatus = {
   included: boolean
   unlimited: boolean
   sessionSeconds: number
+  /** True when the plan lets the user pick the fast tier. */
+  fastModeIncluded: boolean
+  /** Quota sessions one fast session uses. */
+  fastCost: number
   limit: number
   used: number
   remaining: number | null
@@ -34,7 +44,7 @@ export type LivePreviewStatus = {
 }
 
 export type LivePreviewStartResponse = {
-  session: { id: string; model: string; seconds: number; tokenWindowEndsAt: string }
+  session: { id: string; model: string; speed: LivePreviewSpeed; seconds: number; tokenWindowEndsAt: string }
   reference: { prompt: string; imageBase64: string | null; mimeType: string | null }
   status: LivePreviewStatus
 }

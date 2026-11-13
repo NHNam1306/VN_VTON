@@ -36,11 +36,9 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
   const queryClient = useQueryClient();
   const metadata = auth.user?.user_metadata ?? {};
   const [displayName, setDisplayName] = useState(String(metadata.display_name ?? metadata.full_name ?? metadata.name ?? snapshot.me.name ?? ''));
-  // Tài khoản chỉ đăng nhập bằng Google/Zalo chưa có mật khẩu, nên không đổi email/mật khẩu bằng "mật khẩu hiện tại" được.
+  // Tài khoản chỉ đăng nhập bằng Google chưa có mật khẩu, nên không đổi email/mật khẩu bằng "mật khẩu hiện tại" được.
   const providers: unknown = auth.user?.app_metadata.providers ?? [auth.user?.app_metadata.provider];
-  // Tài khoản Zalo được tạo như một tài khoản email nội bộ, nên `providers` vẫn nói là có mật khẩu.
-  const externalProvider = auth.user?.app_metadata.external_provider === 'zalo' ? 'zalo' : undefined;
-  const hasPassword = !externalProvider && Array.isArray(providers) && providers.includes('email');
+  const hasPassword = Array.isArray(providers) && providers.includes('email');
   const [username, setUsername] = useState(snapshot.me.username);
   const [birthDate, setBirthDate] = useState(snapshot.me.birthDate ?? '');
   const [invitePolicy, setInvitePolicy] = useState<InvitePolicy>(snapshot.me.invitePolicy);
@@ -199,10 +197,8 @@ function SettingsContent({ snapshot }: { snapshot: SocialSnapshot }) {
         <Message feedback={accountFeedback} onDismiss={() => setAccountFeedback(null)}/>
       </SettingsCard>
 
-      {!hasPassword && <SettingsCard title={externalProvider === 'zalo' ? 'Đăng nhập bằng Zalo' : 'Đăng nhập bằng Google'}>
-        <AppText variant="subhead">{externalProvider === 'zalo'
-          ? 'Tài khoản của bạn đăng nhập bằng Zalo nên không có email hay mật khẩu Fitsy. Tên hiển thị và ảnh đại diện vẫn đổi được ở trên.'
-          : `Tài khoản ${auth.user?.email} đăng nhập bằng Google nên không có mật khẩu Fitsy. Email và mật khẩu được quản lý trong tài khoản Google của bạn.`}</AppText>
+      {!hasPassword && <SettingsCard title="Đăng nhập bằng Google">
+        <AppText variant="subhead">{`Tài khoản ${auth.user?.email} đăng nhập bằng Google nên không có mật khẩu Fitsy. Email và mật khẩu được quản lý trong tài khoản Google của bạn.`}</AppText>
       </SettingsCard>}
 
       {hasPassword && <SettingsCard title="Địa chỉ email">
