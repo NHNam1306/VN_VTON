@@ -64,6 +64,18 @@ Muốn gửi cho nhiều người hơn thì dùng TestFlight: `build -p ios --pr
 
 `npx eas-cli@latest build -p android --profile preview` ra file APK cài trực tiếp, không cần tài khoản trả phí.
 
+## Các điểm "sống động" (14/11)
+
+- **Ra ảnh**: vệt sáng quét từ trên xuống để lộ outfit mới (`components/reveal-overlay.tsx`), rung khi xong; nút **Trước / Sau** mở màn kéo so sánh (`app/compare.tsx`).
+- **Lúc chờ**: các món đã chọn bay vào ảnh, mẹo phối đồ đổi mỗi 5 giây.
+- **Hôm nay mặc gì?**: thẻ thời tiết (Open-Meteo, không cần khoá, chọn thành phố) + bộ gợi ý từ tủ đồ (`components/weather-card.tsx`, `services/outfit-picker.ts`).
+- **Lắc máy** ở Phòng thử để phối ngẫu nhiên (`hooks/use-shake.ts`, expo-sensors).
+- **Thống kê tủ đồ** (`app/wardrobe-insights.tsx`): bảng màu (máy chủ tính ở `GET /api/garments/colors`), món phối nhiều nhất, món ngủ quên 30 ngày.
+- **Chọn giúp tớ** (`app/polls.tsx`, `app/poll-create.tsx`): quẹt thẻ chọn outfit cho bạn bè, đếm ngược, kết quả %, tạo bình chọn từ outfit đã lưu. Lối vào ở tab Khám phá và tab Yêu thích.
+- **Thẻ chia sẻ** (`app/share-card.tsx`): khung Fitsy 3 màu, chú thích, mã QR mời bạn; chụp bằng react-native-view-shot rồi mở bảng chia sẻ.
+
+Thư viện mới (đều có sẵn trong Expo Go): `expo-haptics`, `expo-sensors`, `expo-sharing`, `expo-linear-gradient`, `react-native-view-shot`. Chạy `npm install` trong `mobile/`; bản APK/IPA phải build lại.
+
 ## Thử trực tiếp bằng camera (Decart)
 
 Cần native module nên phải build lại app sau khi cài thư viện:

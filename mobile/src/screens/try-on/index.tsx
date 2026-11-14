@@ -2,8 +2,8 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { ActivityIndicator, Alert, Pressable, ScrollView, TextInput, View } from 'react-native';
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import Animated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, ZoomOut, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from 'react';
+import Animated, { Easing, FadeIn, FadeOut, LinearTransition, ZoomIn, ZoomOut, cancelAnimation, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 
 import { AppButton } from '@/components/app-button';
 import { AppIcon } from '@/components/icon';
@@ -12,7 +12,12 @@ import { Notice } from '@/components/notice';
 import { OutfitAngles } from '@/components/outfit-angles';
 import { PressableScale } from '@/components/pressable-scale';
 import { PreviewableImage } from '@/components/previewable-image';
-import { router } from 'expo-router';
+import { RevealOverlay } from '@/components/reveal-overlay';
+import { WeatherCard } from '@/components/weather-card';
+import { useShake } from '@/hooks/use-shake';
+import { haptic } from '@/services/haptics';
+import { pickOutfit } from '@/services/outfit-picker';
+import { router, useFocusEffect } from 'expo-router';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { useAuth } from '@/providers/auth-provider';
 import { ApiError, apiRequest, protectedImageSource } from '@/services/api-client';
@@ -29,7 +34,17 @@ type TryOnNotice = { tone: 'success' | 'info'; text: string };
 const EXPECTED_GENERATION_MS = 45_000;
 const GARMENT_PAGE_SIZE = 40;
 
-export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } = {}) {
+/** Mẹo hiện luân phiên trong lúc chờ tạo ảnh. */
+const WAITING_TIPS = [
+  'Áo sáng màu + quần tối màu luôn là công thức an toàn.',
+  'Sơ vin nhẹ phía trước giúp chân trông dài hơn.',
+  'Một món phụ kiện nổi bật là đủ, đừng để tất cả cùng "nói".',
+  'Đồ oversize hợp nhất khi phần còn lại gọn gàng.',
+  'Giày cùng tông với quần giúp dáng liền mạch.',
+  'Ảnh rõ người, đủ sáng thì AI phối càng chuẩn.',
+];
+
+export function TryOnScreen({ onOpenWardrobe, active = true }: { onOpenWardrobe?: () => void; active?: boolean } = {}) {
   const brand = useBrandColors();
   const queryClient = useQueryClient();
   const { session } = useAuth();
@@ -38,6 +53,11 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
   // Phải tích lại mỗi khi đổi ảnh toàn thân, giống bản web.
   const [privacyConsent, setPrivacyConsent] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Ảnh trước khi có kết quả mới: phủ lên rồi bị "quét" đi để lộ outfit mới.
+  const [revealFrom, setRevealFrom] = useState<string | null>(null);
+  const clearReveal = useCallback(() => setRevealFrom(null), []);
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(useCallback(() => { setFocused(true); return () => setFocused(false); }, []));
   const [search, setSearch] = useState('');
   const deferredSearch = useDeferredValue(search);
   const person = useQuery({ queryKey: ['person-image'], queryFn: () => apiRequest<{ item: PersonImage | null }>('/api/person-image') });
@@ -98,6 +118,12 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
       body: JSON.stringify({ garmentIds: selectedGarmentIds, privacyConfirmed: privacyConsent, preservePose: true }),
     }),
     onSuccess: (item) => {
+      if (item.angle === 'front') {
+        const previous = queryClient.getQueryData<{ items: TryOnResult[] }>(['try-on-results'])?.items.find((result) => result.angle === 'front')?.imageUrl
+          ?? queryClient.getQueryData<{ item: PersonImage | null }>(['person-image'])?.item?.imageUrl;
+        if (previous) setRevealFrom(previous);
+      }
+      haptic.success();
       queryClient.setQueryData<{ items: TryOnResult[] }>(['try-on-results'], (current) => ({
         items: item.angle === 'front'
           ? [item]
@@ -112,6 +138,15 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
       }
       setNotice({ tone: 'success', text: item.angle === 'front' ? 'Đã tạo góc trước và lưu vào Yêu thích.' : 'Đã bổ sung góc sau cho outfit.' });
     },
+  });
+  // Lắc máy để phối ngẫu nhiên từ tủ đồ (chỉ khi phòng thử đang hiện).
+  const shakeMax = plans.data?.current.entitlements.selectedGarments ?? 8;
+  useShake(active && focused && garmentItems.length >= 2 && !generate.isPending, () => {
+    const outfit = pickOutfit(garmentItems, { random: Math.random, maxItems: shakeMax });
+    if (outfit.ids.length < 2) return;
+    haptic.medium();
+    setSelected(outfit.ids);
+    setNotice({ tone: 'info', text: 'Đã phối ngẫu nhiên ' + outfit.ids.length + ' món — lắc tiếp để đổi bộ khác.' });
   });
   const loading = person.data === undefined || garments.data === undefined || results.data === undefined || plans.data === undefined;
   const loadError = person.error ?? garments.error ?? results.error ?? plans.error;
@@ -138,6 +173,7 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
       return;
     }
     setNotice(null);
+    haptic.select();
     setSelected(available.includes(id) ? available.filter((item) => item !== id) : [...available, id]);
   };
   // Bắt đầu thao tác mới thì bỏ lỗi cũ của thao tác khác, tránh lỗi "treo" mãi trên màn.
@@ -163,6 +199,13 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
         : null;
 
   return <ScrollView contentInsetAdjustmentBehavior="automatic" style={{ backgroundColor: colors.background }} contentContainerStyle={{ paddingHorizontal: spacing.md, paddingTop: spacing.sm, paddingBottom: spacing.xxl, gap: spacing.lg }}>
+    {garmentItems.length >= 2 && <WeatherCard
+      garments={garmentItems}
+      maxItems={maxSelected}
+      onApply={(ids) => {
+        setSelected(ids);
+        setNotice({ tone: 'success', text: 'Đã chọn bộ gợi ý. Bấm "Tạo outfit ngay" để mặc thử.' });
+      }}/>}
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
       <View style={{ width: '36%', gap: spacing.sm }}>
         {visibleSelected.length === 0
@@ -183,7 +226,9 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
               front={preview}
               back={latestFront ? latestBack?.imageUrl : null}
               onPressImage={(uri, angle) => router.push({ pathname: '/image-viewer', params: { uri, title: !latestFront ? 'Ảnh toàn thân' : angle === 'back' ? 'Outfit · góc sau' : 'Outfit · góc trước' } })}
-              overlay={generate.isPending ? <GeneratingOverlay key={generate.submittedAt} angle={generate.variables ?? 'front'}/> : null}
+              overlay={generate.isPending
+                ? <GeneratingOverlay key={generate.submittedAt} angle={generate.variables ?? 'front'} garments={selectedItems}/>
+                : revealFrom ? <RevealOverlay key={revealFrom} from={revealFrom} onDone={clearReveal}/> : null}
             />
           : <Pressable accessibilityRole="button" accessibilityLabel="Thêm ảnh toàn thân" onPress={startUpload} disabled={upload.isPending} style={({ pressed }) => ({ width: '100%', aspectRatio: 3 / 5, alignItems: 'center', justifyContent: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.xl, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.separator, backgroundColor: colors.surface, opacity: pressed ? 0.7 : 1 })}>
               <AppIcon name="photo" size={32} color={brand.accent}/>
@@ -226,6 +271,12 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
         icon="camera"
         variant="secondary"
         onPress={() => router.push({ pathname: '/live-preview', params: selectedGarmentIds[0] ? { garmentId: selectedGarmentIds[0] } : {} })}/>}
+      {latestFront && <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+        {personItem && <AppButton title="Trước / Sau" icon="sparkles" variant="secondary" style={{ flex: 1 }}
+          onPress={() => router.push({ pathname: '/compare', params: { before: personItem.imageUrl, after: latestFront.imageUrl } })}/>}
+        <AppButton title="Chia sẻ" icon="link" variant="secondary" style={{ flex: 1 }}
+          onPress={() => router.push({ pathname: '/share-card', params: { uri: latestFront.imageUrl } })}/>
+      </View>}
       {latestFront && <AppButton title="Thêm góc sau" variant="secondary" loading={generate.isPending && generate.variables === 'back'} disabled={generate.isPending || selectedGarmentIds.length === 0 || !privacyConsent} onPress={() => startGenerate('back')}/>}
     </View>
 
@@ -235,7 +286,10 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
 
     <View style={{ gap: spacing.sm }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <AppText variant="headline" style={{ flex: 1 }}>Chọn món đồ</AppText>
+        <View style={{ flex: 1 }}>
+          <AppText variant="headline">Chọn món đồ</AppText>
+          {garmentItems.length >= 2 && <AppText variant="caption">Lắc máy để phối ngẫu nhiên</AppText>}
+        </View>
         <AppText variant="caption" style={{ fontVariant: ['tabular-nums'] }}>{selectedGarmentIds.length}/{maxSelected}</AppText>
         {garmentItems.length > 0 && <Pressable
           accessibilityRole="button"
@@ -307,15 +361,17 @@ export function TryOnScreen({ onOpenWardrobe }: { onOpenWardrobe?: () => void } 
 }
 
 /**
- * Lớp phủ trên ảnh trong lúc AI đang tạo outfit: nền mờ "thở" nhẹ, biểu tượng nhấp nháy,
- * thanh tiến độ ước tính (chạy chậm dần, dừng ở 92% tới khi có kết quả) và thời gian đã chờ.
+ * Lớp phủ trên ảnh trong lúc AI đang tạo outfit: nền "thở" nhẹ, các món đã chọn lần lượt bay vào
+ * giữa ảnh như đang được mặc lên, mẹo phối đồ đổi mỗi vài giây, thanh tiến độ ước tính
+ * (chạy chậm dần, dừng ở 92% tới khi có kết quả) và thời gian đã chờ.
  */
-function GeneratingOverlay({ angle }: { angle: 'front' | 'back' }) {
+function GeneratingOverlay({ angle, garments }: { angle: 'front' | 'back'; garments: Garment[] }) {
   const brand = useBrandColors();
   const reduceMotion = useReducedMotion();
   const pulse = useSharedValue(0);
   const progress = useSharedValue(0);
   const [elapsed, setElapsed] = useState(0);
+  const [tip, setTip] = useState(() => Math.floor(Math.random() * WAITING_TIPS.length));
   useEffect(() => {
     if (!reduceMotion) {
       pulse.set(withRepeat(withSequence(
@@ -325,12 +381,16 @@ function GeneratingOverlay({ angle }: { angle: 'front' | 'back' }) {
     }
     progress.set(withTiming(0.92, { duration: EXPECTED_GENERATION_MS * 1.6, easing: Easing.out(Easing.cubic) }));
     const startedAt = Date.now();
-    const timer = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
+    const timer = setInterval(() => {
+      const seconds = Math.floor((Date.now() - startedAt) / 1000);
+      setElapsed(seconds);
+      if (seconds > 0 && seconds % 5 === 0) setTip((value) => (value + 1) % WAITING_TIPS.length);
+    }, 1000);
     return () => { cancelAnimation(pulse); cancelAnimation(progress); clearInterval(timer); };
   }, [pulse, progress, reduceMotion]);
-  const backdrop = useAnimatedStyle(() => ({ opacity: 0.45 + pulse.get() * 0.2 }));
-  const icon = useAnimatedStyle(() => ({ transform: [{ scale: 0.9 + pulse.get() * 0.25 }, { rotate: (pulse.get() * 12 - 6) + 'deg' }] }));
+  const backdrop = useAnimatedStyle(() => ({ opacity: 0.5 + pulse.get() * 0.2 }));
   const bar = useAnimatedStyle(() => ({ width: (progress.get() * 100) + '%' }));
+  const flying = garments.slice(0, 4);
   return <Animated.View
     entering={FadeIn.duration(220)}
     exiting={FadeOut.duration(260)}
@@ -338,16 +398,46 @@ function GeneratingOverlay({ angle }: { angle: 'front' | 'back' }) {
     accessibilityLabel="Đang tạo outfit"
     style={{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: radius.xl, overflow: 'hidden', alignItems: 'center', justifyContent: 'center' }}>
     <Animated.View style={[{ position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: brand.primary }, backdrop]}/>
+    {!reduceMotion && flying.map((item, index) => <FlyingGarment key={item.id} garment={item} index={index} count={flying.length}/>)}
     <View style={{ alignItems: 'center', gap: spacing.sm, padding: spacing.md, width: '100%' }}>
-      <Animated.View style={icon}>
-        <AppIcon name="sparkles" size={34} color={colors.onBrand}/>
-      </Animated.View>
-      <AppText variant="headline" style={{ color: colors.onBrand, textAlign: 'center' }}>{angle === 'front' ? 'Đang tạo outfit…' : 'Đang tạo góc sau…'}</AppText>
+      <AppIcon name="sparkles" size={30} color={colors.onBrand}/>
+      <AppText variant="headline" style={{ color: colors.onBrand, textAlign: 'center' }}>{angle === 'front' ? 'Đang mặc thử…' : 'Đang tạo góc sau…'}</AppText>
       <View style={{ width: '70%', height: 4, borderRadius: 2, overflow: 'hidden', backgroundColor: 'rgba(255, 255, 255, 0.25)' }}>
         <Animated.View style={[{ height: 4, borderRadius: 2, backgroundColor: brand.sparkle }, bar]}/>
       </View>
       <AppText variant="caption" style={{ color: colors.onBrand, opacity: 0.85, textAlign: 'center', fontVariant: ['tabular-nums'] }}>{elapsed}s · thường mất 20–60 giây</AppText>
+      <Animated.View key={tip} entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)} style={{ minHeight: 34, paddingHorizontal: spacing.sm }}>
+        <AppText variant="caption" style={{ color: colors.onBrand, textAlign: 'center', fontStyle: 'italic' }}>💡 {WAITING_TIPS[tip]}</AppText>
+      </Animated.View>
     </View>
+  </Animated.View>;
+}
+
+/** Một món đồ bay từ mép dưới vào giữa ảnh rồi mờ đi, lặp lại lệch nhịp với các món khác. */
+function FlyingGarment({ garment, index, count }: { garment: Garment; index: number; count: number }) {
+  const { session } = useAuth();
+  const value = useSharedValue(0);
+  useEffect(() => {
+    const cycle = 2400;
+    value.set(withDelay(index * (cycle / Math.max(count, 1)), withRepeat(withTiming(1, { duration: cycle, easing: Easing.inOut(Easing.cubic) }), -1)));
+    return () => cancelAnimation(value);
+  }, [count, index, value]);
+  // Mỗi món xuất phát từ một góc khác nhau ở mép dưới.
+  const startX = (index - (count - 1) / 2) * 70;
+  const style = useAnimatedStyle(() => {
+    const t = value.get();
+    return {
+      opacity: t < 0.15 ? t / 0.15 : t > 0.75 ? Math.max(0, (1 - t) / 0.25) : 1,
+      transform: [
+        { translateX: startX * (1 - t) },
+        { translateY: 140 * (1 - t) - 20 },
+        { scale: 0.9 - t * 0.5 },
+        { rotate: (1 - t) * (index % 2 ? 18 : -18) + 'deg' },
+      ],
+    };
+  });
+  return <Animated.View pointerEvents="none" style={[{ position: 'absolute', width: 64, height: 64, borderRadius: 14, padding: 4, backgroundColor: 'rgba(255,255,255,0.92)' }, style]}>
+    <Image source={protectedImageSource(garment.frontProcessedUrl, session?.access_token)} style={{ flex: 1 }} contentFit="contain"/>
   </Animated.View>;
 }
 

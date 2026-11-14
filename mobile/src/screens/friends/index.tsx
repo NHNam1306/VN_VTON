@@ -1,5 +1,6 @@
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
+import { router } from 'expo-router';
 import { ActivityIndicator, RefreshControl, ScrollView, TextInput, View } from 'react-native';
 import { useState } from 'react';
 import Animated, { FadeIn, FadeOut, LinearTransition } from 'react-native-reanimated';
@@ -10,6 +11,7 @@ import { Notice } from '@/components/notice';
 import { PressableScale } from '@/components/pressable-scale';
 import { ScreenError, ScreenLoading } from '@/components/screen-state';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useNow } from '@/hooks/use-now';
 import { useAuth } from '@/providers/auth-provider';
 import { apiRequest, protectedImageSource } from '@/services/api-client';
 import { colors, radius, spacing, useBrandColors } from '@/theme';
@@ -103,6 +105,8 @@ export function FriendsScreen() {
               : data.friends.length + ' bạn bè'}
         </AppText>
       </View>
+
+      <PollsTeaser data={data}/>
 
       <Section title="Tìm bạn bè">
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
@@ -251,4 +255,26 @@ function StatusPill({ label }: { label: string }) {
   return <View style={{ paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.full, backgroundColor: colors.successBackground }}>
     <AppText variant="caption" style={{ color: colors.success, fontWeight: '700' }}>{label}</AppText>
   </View>;
+}
+
+/** Lối vào "Chọn giúp tớ": số bình chọn đang chờ mình quẹt, hoặc mời tạo bình chọn mới. */
+function PollsTeaser({ data }: { data: SocialSnapshot }) {
+  const brand = useBrandColors();
+  const now = useNow(30_000);
+  const waiting = data.polls.filter((poll) => poll.owner.id !== data.me.id && !poll.myVote && !poll.closed && poll.expiresAt > now).length;
+  const mine = data.polls.filter((poll) => poll.owner.id === data.me.id && !poll.closed && poll.expiresAt > now).length;
+  return <PressableScale accessibilityRole="button" accessibilityLabel="Mở bình chọn" onPress={() => router.push('/polls')} scaleTo={0.98}
+    style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.xl, borderCurve: 'continuous', backgroundColor: brand.primary }}>
+    <AppText style={{ fontSize: 30 }}>🗳️</AppText>
+    <View style={{ flex: 1, gap: 2 }}>
+      <AppText variant="headline" style={{ color: colors.onBrand }}>Chọn giúp tớ</AppText>
+      <AppText variant="caption" style={{ color: colors.onBrand, opacity: 0.8 }}>
+        {waiting ? waiting + ' bình chọn đang chờ bạn quẹt' : mine ? mine + ' bình chọn của bạn đang chạy' : 'Quẹt chọn outfit cho bạn bè, hoặc nhờ họ chọn giúp'}
+      </AppText>
+    </View>
+    {waiting > 0 && <View style={{ minWidth: 26, height: 26, paddingHorizontal: 6, borderRadius: 13, alignItems: 'center', justifyContent: 'center', backgroundColor: brand.sparkle }}>
+      <AppText style={{ color: colors.onBrand, fontWeight: '800', fontSize: 13 }}>{waiting}</AppText>
+    </View>}
+    <AppIcon name="chevronRight" size={18} color={colors.onBrand}/>
+  </PressableScale>;
 }

@@ -15,6 +15,7 @@ import type { CreditService } from '../credits/credit-service.js'
 import type { CreditReservation } from '../credits/types.js'
 import { AuthError } from '../auth/auth-service.js'
 import { discardImages, ImmediateStorageCleanup, type StorageCleanup } from '../storage/storage-cleanup.js'
+import { GarmentColorCache } from './garment-colors.js'
 
 const upload = createImageUpload(4)
 const MAX_GARMENTS_PER_USER = 20
@@ -50,6 +51,7 @@ export function createGarmentRouter(
   cleanup: StorageCleanup = new ImmediateStorageCleanup(images),
 ) {
   const router = Router()
+  const colorCache = new GarmentColorCache(images)
   const singleUpload = upload.single('file')
   const aiRateLimit = createFixedWindowRateLimit({
     max: runtimeConfig.aiRequestsPerWindow,
@@ -67,6 +69,17 @@ export function createGarmentRouter(
       const items = await repository.list(request.authUser.id, page)
       const total = page ? await repository.count(request.authUser.id) : items.length
       response.json({ items: items.map((item) => toResponse(item, images)), ...pageMetadata(page?.offset ?? 0, items.length, total) })
+    } catch (error) {
+      next(error)
+    }
+  })
+
+  // Màu chủ đạo từng món (cho thống kê tủ đồ). Tính trên ảnh đã tách nền, có cache theo khoá ảnh.
+  router.get('/colors', async (request, response, next) => {
+    try {
+      const items = await repository.list(request.authUser.id, { limit: 300, offset: 0 })
+      const colors = await colorCache.colorsOf(items.map(item => item.frontProcessedKey || item.frontOriginalKey))
+      response.json({ items: items.map((item, index) => ({ id: item.id, ...(colors[index] ?? { hex: null, name: null }) })) })
     } catch (error) {
       next(error)
     }

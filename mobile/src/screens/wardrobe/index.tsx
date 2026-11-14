@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
+import { router } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, RefreshControl, ScrollView, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -272,6 +273,8 @@ export function WardrobeScreen({ fixedMode }: { fixedMode?: CatalogMode } = {}) 
               </Animated.View>
             : <AppButton title="Thêm món đồ từ ảnh" icon="sparkles" disabled={remainingSlots === 0} onPress={() => void pickImage()}/>)}
           {mode === 'garments' && !extracting && remainingSlots === 0 && <AppText variant="caption">Tủ đồ đã đầy theo gói hiện tại. Xoá bớt món hoặc nâng gói để thêm.</AppText>}
+          {mode === 'garments' && currentCount >= 3 && <InsightTeaser icon="sparkles" title="Tủ đồ của bạn nói gì?" text="Màu chủ đạo, món phối nhiều nhất, món đang ngủ quên" onPress={() => router.push('/wardrobe-insights')}/>}
+          {mode === 'outfits' && currentCount >= 2 && <InsightTeaser icon="people" title="Phân vân bộ nào?" text="Nhờ bạn bè quẹt chọn giúp trong 1–72 giờ" onPress={() => router.push('/poll-create')}/>}
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.sm }}>
             {(mode === 'garments' ? categories : outfitFilters).map((filter) => {
@@ -585,4 +588,19 @@ function OutfitEditor({ outfit, visible, title: initialTitle, policy, social, on
       <AppText variant="headline" style={{ color: colors.destructive }}>Xoá outfit</AppText>
     </Pressable>
   </BottomSheet>;
+}
+
+function InsightTeaser({ icon, title, text, onPress }: { icon: 'sparkles' | 'people'; title: string; text: string; onPress: () => void }) {
+  const brand = useBrandColors();
+  return <PressableScale accessibilityRole="button" accessibilityLabel={title} onPress={onPress} scaleTo={0.98}
+    style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md, padding: spacing.md, borderRadius: radius.lg, borderCurve: 'continuous', backgroundColor: brand.secondary }}>
+    <View style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface }}>
+      <AppIcon name={icon} size={20} color={brand.accent}/>
+    </View>
+    <View style={{ flex: 1, gap: 2 }}>
+      <AppText variant="headline" style={{ fontSize: 15 }}>{title}</AppText>
+      <AppText variant="caption">{text}</AppText>
+    </View>
+    <AppIcon name="chevronRight" size={18} color={brand.primary}/>
+  </PressableScale>;
 }

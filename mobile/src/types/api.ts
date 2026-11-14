@@ -47,7 +47,7 @@ export type SocialSnapshot = {
   friends: SocialPerson[];
   incoming: { id: string; from: SocialPerson; createdAt: number }[];
   outgoing: { id: string; to: SocialPerson; createdAt: number }[];
-  polls: unknown[];
+  polls: SocialPoll[];
   blocked: SocialPerson[];
   notifications: SocialNotification[];
   groups?: SocialGroup[];
@@ -115,3 +115,21 @@ export type LivePreviewStartResponse = {
 };
 
 export type LivePreviewToken = { apiKey: string; expiresAt: string; model: string; seconds: number };
+
+export type GarmentColorItem = { id: string; hex: string | null; name: string | null };
+
+export type SharedOutfit = { id: string; frontImageUrl: string; backImageUrl: string | null; official: boolean };
+export type SocialPoll = {
+  id: string;
+  owner: SocialPerson;
+  title: string;
+  createdAt: number;
+  expiresAt: number;
+  closed: boolean;
+  outfits: SharedOutfit[];
+  recipients: SocialPerson[];
+  /** Chỉ có khi người xem là chủ bình chọn, đã bình chọn, hoặc bình chọn đã kết thúc. */
+  votes: { user: SocialPerson; outfitId: string }[];
+  myVote: string | null;
+  winnerId: string | null;
+};

@@ -54,7 +54,7 @@ export function HomeScreen() {
         />
       </ScrollView>
       <View collapsable={false} style={{ flex: 1 }}>
-        <Pane active={segment === 'try-on'}><TryOnScreen onOpenWardrobe={() => open('wardrobe')} /></Pane>
+        <Pane active={segment === 'try-on'}><TryOnScreen active={segment === 'try-on'} onOpenWardrobe={() => open('wardrobe')} /></Pane>
         {visited.includes('wardrobe') && <Pane active={segment === 'wardrobe'}><WardrobeScreen fixedMode="garments" /></Pane>}
         {visited.includes('shop') && <Pane active={segment === 'shop'}><ShopComingSoon /></Pane>}
       </View>
